@@ -1,0 +1,50 @@
+= NeodeGM
+
+Experiments in how neode could become more object oriented.
+
+== Example
+
+- Create your model as a class:
+
+[source,typescript]
+----
+// Create
+@Node({ labels: ['Person', 'Actor'] })
+export default class Person {
+    @Uuid()
+    @Primary()
+    @Unique()
+    id: string;
+
+    @String()
+    name: string;
+
+    getId() {
+        return this.id
+    }
+
+    getName() {
+        return this.name
+    }
+}
+----
+
+- Write some code:
+
+[source,typescript]
+----
+// Connect from .env
+const neode = neode.fromEnv()
+
+// TOOD: Open a transaction
+neode.openTransaction()
+
+// Create an object
+const adam = new Person("92702e6b-4d39-4ad2-a4ad-cc3923496090", 'Adam')
+
+// Save it
+neode.save(adam)
+
+// Retrieve it
+const found = neode.find(Person, "92702e6b-4d39-4ad2-a4ad-cc3923496090")
+----
