@@ -12,6 +12,7 @@
   "license": "ISC",
   "dependencies": {
     "@neode/querybuilder": "^0.1.8",
+    "dotenv": "^8.2.0",
     "neo4j-driver": "^4.2.1"
   },
   "devDependencies": {

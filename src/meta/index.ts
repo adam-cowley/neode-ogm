@@ -2,6 +2,7 @@ import { Property, PropertyType } from "./property";
 import Schema from "./schema";
 
 export const models: Map<Object, Schema> = new Map()
+export const repositories: Map<Object, Object> = new Map()
 
 export function mergeModel(constructor: any): Schema {
     if ( !models.has(constructor) ) {

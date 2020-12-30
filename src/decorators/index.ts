@@ -1,13 +1,18 @@
-import { mergeModel, mergeProperty, models } from '../meta/index'
+import { mergeModel, mergeProperty, repositories } from '../meta/index'
 import { PropertyType } from '../meta/property'
-import Schema from '../meta/schema'
 
 interface NodeConfig {
     labels?: string[];
 }
 
+export function Repository(entity: Object) {
+    return function(constructor: Function)  {
+        repositories.set(constructor, entity)
+    }
+}
+
 export function Node(config: NodeConfig = {}) {
-    return function(constructor: Function, x: any)  {
+    return function(constructor: Function)  {
         // Merge Model into map
         const model = mergeModel(constructor)
 

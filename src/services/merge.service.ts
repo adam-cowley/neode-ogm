@@ -1,12 +1,13 @@
 import Builder from "@neode/querybuilder";
-import { THIS_NODE } from "../constants";
+import { QueryResult } from "neo4j-driver";
+import { INTERNAL_ID, THIS_NODE } from "../constants";
 import Schema from "../meta/schema";
-import NeodeService from "./service";
+import QueryService from "./query.service";
 
 
-export default class MergeService extends NeodeService {
+export default class MergeService extends QueryService {
 
-    async save(model: Object, schema: Schema) {
+    async save(model: Object, schema: Schema): Promise<QueryResult> {
         const builder = new Builder()
 
         const unique = schema.getProperties().filter(property => property.isUnique())
@@ -35,6 +36,8 @@ export default class MergeService extends NeodeService {
 
         // TODO: Eager Loading
         builder.return(THIS_NODE)
+            .return(`id(${THIS_NODE}) as ${INTERNAL_ID}`)
+
 
         // Build Cypher
         const { cypher, params } = builder.build()

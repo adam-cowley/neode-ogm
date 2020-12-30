@@ -1,10 +1,9 @@
 import Builder from "@neode/querybuilder";
-import { Transaction } from "neo4j-driver";
 import { THIS_NODE } from "../constants";
 import Schema from "../meta/schema";
-import NeodeService from "./service";
+import QueryService from "./query.service";
 
-export default class FindService extends NeodeService {
+export default class FindService extends QueryService {
 
     async find(constructor: Function, schema: Schema, value: any): Promise<any | undefined> {
         const builder = new Builder()

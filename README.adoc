@@ -48,3 +48,40 @@ neode.save(adam)
 // Retrieve it
 const found = neode.find(Person, "92702e6b-4d39-4ad2-a4ad-cc3923496090")
 ----
+
+== Repository Pattern
+
+- Create a repository based on the model:
+[source,typescript]
+----
+// Use decorator to register the PersonRepository as using the Person node
+@RepositoryDecorator(Person)
+export default class PersonRepository extends Repository<Person> {}
+----
+
+- Create an instance of the repository and use it
+
+[source,typescript]
+----
+const repo = new PersonRepository()
+const adam = repo.find("92702e6b-4d39-4ad2-a4ad-cc3923496090")
+----
+
+
+
+== Transaction Management (TODO)
+
+- Call the main repo to open a transaction - this will return a transaction based instance of neode.  The `save`, `create`, (etc) methods will run everything in the context of a single transaction.
+- Otherwise the base class will create a new transaction every time.
+
+[source,typescript]
+----
+neode.openTransaction()
+    .then(async inTx => {
+        const adam = new Person("92702e6b-4d39-4ad2-a4ad-cc3923496090", 'Adam')
+        await inTx.save(adam)
+
+        const arthur = new Person("92702e6b-4d39-4ad2-a4ad-cc3923496090", 'Arthur')
+        await inTx.save(arthur)
+    })
+----

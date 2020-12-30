@@ -1,9 +1,9 @@
 import Builder from "@neode/querybuilder";
-import { QueryResult, Result, Transaction } from "neo4j-driver";
+import { QueryResult,  Transaction } from "neo4j-driver";
 import { THIS_NODE } from "../constants";
 import Schema from "../meta/schema";
 
-export default class NeodeService {
+export default class QueryService {
     constructor(protected readonly transaction: Transaction) {}
 
     async returnFirst(constructor: Function, schema: Schema, builder: Builder<any>): Promise<any | undefined> {
@@ -52,6 +52,7 @@ export default class NeodeService {
     private getAndHydrate(res: QueryResult, constructor: Function, schema: Schema) {
         return res.records.map(row => {
             const node = row.get(THIS_NODE);
+            // @ts-ignore
             const object = new constructor()
 
             schema.getProperties()

@@ -1,6 +1,5 @@
 import { Node, Primary, Unique, Uuid, String } from "../../src/decorators";
-
-@Node({ labels: ['Person', 'Actor'] })
+@Node()
 export default class Person {
     @Uuid()
     @Primary()

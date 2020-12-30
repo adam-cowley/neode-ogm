@@ -1,4 +1,4 @@
-import { Driver, Session, Transaction } from "neo4j-driver";
+import { Driver, Session, SessionMode, Transaction } from "neo4j-driver";
 import { DEFAULT_DATABASE } from "../constants";
 
 export class TransactionManager {
@@ -7,7 +7,23 @@ export class TransactionManager {
 
     constructor(private readonly driver: Driver) {}
 
-    open(database: string | undefined = DEFAULT_DATABASE): Transaction {
+    open(database: string | undefined = DEFAULT_DATABASE, mode: SessionMode = 'READ'): Transaction {
+        if ( ! this.sessions.has(database + mode) ) {
+            this.sessions.set(database + mode, this.driver.session({ database, defaultAccessMode: mode }))
+        }
+
+        switch (mode) {
+            case 'READ':
+                return this.sessions.get(database + mode).beginTransaction()
+
+            case 'WRITE':
+                return this.sessions.get(database + mode).beginTransaction()
+        }
+
+
+    }
+
+    find(database: string | undefined = DEFAULT_DATABASE): Transaction {
         if ( ! this.sessions.has(database) ) {
             this.sessions.set(database, this.driver.session({ database }))
         }
@@ -17,6 +33,16 @@ export class TransactionManager {
         }
 
         return this.transactions.get(database);
+    }
+
+    async commit(tx: Transaction): Promise<void> {
+        await tx.commit()
+
+        const stored = Array.from(this.transactions.entries()).find(([ _, innerTx ]) => tx === innerTx)
+
+        if ( stored ) {
+            this.transactions.delete(stored[0])
+        }
     }
 
     // async commit(): Promise<void> {
