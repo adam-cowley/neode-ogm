@@ -1,73 +1,15 @@
-import { mergeModel, mergeProperty, repositories } from '../meta/index'
-import { PropertyType } from '../meta/property'
+// Node Entities
+export { default as NodeEntity } from './node/node-entity.decorator'
 
-interface NodeConfig {
-    labels?: string[];
-}
+export { default as Primary } from './node/primary.decorator'
+export { default as Uuid } from './node/uuid.decorator'
+export { default as String } from './node/string.decorator'
+export { default as OneToOne } from './node/one-to-one.decorator'
+export { default as OneToMany } from './node/one-to-many.decorator'
 
-export function Repository(entity: Object) {
-    return function(constructor: Function)  {
-        repositories.set(constructor, entity)
-    }
-}
+// Relationship Entities
+export { default as RelationshipEntity } from './relationship/relationship-entity.decorator'
 
-export function Node(config: NodeConfig = {}) {
-    return function(constructor: Function)  {
-        // Merge Model into map
-        const model = mergeModel(constructor)
-
-        // If no label has been defined, use the constructor name
-        const labels = config.labels || [constructor.name]
-
-        // Sort Labels by name
-        labels.sort()
-
-        // Set Labels in definition
-        model.setLabels(labels)
-    }
-}
-
-export function Uuid() {
-    return function(target: any, propertyKey: string, descriptor?: any): void {
-        const constructor = target.constructor
-
-        // Merge Property Key
-        const property = mergeProperty(constructor, propertyKey, PropertyType.STRING)
-
-        // Set Default
-        // TODO: Call the function
-        property.setDefaultValue('___DEFAULT___')
-
-    }
-}
-
-export function String() {
-    return function(target: any, propertyKey: string, descriptor?: any): void {
-        const constructor = target.constructor
-
-        // Merge Property Key
-        const property = mergeProperty(constructor, propertyKey, PropertyType.STRING)
-    }
-}
-
-export function Primary() {
-    return function(target: any, propertyKey: string, descriptor?: any): void {
-        const constructor = target.constructor
-
-        // Merge Property Key
-        const property = mergeProperty(constructor, propertyKey, PropertyType.STRING)
-
-        property.setPrimaryKey()
-    }
-}
-
-export function Unique() {
-    return function(target: any, propertyKey: string, descriptor?: any): void {
-        const constructor = target.constructor
-
-        // Merge Property Key
-        const property = mergeProperty(constructor, propertyKey, PropertyType.STRING)
-
-        property.setUnique()
-    }
-}
+export { default as StartNode } from './relationship/start-node.decorator'
+export { default as EndNode } from './relationship/end-node.decorator'
+export { default as OtherNode } from './relationship/other-node.decorator'

@@ -6,10 +6,17 @@
       "emitDecoratorMetadata": true,
       "experimentalDecorators": true,
       "allowSyntheticDefaultImports": true,
-      "lib": ["es2019"],
+      "lib": ["es2019", "dom"],
       "target": "es5",
       "sourceMap": true,
       "outDir": "./dist",
-      "incremental": true
-    }
+      "incremental": true,
+
+      "forceConsistentCasingInFileNames": true,
+      "noImplicitReturns": true,
+
+      "noUnusedLocals": true,
+    },
+    "include": ["src/**/*.ts"],
+    "exclude": ["src/**/*.test.ts"]
   }

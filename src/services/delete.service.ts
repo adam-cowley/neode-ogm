@@ -1,11 +1,11 @@
 import Builder from "@neode/querybuilder";
 import { THIS_NODE } from "../constants";
-import Schema from "../meta/schema";
+import EntitySchema from "../meta/entity/entity-schema";
 import QueryService from "./query.service";
 
 export default class DeleteService extends QueryService {
 
-    async delete<T extends Object>(schema: Schema, entity: T): Promise<void> {
+    async delete<T extends Object>(schema: EntitySchema, entity: T): Promise<void> {
         const builder = new Builder()
 
         const primaryKey = schema.getProperties().find(property => property.isPrimaryKey()).getKey()

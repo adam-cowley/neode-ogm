@@ -1,25 +1,108 @@
-import { Property, PropertyType } from "./property";
-import Schema from "./schema";
+import { Direction } from "@neode/querybuilder";
+import PropertySchema, { PropertyType } from "./property-schema";
 
-export const models: Map<Object, Schema> = new Map()
-export const repositories: Map<Object, Object> = new Map()
+import RelationshipPropertySchema from "./relationship-property-schema";
 
-export function mergeModel(constructor: any): Schema {
-    if ( !models.has(constructor) ) {
-        models.set(constructor, new Schema())
-    }
+import EntitySchema, { EntityType } from "./entity/entity-schema";
+import PropertyConfig from "../decorators/property-config.interface";
 
-    return models.get(constructor)
+const models: Map<ObjectConstructor, EntitySchema> = new Map()
+
+export function getModels() {
+    return models
 }
 
-export function mergeProperty(constructor: any, key: string, type: PropertyType): Property {
-    if ( !models.has(constructor) ) {
-        models.set(constructor, new Schema())
+export function getModel(constructor: any): EntitySchema {
+    return getModels().get(constructor)
+}
+
+export function mergeModel(constructor: any): EntitySchema {
+    if ( !getModels().has(constructor) ) {
+        getModels().set(constructor, new EntitySchema())
     }
 
-    if ( ! models.get(constructor).hasProperty(key) ) {
-        models.get(constructor).addProperty(key)
+    return getModels().get(constructor)
+}
+
+export function mergeRelationshipModel(constructor: any): EntitySchema {
+    // Decorators are run in a weird order (accessor, property then class decorators)
+    // So this may already exist as a NodeEntity and should be confirmed
+    if ( !getModels().has(constructor) ) {
+        getModels().set(constructor, new EntitySchema())
     }
 
-    return models.get(constructor).getProperty(key)
+    const model = getModels().get(constructor)
+    model.setType(EntityType.RelationshipEntity)
+
+    return model
+}
+
+export function mergeProperty(constructor: any, key: string, type: PropertyType, config: PropertyConfig = {}): PropertySchema {
+    const model = mergeModel(constructor)
+
+    if ( !model.hasProperty(key) ) {
+        model.addProperty(key)
+    }
+
+    const property = model.getProperty(key) as PropertySchema
+
+    // If specificially set, then overwrite the type
+    if ( type !== PropertyType.ANY ) {
+        property.setType(type)
+    }
+
+    // Set Config
+    if ( config?.primary === true ) {
+        property.setPrimaryKey(true)
+    }
+
+    if ( config?.unique === true ) {
+        property.setUnique(true)
+    }
+
+    if ( config?.array === true ) {
+        property.setArray(true)
+    }
+
+    if ( config?.hasOwnProperty('default') ) {
+        property.setDefaultValue(config.default)
+    }
+
+    if ( config?.hasOwnProperty('onCreateSet') ) {
+        property.setOnCreateSet(config.onCreateSet)
+    }
+
+    if ( config?.hasOwnProperty('onMatchSet') ) {
+        property.setOnMatchSet(config.onMatchSet)
+    }
+
+    if ( config?.hasOwnProperty('alwaysSet') ) {
+        property.setAlwaysSet(config.alwaysSet)
+    }
+
+    return property
+}
+
+export function mergeRelationshipProperty(constructor: any, key: string,
+    type: string,
+    target: ObjectConstructor,
+    direction: Direction,
+    many: boolean,
+    eager?: boolean
+): RelationshipPropertySchema {
+    mergeModel(constructor)
+
+    if ( !models.get(constructor).hasProperty(key) ) {
+        models.get(constructor).addRelationship(key)
+    }
+
+    const rel = models.get(constructor).getRelationship(key)
+
+    rel.setType(type)
+    rel.setDirection(direction)
+    rel.setTarget(target)
+    rel.setMany(many)
+    rel.setEager(eager || false)
+
+    return rel
 }

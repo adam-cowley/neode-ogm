@@ -1,11 +1,11 @@
 import Builder from "@neode/querybuilder";
 import { THIS_NODE } from "../constants";
-import Schema from "../meta/schema";
+import EntitySchema from "../meta/entity/entity-schema";
 import QueryService from "./query.service";
 
 export default class FindService extends QueryService {
 
-    async find(constructor: Function, schema: Schema, value: any): Promise<any | undefined> {
+    async find(constructor: ObjectConstructor, schema: EntitySchema, value: any): Promise<any | undefined> {
         const builder = new Builder()
 
         const primaryKey = schema.getProperties().find(property => property.isPrimaryKey()).getKey()
@@ -15,6 +15,5 @@ export default class FindService extends QueryService {
 
         // Run it!
         return this.returnFirst(constructor, schema, builder)
-
     }
 }

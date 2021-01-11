@@ -1,12 +1,13 @@
-import neo4j, { Driver, Session, Transaction } from "neo4j-driver";
-import { models } from "./meta";
-import Schema from "./meta/schema";
+import neo4j, { Driver, QueryResult, Session, Transaction } from "neo4j-driver";
+import { getModel, getModels } from "./meta";
+import EntitySchema from "./meta/entity/entity-schema";
 import { EventEmitter } from 'events';
 import FindService from "./services/find.service";
 import MergeService from "./services/merge.service";
 import { INTERNAL_NODE, THIS_NODE } from "./constants";
 import { EventType } from "./common/events";
 import DeleteService from "./services/delete.service";
+import INeode from "./neode.interface";
 
 export default class Neode implements INeode {
 
@@ -26,12 +27,16 @@ export default class Neode implements INeode {
         return this.driver
     }
 
-    private getSchema(constructor: any): Schema {
-        if ( !models.has(constructor) ) {
-            throw new Error(`Couldn't find a model for "${constructor.name}".  Registered model(s) are: ${ Array.from( models.keys() ).map(model => (model as Record<string, any>).name)}`)
+    isEnterprise(): boolean {
+        return this.enterprise
+    }
+
+    private getSchema(constructor: any): EntitySchema {
+        if ( !getModel(constructor) ) {
+            throw new Error(`Couldn't find a model for "${constructor.name}".  Registered model(s) are: ${ Array.from( getModels().keys() ).map(model => (model as Record<string, any>).name)}`)
         }
 
-        return models.get(constructor)
+        return getModel(constructor)
     }
 
     /**
@@ -70,6 +75,44 @@ export default class Neode implements INeode {
             database,
             defaultAccessMode: neo4j.session.WRITE,
         });
+    }
+
+    /**
+     * Run a read query against the database in an auto-commit transaction
+     * and return the QueryResult directly from the neo4j driver
+     *
+     * @param {String} query
+     * @param {Record<string, any>} params
+     * @param database
+     */
+    readCypher(query: string, params: Record<string, any> = {}, database?: string): Promise<QueryResult> {
+        const session = this.readSession(database)
+
+        return session.run(query, params)
+            .then(res => {
+                session.close()
+
+                return res
+            })
+    }
+
+    /**
+     * Run a write query against the database in an auto-commit transaction
+     * and return the QueryResult directly from the neo4j driver
+     *
+     * @param {String} query
+     * @param {Record<string, any>} params
+     * @param database
+     */
+    writeCypher(query: string, params: Record<string, any> = {}, database?: string): Promise<QueryResult> {
+        const session = this.writeSession(database)
+
+        return session.run(query, params)
+            .then(res => {
+                session.close()
+
+                return res
+            })
     }
 
 

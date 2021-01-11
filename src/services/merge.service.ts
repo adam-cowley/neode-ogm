@@ -1,13 +1,13 @@
 import Builder from "@neode/querybuilder";
 import { QueryResult } from "neo4j-driver";
 import { INTERNAL_ID, THIS_NODE } from "../constants";
-import Schema from "../meta/schema";
+import EntitySchema from "../meta/entity/entity-schema";
 import QueryService from "./query.service";
 
 
 export default class MergeService extends QueryService {
 
-    async save(model: Object, schema: Schema): Promise<QueryResult> {
+    async save(model: Object, schema: EntitySchema): Promise<QueryResult> {
         const builder = new Builder()
 
         const unique = schema.getProperties().filter(property => property.isUnique())

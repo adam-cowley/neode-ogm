@@ -83,5 +83,47 @@ neode.openTransaction()
 
         const arthur = new Person("92702e6b-4d39-4ad2-a4ad-cc3923496090", 'Arthur')
         await inTx.save(arthur)
+
+        await inTx.commit()
     })
 ----
+
+== Annotations (TODO)
+
+
+- @NeodeRepository
+
+=== Entities
+
+* [x] `@NodeEntity`
+* [ ] `@RelationshipEntity`
+
+=== Property Types
+
+* [x] @String
+* [x] @Uuid
+* [ ] @Int
+* [ ] @Float
+* [ ] @Number
+* [ ] @Property
+
+=== Relationships
+
+* [ ] @OneToOne
+* [ ] @OneToMany
+
+
+== Writing
+
+* [ ] @Default
+* [ ] @OnCreateSet
+* [ ] @OnMatchSet
+
+=== Schema
+
+* [ ] @Primary
+* [ ] @Unique
+
+== Other TODO's
+
+* [ ] `neode.installSchema()`
