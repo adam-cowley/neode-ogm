@@ -181,13 +181,16 @@ export default class Neode implements INeode {
 
             entity[ INTERNAL_NODE ] = node
 
+
             // Commit the transaction and clear it from memory
             await tx.commit()
 
             // Emit event
             this.eventEmitter.emit(EventType.NODE_CREATED, entity)
 
-            return entity
+            const id = entity[ schema.getPrimaryKey().getKey() ]
+
+            return this.find(entity.constructor, id)
         }
         catch(e) {
             return Promise.reject(e)

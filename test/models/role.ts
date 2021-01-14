@@ -1,5 +1,4 @@
-import { EndNode, RelationshipEntity, StartNode, String } from "../../src/decorators";
-// import Person from "./person";
+import { EndNode, RelationshipEntity, String } from "../../src/decorators";
 import Movie from "./movie";
 import InternalId from "../../src/decorators/internal-id.decorator";
 
@@ -23,4 +22,12 @@ export default class Role {
         array: true
     })
     roles: string[] = [];
+
+    setMovie(movie: Movie) {
+        this.movie = movie
+    }
+
+    addRole(role: string) {
+        this.roles.push(role)
+    }
 }

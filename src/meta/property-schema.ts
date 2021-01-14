@@ -1,8 +1,10 @@
 export enum PropertyType {
     ANY,
     INTERNAL_ID,
+    ALL_PROPERTIES,
     UUID,
     STRING,
+    INTEGER,
 
     ONE_TO_ONE,
     ONE_TO_MANY,

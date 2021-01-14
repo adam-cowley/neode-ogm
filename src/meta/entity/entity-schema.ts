@@ -62,6 +62,11 @@ export default class EntitySchema {
         return this.properties.has(key)
     }
 
+    getPrimaryKey() {
+        return this.getProperties()
+            .find(property => property.isPrimaryKey())
+    }
+
     getProperty(key: string) {
         return this.properties.get(key)
     }

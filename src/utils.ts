@@ -1,7 +1,8 @@
-import neo4j, { Node, Relationship } from 'neo4j-driver'
+import Builder from '@neode/querybuilder';
+import neo4j, { int, Node, Relationship } from 'neo4j-driver'
 import { getModel } from './meta';
 import EntitySchema, { EntityType } from './meta/entity/entity-schema';
-import { PropertyType } from './meta/property-schema';
+import PropertySchema, { PropertyType } from './meta/property-schema';
 import Neode from './neode.service'
 
 
@@ -74,6 +75,15 @@ export function hydrateNode<T>(targetSchema: EntitySchema, targetEntity: ObjectC
         switch ( property.getType() ) {
             case PropertyType.INTERNAL_ID:
                 entity[ property.getKey() ] = node.identity.toNumber()
+                break;
+
+            case PropertyType.ALL_PROPERTIES:
+                // TODO: Convert property to native
+                entity[ property.getKey() ] = node.properties
+                break;
+
+            case PropertyType.INTEGER:
+                entity[ property.getKey() ] = node.properties[ property.getKey() ].toNumber()
                 break;
 
             default:
@@ -168,4 +178,26 @@ export function hydrateRelationship<T>(targetSchema: EntitySchema, targetEntity:
     })
 
     return entity
+}
+
+export function setPropertyInBuilder<T>(builder: Builder<T>, alias: string, property: PropertySchema, value: any): Builder<T> {
+    if ( value === undefined || value === null ) {
+        return builder.delete(`${alias}.${property.getKey()}`)
+    }
+
+    // TODO: Handle complex types
+    switch ( property.getType() ) {
+        case PropertyType.INTERNAL_ID:
+        case PropertyType.ALL_PROPERTIES:
+            break;
+
+        case PropertyType.INTEGER:
+            builder.set(`${alias}.${property.getKey()}`, int(value))
+            break;
+
+        default:
+            builder.set(`${alias}.${property.getKey()}`, value)
+    }
+
+    return builder
 }
