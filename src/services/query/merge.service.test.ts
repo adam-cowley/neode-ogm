@@ -1,15 +1,24 @@
 import { v4 } from 'uuid'
-import { fromEnv } from "../utils"
-import Person from "../../test/models/person"
-import Movie from "../../test/models/movie"
-import Role from "../../test/models/role"
-
+import { fromEnv } from "../../utils"
+import Person from "../../../test/models/person"
+import Movie from "../../../test/models/movie"
+import Role from "../../../test/models/role"
 
 describe('MergeService', () => {
     // @ts-ignore
     const neode = fromEnv()
 
     let ids = []
+
+    // beforeAll(() => neode.writeCypher(`MATCH (n) DETACH DELETE n`))
+
+    afterAll(async () => {
+        await neode.writeCypher(`
+            MATCH (n)
+            WHERE id(n) IN $ids
+            DETACH DELETE n
+        `, { ids })
+    })
 
     it('should merge a node and @OneToOne ', async () => {
         const id = v4()
@@ -106,16 +115,6 @@ describe('MergeService', () => {
             res['topRole']['_id'],
             res['roles'][0]['_id'],
         )
-    })
-
-    // beforeAll(() => neode.writeCypher(`MATCH (n) DETACH DELETE n`))
-
-    afterAll(async () => {
-        await neode.writeCypher(`
-            MATCH (n)
-            WHERE id(n) IN $ids
-            DETACH DELETE n
-        `, { ids })
     })
 
 })

@@ -10,7 +10,7 @@ export default class EntitySchema {
     protected properties: Map<string, PropertySchema> = new Map;
     protected relationships: Map<string, RelationshipPropertySchema> = new Map;
 
-    private labels: string[];
+    private labels: string[] = [];
     private objectConstructor: ObjectConstructor;
 
 

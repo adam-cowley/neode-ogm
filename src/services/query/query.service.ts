@@ -1,21 +1,21 @@
 import Builder from "@neode/querybuilder";
 import { QueryResult,  Transaction } from "neo4j-driver";
-import { THIS_NODE } from "../constants";
-import EntitySchema from "../meta/entity/entity-schema";
+import { THIS_NODE } from "../../constants";
+import EntitySchema from "../../meta/entity/entity-schema";
 import { hydrateNode,
     // EagerNode, EagerRelationship
-} from "../utils";
+} from "../../utils";
 
 export default class QueryService {
     constructor(protected readonly transaction: Transaction) {}
 
     async returnFirst<T>(constructor: ObjectConstructor, schema: EntitySchema, builder: Builder<any>): Promise<T | undefined> {
-        const results = await this.return(constructor, schema, builder, 0, 1)
+        const results = await this.return<T>(constructor, schema, builder, 0, 1)
 
         return results[0]
     }
 
-    async return(constructor: ObjectConstructor, schema: EntitySchema, builder: Builder<any>, skip?: number, limit?: number): Promise<any[]> {
+    async return<T>(constructor: ObjectConstructor, schema: EntitySchema, builder: Builder<any>, skip?: number, limit?: number): Promise<T[]> {
         // Return
         builder.return(THIS_NODE)
 
@@ -24,8 +24,6 @@ export default class QueryService {
             .forEach((rel) => {
                 const key = rel.getKey()
                 // TODO: Check type - is this a node entity or a relationship entity?
-                // const targetEntity = rel.getTarget()
-
                 // TODO: Inner Eager statements inside `other: { node: other, eager: { [relKey] : { rel, start, end, other }} }`
                 if ( rel.getEager() ) {
                     builder.return(`[ (${THIS_NODE})${rel.toString(key)}(other) | {
@@ -54,14 +52,14 @@ export default class QueryService {
         return this.getAndHydrate(res, constructor, schema)
     }
 
-    private getAndHydrate(res: QueryResult, constructor: ObjectConstructor, schema: EntitySchema) {
-        return res.records.map(row => {
+    private getAndHydrate<T>(res: QueryResult, constructor: ObjectConstructor, schema: EntitySchema): Promise<T[]> {
+        return Promise.all(res.records.map(row => {
             const node = row.get(THIS_NODE);
             const eager = Object.fromEntries(row.keys.filter(key => key !== THIS_NODE)
                 .map(key => [ key, row.get(key) ]))
 
-            return hydrateNode(schema, constructor, node, eager)
-        })
+            return hydrateNode<T>(schema, constructor, node, eager)
+        }))
     }
 
 }

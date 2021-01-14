@@ -1,6 +1,6 @@
 import Builder from "@neode/querybuilder";
-import { THIS_NODE } from "../constants";
-import EntitySchema from "../meta/entity/entity-schema";
+import { THIS_NODE } from "../../constants";
+import EntitySchema from "../../meta/entity/entity-schema";
 import QueryService from "./query.service";
 
 export default class DeleteService extends QueryService {

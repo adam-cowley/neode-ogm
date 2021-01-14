@@ -1,6 +1,5 @@
 import { Direction } from "@neode/querybuilder";
-import { NodeEntity, Uuid, String, OneToMany, OneToOne } from "../../src/decorators";
-import InternalId from "../../src/decorators/internal-id.decorator";
+import { NodeEntity, Uuid, String, OneToMany, OneToOne, InternalId } from "../../src";
 import Movie from "./movie";
 import Role from "./role";
 

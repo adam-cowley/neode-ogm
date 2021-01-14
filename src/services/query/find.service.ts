@@ -1,6 +1,6 @@
 import Builder from "@neode/querybuilder";
-import { THIS_NODE } from "../constants";
-import EntitySchema from "../meta/entity/entity-schema";
+import { THIS_NODE } from "../../constants";
+import EntitySchema from "../../meta/entity/entity-schema";
 import QueryService from "./query.service";
 
 export default class FindService extends QueryService {
@@ -10,7 +10,7 @@ export default class FindService extends QueryService {
 
         const primaryKey = schema.getProperties().find(property => property.isPrimaryKey()).getKey()
 
-        // TODO: Convert value
+        // TODO: Convert value?
         builder.match(THIS_NODE, schema.getLabels(), { [primaryKey]: value })
 
         // Run it!

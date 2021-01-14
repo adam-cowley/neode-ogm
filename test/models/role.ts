@@ -1,6 +1,5 @@
-import { EndNode, RelationshipEntity, String } from "../../src/decorators";
+import { EndNode, RelationshipEntity, String, InternalId } from "../../src/";
 import Movie from "./movie";
-import InternalId from "../../src/decorators/internal-id.decorator";
 
 @RelationshipEntity()
 export default class Role {

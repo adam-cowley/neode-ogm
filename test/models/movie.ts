@@ -1,9 +1,8 @@
-import { NodeEntity, Primary, String, Uuid } from "../../src/decorators";
-import InternalId from "../../src/decorators/internal-id.decorator";
+import { NodeEntity, Primary, String, Uuid, InternalId } from "../../src/";
+
 
 @NodeEntity()
 export default class Movie {
-
 
     @InternalId()
     _id: number;

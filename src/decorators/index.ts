@@ -1,6 +1,8 @@
 // Node Entities
 export { default as NodeEntity } from './node/node-entity.decorator'
 
+export { default as InternalId } from './internal-id.decorator'
+
 export { default as Primary } from './node/primary.decorator'
 export { default as Uuid } from './node/uuid.decorator'
 export { default as String } from './node/string.decorator'

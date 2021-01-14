@@ -1,8 +1,8 @@
 import { v4 } from 'uuid'
-import { fromEnv } from "../utils"
-import Person from "../../test/models/person"
-import Movie from "../../test/models/movie"
-import Role from "../../test/models/role"
+import { fromEnv } from "../../utils"
+import Person from "../../../test/models/person"
+import Movie from "../../../test/models/movie"
+import Role from "../../../test/models/role"
 
 describe('FindService', () => {
     const neode = fromEnv()

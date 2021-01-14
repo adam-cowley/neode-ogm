@@ -2,8 +2,9 @@
   "name": "neodegm",
   "version": "0.1.1",
   "description": "",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
   "scripts": {
+    "watch": "tsc --watch",
     "test": "jest --coverage",
     "dev": "jest --watch --runInBand --detectOpenHandles"
   },
