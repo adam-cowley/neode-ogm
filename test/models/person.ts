@@ -12,7 +12,9 @@ export default class Person {
     @Uuid({ primary: true })
     id: string;
 
-    @String()
+    @String({
+        unique: true
+    })
     name: string;
 
     @OneToOne({

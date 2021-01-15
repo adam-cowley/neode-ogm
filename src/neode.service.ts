@@ -9,6 +9,7 @@ import { EventType } from "./common/events";
 import DeleteService from "./services/query/delete.service";
 import INeode from "./neode.interface";
 import GetService from "./services/query/get.service";
+import SchemaService from "./services/schema/schema.service";
 
 export default class Neode implements INeode {
 
@@ -140,28 +141,40 @@ export default class Neode implements INeode {
         return session.beginTransaction()
     }
 
+    /**
+     * Run statements to create the schema
+     */
+    installSchema(): Promise<void> {
+        const service = new SchemaService(this.driver)
+
+        return service.create()
+    }
+
+    /**
+     * Run statements to drop the schema
+     */
+    dropSchema(): Promise<void> {
+        const service = new SchemaService(this.driver)
+
+        return service.drop()
+    }
+
 
     async find<T extends Object>(constructor: any, value: string, database?: string): Promise<T | undefined> {
-        try {
-            // Get Schema
-            const schema = this.getSchema(constructor)
+        // Get Schema
+        const schema = this.getSchema(constructor)
 
-            // Open Tx
-            const tx = this.readTransaction(database)
+        // Open Tx
+        const tx = this.readTransaction(database)
 
-            const service = new FindService(tx)
+        const service = new FindService(tx)
 
-            const output = await service.find(constructor, schema, value)
+        const output = await service.find(constructor, schema, value)
 
-            // Commit
-            await tx.commit()
+        // Commit
+        await tx.commit()
 
-
-            return output
-        }
-        catch(e) {
-            return Promise.reject(e)
-        }
+        return output
     }
 
     async get<T extends Object>(constructor: any, params: Record<string, any>, limit?: number, skip?: number, database?: string): Promise<T[]> {
@@ -189,31 +202,36 @@ export default class Neode implements INeode {
 
 
     async save<T extends Object>(entity: T, database?: string): Promise<T> {
-        // Get Schema
-        const schema = this.getSchema(entity.constructor)
+        try {
+            // Get Schema
+            const schema = this.getSchema(entity.constructor)
 
-        // Open Tx
-        const tx = this.writeTransaction(database)
+            // Open Tx
+            const tx = this.writeTransaction(database)
 
-        const merge = new MergeService(tx)
+            const merge = new MergeService(tx)
 
-        const res = await merge.save(entity, schema)
+            const res = await merge.save(entity, schema)
 
-        // TODO: Should this happen here?!
-        const node = res.records[0].get(THIS_NODE)
+            // TODO: Should this happen here?!
+            const node = res.records[0].get(THIS_NODE)
 
-        entity[ INTERNAL_NODE ] = node
+            entity[ INTERNAL_NODE ] = node
 
 
-        // Commit the transaction and clear it from memory
-        await tx.commit()
+            // Commit the transaction and clear it from memory
+            await tx.commit()
 
-        // Emit event
-        this.eventEmitter.emit(EventType.NODE_CREATED, entity)
+            // Emit event
+            this.eventEmitter.emit(EventType.NODE_CREATED, entity)
 
-        const id = entity[ schema.getPrimaryKey().getKey() ]
+            const id = entity[ schema.getPrimaryKey().getKey() ]
 
-        return this.find(entity.constructor, id)
+            return this.find(entity.constructor, id)
+        }
+        catch (e) {
+            throw e
+        }
     }
 
     async delete<T extends Object>(entity: T, database?: string): Promise<void> {
@@ -231,7 +249,7 @@ export default class Neode implements INeode {
             this.eventEmitter.emit(EventType.NODE_DELETED, entity)
         }
         catch(e) {
-            return Promise.reject(e)
+            throw e
         }
 
     }

@@ -13,8 +13,6 @@ describe('e2e test example', () => {
 
     describe('Decorators', () => {
         it('should register a model using decorators', () => {
-            // expect(models.has(Person)).toBe(true)
-
             const model = getModel(Person)
             expect((model as NodeEntitySchema).getLabels()).toEqual(['Person'])
         })
@@ -27,36 +25,66 @@ describe('e2e test example', () => {
         // })
     })
 
+    describe('::installSchema', () => {
+        it('should create the schema', async () => {
+            await neode.installSchema()
+        })
+
+        it('should not throw any errors if constraints already exist', async () => {
+            await neode.installSchema()
+        })
+    })
+
     describe('::save', () => {
-        // it('should throw an error if model is not registered', () => {
-        //     class UnknownModel {}
+        it('should throw an error if model is not registered', () => {
+            class UnknownModel {}
 
-        //     neode.save(new UnknownModel)
-        //         .then(() => fail())
-        //         .catch(() => expect(true))
-        // })
+            neode.save(new UnknownModel)
+                .then(() => fail())
+                .catch(() => expect(true))
+        })
+
+        it('should save a model', async () => {
+            const adam = Person.create(id, name)
+            const saved = await neode.save<Person>(adam)
+
+            expect(saved['_id']).toBeDefined()
+        })
+
+        it('should throw an error when unique constraint is violated', async () => {
+
+            try {
+                const adam = Person.create('another-id', name)
+                await neode.save<Person>(adam)
+
+                fail()
+            }
+            catch(e) {
+                expect(true)
+            }
 
 
-        // it('should save a model', async () => {
-        //     const adam = Person.create(id, name)
-        //     const saved = await neode.save<Person>(adam)
 
-        //     expect(saved[ INTERNAL_NODE ]).toBeDefined()
 
-        //     // expect(summary.counters.updates().propertiesSet).toEqual(1)
-        // })
+        })
+
+
+
     })
 
     describe('::find', () => {
         it('should find a node and hydrate into an object', async () => {
-            // const adam = await neode.find<Person>(Person, id)
 
-            // expect(adam.getId()).toEqual(id)
-            // expect(adam.getName()).toEqual(name)
+        })
+    })
 
-            // console.log(adam);
-            // console.log(adam['directed']);
+    describe('::dropSchema', () => {
+        it('should drop the schema', async () => {
+            await neode.dropSchema()
+        })
 
+        it('should not throw any errors if constraints do not exist', async () => {
+            await neode.dropSchema()
         })
     })
 })
