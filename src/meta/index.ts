@@ -5,6 +5,7 @@ import RelationshipPropertySchema from "./relationship-property-schema";
 
 import EntitySchema, { EntityType } from "./entity/entity-schema";
 import PropertyConfig from "../decorators/property-config.interface";
+import Repository from "../repository/index";
 
 const models: Map<ObjectConstructor, EntitySchema> = new Map()
 
@@ -105,4 +106,14 @@ export function mergeRelationshipProperty(constructor: any, key: string,
     rel.setEager(eager || false)
 
     return rel
+}
+
+const repositories: Map<ObjectConstructor, Repository<any>> = new Map()
+
+export function registerRepository(entity: ObjectConstructor, repository: Repository<any>) {
+    repositories.set(entity, repository)
+}
+
+export function getRepository<T extends ObjectConstructor>(entity: T): Repository<T> | undefined {
+    return repositories.get(entity)
 }

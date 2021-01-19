@@ -1,31 +1,49 @@
-// import INeode from '../neode.interface'
+import Builder from '@neode/querybuilder'
+import { THIS_NODE } from '../constants'
+import { getModel } from '../meta'
+import EntitySchema from '../meta/entity/entity-schema'
+import PropertySchema from '../meta/property-schema'
+import INeode from '../neode.interface'
 
 export default class Repository<Entity> {
 
-    // TODO: Get singleton?
-    // constructor(protected readonly neode: INeode, private readonly database?: string) {}
+    protected schema: EntitySchema
 
-    // protected getEntity() {
-    //     if ( !repositories.has(this.constructor) ) {
-    //         throw new Error(`Could not find a registered repository for ${this.constructor.name}.  Have you decorated the class with @Repository?`)
-    //     }
+    constructor(
+        protected readonly neode: INeode,
+        protected readonly entity: Entity,
+        protected readonly database?: string,
+    ) {
+        this.schema = getModel(entity.constructor)
+    }
 
-    //     return repositories.get(typeof this)
-    // }
+    protected getLabels(): string[] {
+        return this.schema.getLabels()
+    }
 
-    // async find(id: any): Promise<Entity> {
-    //     return this.neode.find(this.getEntity(), id, this.database)
-    // }
+    getPrimaryKey(): PropertySchema {
+        return this.schema.getProperties().find(property => property.isPrimaryKey())
+    }
 
-    // async create(object: Entity): Promise<Entity> {
-    //     return null
-    // }
+    async find(id: any): Promise<Entity> {
+        return this.neode.find(this.entity, id, this.database)
+    }
 
-    // merge(object: Entity): Promise<Entity> {
-    //     return this.neode.save(object)
-    // }
+    save(object: Entity): Promise<Entity> {
+        return this.neode.save(object)
+    }
 
-    // async delete(id: any): Promise<void> {
-    //     return this.neode.delete(this.find(id))
-    // }
+    async delete(id: any): Promise<void> {
+        return this.neode.delete(this.find(id))
+    }
+
+    matchEntity(variable: string = THIS_NODE, object: Entity): Builder<Entity> {
+        const builder = new Builder()
+
+        const primaryKey = this.getPrimaryKey().getKey()
+        const value = object[ primaryKey ]
+
+        return builder.match(variable, this.schema.getLabels(), { [primaryKey]: value })
+    }
+
 }

@@ -10,6 +10,8 @@ import DeleteService from "./services/query/delete.service";
 import INeode from "./neode.interface";
 import GetService from "./services/query/get.service";
 import SchemaService from "./services/schema/schema.service";
+import { Repository } from ".";
+import TransactionalService from "./transaction/transactional.service";
 
 export default class Neode implements INeode {
 
@@ -116,7 +118,6 @@ export default class Neode implements INeode {
             })
     }
 
-
     /**
      * Begin a Read Transaction
      *
@@ -142,6 +143,31 @@ export default class Neode implements INeode {
     }
 
     /**
+     * Open a new transaction and return a TransactionalService
+     * (Remember to call .commit())
+     *
+     * @param database
+     */
+    openTransaction(database?: string): TransactionalService {
+        const session = this.writeSession(database)
+        const transaction = session.beginTransaction()
+
+        return new TransactionalService(session, transaction, this.eventEmitter)
+    }
+
+    /**
+     * Run a unit of work within a transaction (Remember to call .commit())
+     *
+     * @param work
+     * @param database
+     */
+    inTransaction(work: (tx: TransactionalService) => any, database?: string): Promise<any> {
+        const tx = this.openTransaction(database)
+
+        return work(tx)
+    }
+
+    /**
      * Run statements to create the schema
      */
     installSchema(): Promise<void> {
@@ -157,6 +183,17 @@ export default class Neode implements INeode {
         const service = new SchemaService(this.driver)
 
         return service.drop()
+    }
+
+    /**
+     * Create a Repository
+     *
+     * @param {Object} entity
+     * @param {String} database
+     * @return {Repository<T>}
+     */
+    getRepository<T>(entity: T, database?: string): Repository<T> {
+        return new Repository<T>(this, entity, database)
     }
 
 

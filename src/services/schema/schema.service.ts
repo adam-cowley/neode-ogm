@@ -1,4 +1,4 @@
-import { Driver, QueryResult, Session, session as SessionMode } from "neo4j-driver";
+import { Driver, session as SessionMode } from "neo4j-driver";
 import { getModels } from "../../meta";
 import EntitySchema from "../../meta/entity/entity-schema"
 import PropertySchema from "../../meta/property-schema";
@@ -37,8 +37,6 @@ export default class SchemaService {
             model.getLabels()
                 .map(label => this.runSchemaStatementsForLabel(action, model, label))
         )
-
-
     }
 
     runSchemaStatementsForLabel(action: ConstraintAction, model: EntitySchema, label: string) {
@@ -48,11 +46,13 @@ export default class SchemaService {
     runUniqueConstraintStatementsForLabel(action: ConstraintAction, properties: PropertySchema[], label: string) {
         return Promise.all(properties.filter(property => property.isUnique())
             .map(property => this.constraintStatement(action, ConstraintType.UNIQUE, label, property.getKey()))
+        )
     }
 
     runExistsConstraintStatementsForLabel(action: ConstraintAction, properties: PropertySchema[], label: string) {
         return Promise.all(properties.filter(property => property.isUnique())
             .map(property => this.constraintStatement(action, ConstraintType.EXISTS, label, property.getKey()))
+        )
     }
 
     async constraintStatement(action: ConstraintAction, type: ConstraintType, label: string, property: string): Promise<void> {
@@ -65,8 +65,7 @@ export default class SchemaService {
                 .catch(e => console.log(e.message))
         }
         catch (e) {
-            console.log('???', e);
-
+            console.log(e);
         }
 
         await session.close()
