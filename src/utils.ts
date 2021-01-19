@@ -82,6 +82,10 @@ export function hydrateNode<T>(targetSchema: EntitySchema, targetEntity: ObjectC
                 entity[ property.getKey() ] = node.properties
                 break;
 
+            case PropertyType.NODE:
+                entity[ property.getKey() ] = node
+                break;
+
             case PropertyType.INTEGER:
                 entity[ property.getKey() ] = node.properties[ property.getKey() ].toNumber()
                 break;
@@ -140,6 +144,10 @@ export function hydrateRelationship<T>(targetSchema: EntitySchema, targetEntity:
         switch ( property.getType() ) {
             case PropertyType.INTERNAL_ID:
                 value = rel.identity.toNumber()
+                break;
+
+            case PropertyType.RELATIONSHIP:
+                value = rel
                 break;
 
             case PropertyType.START_NODE:

@@ -6,8 +6,9 @@ module.exports = {
     coverageDirectory: "coverage",
     testEnvironment: "node",
     testMatch: [
-      "**/?(*.)+(spec|test).[tj]s?(x)"
+      "**/?(*.)+(spec|test).[t]s?(x)"
     ],
+    transformIgnorePatterns: ['^.+\\.js$'],
 
     preset: 'ts-jest',
     transform: {

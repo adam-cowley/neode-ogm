@@ -61,7 +61,7 @@ export default class PersonRepository extends Repository<Person> {}
 
 - Create an instance of the repository and use it
 
-[source,typescript]
+[source,typescript]w
 ----
 const repo = new PersonRepository()
 const adam = repo.find("92702e6b-4d39-4ad2-a4ad-cc3923496090")
@@ -76,7 +76,7 @@ const adam = repo.find("92702e6b-4d39-4ad2-a4ad-cc3923496090")
 
 [source,typescript]
 ----
-neode.openTransaction()
+neode.inWriteTransaction()
     .then(async inTx => {
         const adam = new Person("92702e6b-4d39-4ad2-a4ad-cc3923496090", 'Adam')
         await inTx.save(adam)

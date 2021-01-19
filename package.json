@@ -1,5 +1,5 @@
 {
-  "name": "neodegm",
+  "name": "@neode/beta",
   "version": "0.1.2",
   "description": "",
   "main": "dist/index.js",

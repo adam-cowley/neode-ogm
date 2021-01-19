@@ -11,7 +11,10 @@ export enum PropertyType {
 
     START_NODE,
     END_NODE,
-    OTHER_NODE
+    OTHER_NODE,
+
+    NODE,
+    RELATIONSHIP
 }
 
 export const RelationshipTypes = [

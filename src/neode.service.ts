@@ -148,7 +148,20 @@ export default class Neode implements INeode {
      *
      * @param database
      */
-    openTransaction(database?: string): TransactionalService {
+    openReadTransaction(database?: string): TransactionalService {
+        const session = this.readSession(database)
+        const transaction = session.beginTransaction()
+
+        return new TransactionalService(session, transaction, this.eventEmitter)
+    }
+
+    /**
+     * Open a new transaction and return a TransactionalService
+     * (Remember to call .commit())
+     *
+     * @param database
+     */
+    openWriteTransaction(database?: string): TransactionalService {
         const session = this.writeSession(database)
         const transaction = session.beginTransaction()
 
@@ -156,13 +169,25 @@ export default class Neode implements INeode {
     }
 
     /**
-     * Run a unit of work within a transaction (Remember to call .commit())
+     * Run a unit of work within a READ transaction (Remember to call .commit())
      *
      * @param work
      * @param database
      */
-    inTransaction(work: (tx: TransactionalService) => any, database?: string): Promise<any> {
-        const tx = this.openTransaction(database)
+    inReadTransaction(work: (tx: TransactionalService) => any, database?: string): Promise<any> {
+        const tx = this.openReadTransaction(database)
+
+        return work(tx)
+    }
+
+    /**
+     * Run a unit of work within a WRITE transaction (Remember to call .commit())
+     *
+     * @param work
+     * @param database
+     */
+    inWriteTransaction(work: (tx: TransactionalService) => any, database?: string): Promise<any> {
+        const tx = this.openWriteTransaction(database)
 
         return work(tx)
     }

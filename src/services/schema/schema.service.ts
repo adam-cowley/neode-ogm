@@ -13,61 +13,92 @@ enum ConstraintType {
     EXISTS
 }
 
+interface SchemaResult {
+    action: ConstraintAction,
+    type: ConstraintType,
+    label: string;
+    property: string;
+    statement: string;
+    success: boolean;
+    error?: Error;
+}
+
 export default class SchemaService {
-    constructor(private readonly driver: Driver) {}
+    constructor(private readonly driver: Driver, private readonly enterprise: boolean = false) {}
 
-    async create(): Promise<void> {
-        await this.runSchemaStatements(ConstraintAction.CREATE)
+    create(): Promise<SchemaResult[]> {
+        return this.runSchemaStatements(ConstraintAction.CREATE)
     }
 
-    async drop(): Promise<void> {
-        await this.runSchemaStatements(ConstraintAction.DROP)
+    drop(): Promise<SchemaResult[]> {
+        return this.runSchemaStatements(ConstraintAction.DROP)
     }
 
-    private runSchemaStatements(action: ConstraintAction) {
-        return Promise.all(
-            Array.from(getModels().values())
-                .map(model => this.runSchemaStatementsForModel(action, model))
+    private async runSchemaStatements(action: ConstraintAction): Promise<SchemaResult[]> {
+        const output = await Promise.all(Array.from(getModels().values())
+            .map(async model => await this.runSchemaStatementsForModel(action, model))
         )
 
+        return output.reduce((acc: SchemaResult[], current: SchemaResult[]) => acc.concat(current) , []) as SchemaResult[]
     }
 
-    runSchemaStatementsForModel(action: ConstraintAction, model: EntitySchema) {
-        return Promise.all(
-            model.getLabels()
-                .map(label => this.runSchemaStatementsForLabel(action, model, label))
+    async runSchemaStatementsForModel(action: ConstraintAction, model: EntitySchema): Promise<SchemaResult[]> {
+        const output = await Promise.all(model.getLabels()
+            .map(label => this.runSchemaStatementsForLabel(action, model, label))
         )
+
+        return output.reduce((acc: SchemaResult[], current: SchemaResult[]) => acc.concat(current) , []) as SchemaResult[]
     }
 
-    runSchemaStatementsForLabel(action: ConstraintAction, model: EntitySchema, label: string) {
-        return this.runUniqueConstraintStatementsForLabel(action, model.getProperties(), label)
+    async runSchemaStatementsForLabel(action: ConstraintAction, model: EntitySchema, label: string): Promise<SchemaResult[]> {
+        let output: SchemaResult[] = (await this.runUniqueConstraintStatementsForLabel(action, model.getProperties(), label))
+            .reduce((acc: SchemaResult[], value: SchemaResult) => acc.concat(value), [])
+
+
+        if ( this.enterprise ) {
+            return output.concat(...await this.runExistsConstraintStatementsForLabel(action, model.getProperties(), label))
+        }
+
+        return output
     }
 
-    runUniqueConstraintStatementsForLabel(action: ConstraintAction, properties: PropertySchema[], label: string) {
+    runUniqueConstraintStatementsForLabel(action: ConstraintAction, properties: PropertySchema[], label: string): Promise<SchemaResult[]> {
         return Promise.all(properties.filter(property => property.isUnique())
             .map(property => this.constraintStatement(action, ConstraintType.UNIQUE, label, property.getKey()))
         )
     }
 
-    runExistsConstraintStatementsForLabel(action: ConstraintAction, properties: PropertySchema[], label: string) {
+    runExistsConstraintStatementsForLabel(action: ConstraintAction, properties: PropertySchema[], label: string): Promise<SchemaResult[]> {
         return Promise.all(properties.filter(property => property.isUnique())
             .map(property => this.constraintStatement(action, ConstraintType.EXISTS, label, property.getKey()))
         )
     }
 
-    async constraintStatement(action: ConstraintAction, type: ConstraintType, label: string, property: string): Promise<void> {
+    async constraintStatement(action: ConstraintAction, type: ConstraintType, label: string, property: string): Promise<SchemaResult> {
         const session = this.driver.session({ defaultAccessMode: SessionMode.WRITE })
 
-        try {
-            const statement = type === ConstraintType.UNIQUE ? `n.\`${property}\` IS UNIQUE` : `exists(n.\`${property}\`)`
+        const statement = type === ConstraintType.UNIQUE ? `n.\`${property}\` IS UNIQUE` : `exists(n.\`${property}\`)`
 
+        const output: SchemaResult = {
+            action,
+            type,
+            label,
+            property,
+            statement,
+            success: false
+        }
+
+        try {
             await session.writeTransaction(tx => tx.run(`${action} CONSTRAINT ON (n:${label}) ASSERT ${statement}`))
-                .catch(e => console.log(e.message))
+
+            output.success = true
         }
         catch (e) {
-            console.log(e);
+            output.error = e
         }
 
         await session.close()
+
+        return output
     }
 }

@@ -22,6 +22,9 @@ describe('FindService', () => {
 
             CREATE (p)-[:ACTED_IN {roles: $roles}]->(m)
             CREATE (p)-[:DIRECTED]->(m)
+
+            CREATE (p)-[:ACTED_IN_TOP_ROLE]->(m)
+            CREATE (p)-[:ACTED_IN_ROLE {roles: $roles}]->(m)
         `, { id, name, movieId, movieTitle, roles })
 
         const person = Person.create(id, name)
@@ -51,7 +54,5 @@ describe('FindService', () => {
         expect(person['roles'][0]).toBeInstanceOf(Role)
         expect(person['roles'][0].internalId).toBeDefined()
         expect(person['roles'][0].roles).toEqual(roles)
-
-        // console.log(JSON.stringify(person, null, 2))
     })
 })

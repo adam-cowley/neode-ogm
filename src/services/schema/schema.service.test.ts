@@ -14,28 +14,34 @@ describe('SchemaService', () => {
         // Ensure that the models are registered
         Person.create('id', 'name')
 
-        service = new SchemaService(neode.getDriver())
+        service = new SchemaService(neode.getDriver(), true)
     })
 
     describe('::create', () => {
         it('should install the schema', async () => {
-            await service.create()
+            const output = await service.create()
+
+            expect(output.filter(res => res.success === false).length).toEqual(0)
         })
 
         it('should silently fail if the schema is already set', async () => {
-            await service.create()
+            const output = await service.create()
+
+            expect(output.filter(res => res.success === false).length).toEqual(6)
         })
     })
 
     describe('::drop', () => {
         it('should drop the schema', async () => {
-            const service = new SchemaService(neode.getDriver())
+            const output = await service.drop()
 
-            await service.drop()
+            expect(output.filter(res => res.success === false).length).toEqual(0)
         })
 
-        it('should silently fail if the schema is already set', async () => {
-            await service.drop()
+        it('should silently fail if the schema is not set', async () => {
+            const output = await service.drop()
+
+            expect(output.filter(res => res.success === false).length).toEqual(6)
         })
     })
 
