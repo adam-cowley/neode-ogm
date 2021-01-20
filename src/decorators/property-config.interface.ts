@@ -1,6 +1,8 @@
+import { DefaultValue } from "../meta/property-schema";
+
 export default interface PropertyConfig {
     array?: boolean;
-    default?: any;
+    default?: DefaultValue;
     primary?: boolean;
     unique?: boolean;
     onCreateSet?: boolean;

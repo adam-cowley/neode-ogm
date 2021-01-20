@@ -9,13 +9,13 @@ import { hydrateNode,
 export default class QueryService {
     constructor(protected readonly transaction: Transaction) {}
 
-    async returnFirst<T>(constructor: ObjectConstructor, schema: EntitySchema, builder: Builder<any>): Promise<T | undefined> {
+    async returnFirst<T>(constructor: ObjectConstructor | Function, schema: EntitySchema, builder: Builder<any>): Promise<T | undefined> {
         const results = await this.return<T>(constructor, schema, builder, 0, 1)
 
         return results[0]
     }
 
-    async return<T>(constructor: ObjectConstructor, schema: EntitySchema, builder: Builder<any>, skip?: number, limit?: number): Promise<T[]> {
+    async return<T>(constructor: ObjectConstructor | Function, schema: EntitySchema, builder: Builder<any>, skip?: number, limit?: number): Promise<T[]> {
         // Return
         builder.return(THIS_NODE)
 
@@ -52,7 +52,7 @@ export default class QueryService {
         return this.getAndHydrate(res, constructor, schema)
     }
 
-    private getAndHydrate<T>(res: QueryResult, constructor: ObjectConstructor, schema: EntitySchema): Promise<T[]> {
+    private getAndHydrate<T>(res: QueryResult, constructor: ObjectConstructor | Function, schema: EntitySchema): Promise<T[]> {
         return Promise.all(res.records.map(row => {
             const node = row.get(THIS_NODE);
             const eager = Object.fromEntries(row.keys.filter(key => key !== THIS_NODE)

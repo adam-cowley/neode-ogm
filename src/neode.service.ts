@@ -4,14 +4,15 @@ import EntitySchema from "./meta/entity/entity-schema";
 import { EventEmitter } from 'events';
 import FindService from "./services/query/find.service";
 import MergeService from "./services/query/merge.service";
-import { INTERNAL_NODE, THIS_NODE } from "./constants";
+import { INTERNAL_ID } from "./constants";
 import { EventType } from "./common/events";
 import DeleteService from "./services/query/delete.service";
 import INeode from "./neode.interface";
 import GetService from "./services/query/get.service";
-import SchemaService from "./services/schema/schema.service";
+import SchemaService, { SchemaResult } from "./services/schema/schema.service";
 import { Repository } from ".";
 import TransactionalService from "./transaction/transactional.service";
+import FindByIdService from "./services/query/find-by-id.service";
 
 export default class Neode implements INeode {
 
@@ -195,7 +196,7 @@ export default class Neode implements INeode {
     /**
      * Run statements to create the schema
      */
-    installSchema(): Promise<void> {
+    installSchema(): Promise<SchemaResult[]> {
         const service = new SchemaService(this.driver)
 
         return service.create()
@@ -204,7 +205,7 @@ export default class Neode implements INeode {
     /**
      * Run statements to drop the schema
      */
-    dropSchema(): Promise<void> {
+    dropSchema(): Promise<SchemaResult[]> {
         const service = new SchemaService(this.driver)
 
         return service.drop()
@@ -232,6 +233,23 @@ export default class Neode implements INeode {
         const service = new FindService(tx)
 
         const output = await service.find(constructor, schema, value)
+
+        // Commit
+        await tx.commit()
+
+        return output
+    }
+
+    async findById<T extends Object>(constructor: any, id: number, database?: string): Promise<T | undefined> {
+        // Get Schema
+        const schema = this.getSchema(constructor)
+
+        // Open Tx
+        const tx = this.readTransaction(database)
+
+        const service = new FindByIdService(tx)
+
+        const output = await service.find(constructor, schema, id)
 
         // Commit
         await tx.commit()
@@ -269,27 +287,26 @@ export default class Neode implements INeode {
             const schema = this.getSchema(entity.constructor)
 
             // Open Tx
-            const tx = this.writeTransaction(database)
+            const res = await this.inWriteTransaction(async tx => {
+                const mergeService = new MergeService(tx.getTransaction())
 
-            const merge = new MergeService(tx)
+                const res = await mergeService.save(entity, schema)
 
-            const res = await merge.save(entity, schema)
+                const internalId = res.records[0].get(INTERNAL_ID).toNumber()
 
-            // TODO: Should this happen here?!
-            const node = res.records[0].get(THIS_NODE)
+                const findService = new FindByIdService(tx.getTransaction())
 
-            entity[ INTERNAL_NODE ] = node
+                const hydrated = await findService.find(entity.constructor, getModel(entity.constructor), internalId)
 
+                await tx.commit()
 
-            // Commit the transaction and clear it from memory
-            await tx.commit()
+                return hydrated
+            })
 
             // Emit event
-            this.eventEmitter.emit(EventType.NODE_CREATED, entity)
+            this.eventEmitter.emit(EventType.NODE_CREATED, res)
 
-            const id = entity[ schema.getPrimaryKey().getKey() ]
-
-            return this.find(entity.constructor, id)
+            return res
         }
         catch (e) {
             throw e

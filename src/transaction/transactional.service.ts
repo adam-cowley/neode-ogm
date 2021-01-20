@@ -1,11 +1,12 @@
 import { EventEmitter } from 'events';
-import { Session, Transaction } from "neo4j-driver";
+import { QueryResult, Session, Transaction } from "neo4j-driver";
 import { Repository } from '..';
 import { EventType } from '../common/events';
 import { getModel, getModels } from "../meta";
 import EntitySchema from "../meta/entity/entity-schema";
 import INeode from '../neode.interface';
 import DeleteService from '../services/query/delete.service';
+import FindByIdService from '../services/query/find-by-id.service';
 import FindService from "../services/query/find.service";
 import GetService from "../services/query/get.service";
 import MergeService from "../services/query/merge.service";
@@ -17,6 +18,10 @@ export default class TransactionalService implements INeode {
         private readonly transaction: Transaction,
         private readonly eventEmitter: EventEmitter
     ) {}
+
+    getTransaction() {
+        return this.transaction
+    }
 
     private getSchema(constructor: any): EntitySchema {
         if ( !getModel(constructor) ) {
@@ -30,12 +35,20 @@ export default class TransactionalService implements INeode {
         // Get Schema
         const schema = this.getSchema(constructor)
 
-        // Open Tx
+        // Find Node
         const service = new FindService(this.transaction)
 
-        const output = await service.find(constructor, schema, value)
+        return service.find(constructor, schema, value)
+    }
 
-        return output
+    async findById<T extends Object>(constructor: any, id: number, database?: string): Promise<T | undefined> {
+        // Get Schema
+        const schema = this.getSchema(constructor)
+
+        // Find Node
+        const service = new FindByIdService(this.transaction)
+
+        return service.find(constructor, schema, id)
     }
 
     async get<T extends Object>(constructor: any, params: Record<string, any>, limit?: number, skip?: number, database?: string): Promise<T[]> {
@@ -54,7 +67,6 @@ export default class TransactionalService implements INeode {
 
         return records[0]
     }
-
 
     async save<T extends Object>(entity: T, database?: string): Promise<T> {
         try {
@@ -105,6 +117,33 @@ export default class TransactionalService implements INeode {
     getRepository<T>(entity: T, database?: string): Repository<T> {
         return new Repository<T>(this, entity, database)
     }
+
+
+    /**
+     * Run a read query against the database in an auto-commit transaction
+     * and return the QueryResult directly from the neo4j driver
+     *
+     * @param {String} query
+     * @param {Record<string, any>} params
+     * @param database
+     */
+    readCypher(query: string, params: Record<string, any> = {}): Promise<QueryResult> {
+        return this.transaction.run(query, params)
+    }
+
+    /**
+     * Run a write query against the database in an auto-commit transaction
+     * and return the QueryResult directly from the neo4j driver
+     *
+     * @param {String} query
+     * @param {Record<string, any>} params
+     * @param database
+     */
+    writeCypher(query: string, params: Record<string, any> = {}): Promise<QueryResult> {
+        // TODO: Throw error if this is not a write transaction
+        return this.transaction.run(query, params)
+    }
+
 
     async commit(): Promise<void> {
         await this.transaction.commit()

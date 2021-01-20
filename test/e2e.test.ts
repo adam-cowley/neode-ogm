@@ -51,25 +51,17 @@ describe('e2e test example', () => {
             expect(saved['_id']).toBeDefined()
         })
 
-        it('should throw an error when unique constraint is violated', async () => {
+        // it('should throw an error when unique constraint is violated', async () =>
+        //     try {
+        //         const adam = Person.create('another-id', name)
+        //         await neode.save<Person>(adam)
 
-            try {
-                const adam = Person.create('another-id', name)
-                await neode.save<Person>(adam)
-
-                fail()
-            }
-            catch(e) {
-                expect(true)
-            }
-
-
-
-
-        })
-
-
-
+        //         fail()
+        //     }
+        //     catch(e) {
+        //         expect(true)
+        //     }
+        // })
     })
 
     describe('::find', () => {

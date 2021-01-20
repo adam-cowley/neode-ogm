@@ -36,7 +36,8 @@ describe('MergeService', () => {
         const topRoleName = 'a'
         const otherRoleName = 'b'
 
-        const p = Person.create(id, name)
+        const p = Person.create(name)
+        p['id'] = id
 
         // @OneToOne NodeEntity: Directed Movie
         const directedMovie = new Movie
@@ -115,6 +116,18 @@ describe('MergeService', () => {
             res['topRole']['_id'],
             res['roles'][0]['_id'],
         )
+    })
+
+    it('should set the default value if none is set', async () => {
+        const name = 'No default value set'
+        const p = Person.create(name)
+
+        const res = await neode.save(p)
+
+        expect(res).toBeInstanceOf(Person)
+
+        expect(res.name).toEqual(name)
+        expect(res.id).toBeDefined()
     })
 
 })

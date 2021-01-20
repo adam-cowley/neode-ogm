@@ -50,10 +50,9 @@ export default class Person {
     )
     roles: Role[] = []
 
-    static create(id: string, name: string): Person {
+    static create(name: string): Person {
         const person = new Person()
 
-        person.id = id
         person.name = name
 
         return person

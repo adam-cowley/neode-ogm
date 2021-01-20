@@ -44,28 +44,4 @@ export class TransactionManager {
             this.transactions.delete(stored[0])
         }
     }
-
-    // async commit(): Promise<void> {
-    //     // Commit the transaction
-    //     await this.transaction.commit()
-
-    //     // Close the session
-    //     await this.session.close()
-
-    //     // Unset the transaction & session
-    //     this.transaction = undefined
-    //     this.session = undefined
-    // }
-
-    // async rollback(): Promise<void> {
-    //     // Commit the transaction
-    //     await this.transaction.rollback()
-
-    //     // Close the session
-    //     await this.session.close()
-
-    //     // Unset the transaction & session
-    //     this.transaction = undefined
-    //     this.session = undefined
-    // }
 }

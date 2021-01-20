@@ -12,6 +12,6 @@ export default function Uuid(config: PropertyConfig = {}) {
 
         // Set Default
         // TODO: Call the function
-        property.setDefaultValue(v4)
+        property.setDefaultValue(() => v4())
     }
 }

@@ -13,7 +13,7 @@ enum ConstraintType {
     EXISTS
 }
 
-interface SchemaResult {
+export interface SchemaResult {
     action: ConstraintAction,
     type: ConstraintType,
     label: string;

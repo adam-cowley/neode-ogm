@@ -10,8 +10,13 @@ export default class FindService extends QueryService {
 
         const primaryKey = schema.getProperties().find(property => property.isPrimaryKey()).getKey()
 
+console.log('?? find me', primaryKey, value);
+
+
         // TODO: Convert value?
         builder.match(THIS_NODE, schema.getLabels(), { [primaryKey]: value })
+
+
 
         // Run it!
         return this.returnFirst(constructor, schema, builder)

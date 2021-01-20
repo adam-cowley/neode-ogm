@@ -5,20 +5,27 @@ import { getModel } from "../../meta";
 import EntitySchema, { EntityType } from "../../meta/entity/entity-schema";
 import PropertySchema, { PropertyType } from "../../meta/property-schema";
 import RelationshipPropertySchema from "../../meta/relationship-property-schema";
-import { setPropertyInBuilder } from "../../utils";
+import { getValuesAsRecord, setPropertyInBuilder } from "../../utils";
 import QueryService from "./query.service";
 export default class MergeService extends QueryService {
 
     async save(model: Object, schema: EntitySchema): Promise<QueryResult> {
         const builder = new Builder()
 
-        const unique = schema.getProperties().filter(property => property.isUnique())
-            .map(property => property.getKey())
+        let mergeOn: Record<string, any>
 
-        // Get Primary/Unique
-        const mergeOn = Object.fromEntries(
-            unique.map(key => [ key, model[ key ] ])
-        )
+        // Primary Key?
+        const primaryKeys = schema.getProperties().filter(property => property.isPrimaryKey())
+
+        if ( primaryKeys.length ) {
+            mergeOn = getValuesAsRecord(model, primaryKeys, schema)
+        }
+
+        // No primary keys, fall back to unique values
+        else {
+            const unique = schema.getProperties().filter(property => property.isUnique())
+            mergeOn = getValuesAsRecord(model, unique, schema)
+        }
 
         builder.merge(THIS_NODE, schema.getLabels(), mergeOn)
 
@@ -27,16 +34,17 @@ export default class MergeService extends QueryService {
         // TODO: ON MATCH SET
         // TODO: Default values
         schema.getProperties()
-            .filter(property => !property.isUnique())
+            .filter(property => primaryKeys.length ? !property.isPrimaryKey() : !property.isUnique())
             .map(property => {
                 const key = property.getKey()
                 const value = model[ key ]
 
                 // If property is not set then ignore it
-                if ( model.hasOwnProperty(key) ) {
+                if ( model.hasOwnProperty(key) && model [ key ] !== undefined ) {
                     setPropertyInBuilder(builder, THIS_NODE, property, value)
                 }
             })
+
 
         builder.return(THIS_NODE, `id(${THIS_NODE}) as ${INTERNAL_ID}`)
 
@@ -105,7 +113,6 @@ export default class MergeService extends QueryService {
                     return Promise.resolve()
                 })
         )
-
 
         return result
     }

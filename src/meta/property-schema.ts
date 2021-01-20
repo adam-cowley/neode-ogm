@@ -1,3 +1,5 @@
+import EntitySchema from "./entity/entity-schema";
+
 export enum PropertyType {
     ANY,
     INTERNAL_ID,
@@ -22,9 +24,11 @@ export const RelationshipTypes = [
     PropertyType.ONE_TO_ONE
 ]
 
+export type DefaultValue = (model: Object, schema: EntitySchema) => any | any | undefined
+
 export default class PropertySchema {
     private type: PropertyType = PropertyType.ANY;
-    private defaultValue: any;
+    private defaultValue: DefaultValue;
 
     private primaryKey: boolean;
     private unique: boolean;
@@ -57,7 +61,7 @@ export default class PropertySchema {
         return this.array
     }
 
-    setDefaultValue(value: any) {
+    setDefaultValue(value: DefaultValue) {
         this.defaultValue = value
     }
 

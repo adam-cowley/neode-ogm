@@ -68,7 +68,7 @@ export interface EagerRelationship {
 }
 
 
-export function hydrateNode<T>(targetSchema: EntitySchema, targetEntity: ObjectConstructor, node: Node, eager: Record<string, EagerRelationship[]>): T {
+export function hydrateNode<T>(targetSchema: EntitySchema, targetEntity: ObjectConstructor | Function, node: Node, eager: Record<string, EagerRelationship[]>): T {
     const entity = new targetEntity as T
 
     targetSchema.getProperties().map(property => {
@@ -133,7 +133,7 @@ export function hydrateNode<T>(targetSchema: EntitySchema, targetEntity: ObjectC
 }
 
 
-export function hydrateRelationship<T>(targetSchema: EntitySchema, targetEntity: ObjectConstructor, relObject: EagerRelationship): T {
+export function hydrateRelationship<T>(targetSchema: EntitySchema, targetEntity: ObjectConstructor | Function, relObject: EagerRelationship): T {
     const entity = new targetEntity as T
 
     const { rel, start, end, other } = relObject
@@ -208,4 +208,37 @@ export function setPropertyInBuilder<T>(builder: Builder<T>, alias: string, prop
     }
 
     return builder
+}
+
+export function getValuesAsRecord(model: Object, properties: PropertySchema[], schema: EntitySchema): Record<string, any> {
+    return Object.fromEntries(
+        properties.map(property => {
+            const key = property.getKey()
+
+            const value = getValueOrDefault(model, property, schema)
+
+            if ( value !== undefined ) {
+                return [ key, value ]
+            }
+
+            return undefined
+        })
+        .filter(key => key !== undefined)
+    )
+}
+
+export function getValueOrDefault(model: Object, property: PropertySchema, schema: EntitySchema): any {
+    const key = property.getKey()
+
+    if ( model.hasOwnProperty(key) && model[ key ] !== undefined ) {
+        return model[ key ]
+    }
+
+    let defaultValue = property.getDefaultValue()
+
+    if ( typeof defaultValue === 'function' ) {
+        return defaultValue(model, schema)
+    }
+
+    return defaultValue
 }
