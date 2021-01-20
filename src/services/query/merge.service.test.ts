@@ -3,6 +3,7 @@ import { fromEnv } from "../../utils"
 import Person from "../../../test/models/person"
 import Movie from "../../../test/models/movie"
 import Role from "../../../test/models/role"
+import Location from '../../../test/models/location'
 
 describe('MergeService', () => {
     // @ts-ignore
@@ -18,6 +19,28 @@ describe('MergeService', () => {
             WHERE id(n) IN $ids
             DETACH DELETE n
         `, { ids })
+    })
+
+    it('should merge a node', async () => {
+        const directedMovieId = v4()
+        const directedMovieTitle = 'Some Movie'
+
+        const directedMovie = new Movie
+
+        directedMovie.setId(directedMovieId)
+        directedMovie.setTitle(directedMovieTitle)
+
+        // First save
+        const res = await neode.save(directedMovie)
+
+        expect(res._id).toBeDefined()
+        expect(res.id).toEqual(directedMovieId)
+        expect(res.title).toEqual(directedMovieTitle)
+
+        // Retrieve a second time
+        const res2 = await neode.save(directedMovie)
+
+        expect(res._id).toEqual(res2._id)
     })
 
     it('should merge a node and @OneToOne ', async () => {
@@ -78,6 +101,8 @@ describe('MergeService', () => {
 
         expect(res.getId()).toEqual(id)
 
+        // console.log(p, res);
+
         // Assert
         expect(res.getId()).toEqual(id)
         expect(res.getName()).toEqual(name)
@@ -128,6 +153,18 @@ describe('MergeService', () => {
 
         expect(res.name).toEqual(name)
         expect(res.id).toBeDefined()
+    })
+
+    it('should merge on unique keys if no primary key is set', async () => {
+        const name = 'Swindon, UK'
+        const swindon = Location.create(name)
+
+        const res = await neode.save(swindon)
+
+        expect(res.id).toBeDefined()
+        expect(res.name).toEqual(name)
+
+        const next = await neode.save(swindon)
     })
 
 })

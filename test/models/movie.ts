@@ -1,6 +1,5 @@
 import { NodeEntity, Primary, String, Uuid, InternalId } from "../../src/";
 
-
 @NodeEntity()
 export default class Movie {
 

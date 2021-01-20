@@ -30,12 +30,12 @@ export default class PropertySchema {
     private type: PropertyType = PropertyType.ANY;
     private defaultValue: DefaultValue;
 
-    private primaryKey: boolean;
-    private unique: boolean;
-    private array: boolean;
-    private onCreateSet: boolean;
-    private onMatchSet: boolean;
-    private alwaysSet: boolean;
+    private primaryKey: boolean = false;
+    private unique: boolean = false;
+    private array: boolean = false;
+    private onCreateSet: boolean = false;
+    private onMatchSet: boolean = false;
+    private alwaysSet: boolean = false;
 
     private entity: ObjectConstructor;
 

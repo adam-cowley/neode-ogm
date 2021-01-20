@@ -5,7 +5,7 @@ import { getModel } from "../../meta";
 import EntitySchema, { EntityType } from "../../meta/entity/entity-schema";
 import PropertySchema, { PropertyType } from "../../meta/property-schema";
 import RelationshipPropertySchema from "../../meta/relationship-property-schema";
-import { getValuesAsRecord, setPropertyInBuilder } from "../../utils";
+import { getValueOrDefault, getValuesAsRecord, setPropertyInBuilder } from "../../utils";
 import QueryService from "./query.service";
 export default class MergeService extends QueryService {
 
@@ -15,7 +15,8 @@ export default class MergeService extends QueryService {
         let mergeOn: Record<string, any>
 
         // Primary Key?
-        const primaryKeys = schema.getProperties().filter(property => property.isPrimaryKey())
+        const primaryKeys = schema.getProperties()
+            .filter(property => property.isPrimaryKey() && model.hasOwnProperty(property.getKey()) && model[ property.getKey() ] !== undefined)
 
         if ( primaryKeys.length ) {
             mergeOn = getValuesAsRecord(model, primaryKeys, schema)
@@ -24,23 +25,20 @@ export default class MergeService extends QueryService {
         // No primary keys, fall back to unique values
         else {
             const unique = schema.getProperties().filter(property => property.isUnique())
+
             mergeOn = getValuesAsRecord(model, unique, schema)
         }
 
         builder.merge(THIS_NODE, schema.getLabels(), mergeOn)
 
+
         // Set Properties
-        // TODO: ON CREATE SET
-        // TODO: ON MATCH SET
-        // TODO: Default values
         schema.getProperties()
-            .filter(property => primaryKeys.length ? !property.isPrimaryKey() : !property.isUnique())
             .map(property => {
-                const key = property.getKey()
-                const value = model[ key ]
+                const value = getValueOrDefault(model, property, schema)
 
                 // If property is not set then ignore it
-                if ( model.hasOwnProperty(key) && model [ key ] !== undefined ) {
+                if ( value !== undefined ) {
                     setPropertyInBuilder(builder, THIS_NODE, property, value)
                 }
             })

@@ -193,18 +193,39 @@ export function setPropertyInBuilder<T>(builder: Builder<T>, alias: string, prop
         return builder.delete(`${alias}.${property.getKey()}`)
     }
 
+    // Ignore Internal IDs, properties and nodes
+    if ( property.getType() === PropertyType.INTERNAL_ID || property.getType() === PropertyType.ALL_PROPERTIES || property.getType() === PropertyType.NODE ) {
+        return builder
+    }
+
     // TODO: Handle complex types
-    switch ( property.getType() ) {
-        case PropertyType.INTERNAL_ID:
-        case PropertyType.ALL_PROPERTIES:
-            break;
+    // Convert Integer
+    if ( property.getType() === PropertyType.INTEGER ) {
+        value = int(value)
+    }
 
-        case PropertyType.INTEGER:
-            builder.set(`${alias}.${property.getKey()}`, int(value))
-            break;
+    const set = `${alias}.${property.getKey()}`
 
-        default:
-            builder.set(`${alias}.${property.getKey()}`, value)
+    // Only set primary key on create
+    if ( property.isPrimaryKey() ) {
+        builder.onCreateSet(set, value)
+
+        return builder;
+    }
+
+    // On create set
+    if ( property.getOnCreateSet() ) {
+        builder.onCreateSet(set, value)
+    }
+
+    // On match set
+    if ( property.getOnMatchSet() ) {
+        builder.onMatchSet(set, value)
+    }
+
+    // Always set
+    if ( ( property.getOnCreateSet() === false && property.getOnMatchSet() === false ) || property.getAlwaysSet() === true || property.isUnique() === true ) {
+        builder.set(set, value)
     }
 
     return builder
