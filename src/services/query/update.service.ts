@@ -1,5 +1,6 @@
 import Builder from '../../query';
 import { INTERNAL_ID, THIS_NODE } from '../../constants';
+import { matchCriteriaForEntity } from '../../utils';
 import { GraphNode, QueryOutput } from '../../driver/types';
 import { PropertyType } from '../../meta/property-schema';
 import EntitySchema from '../../meta/entity/entity-schema';
@@ -34,8 +35,9 @@ export default class UpdateService extends QueryService {
         entity: T,
         properties: Record<string, unknown>
     ): Promise<QueryOutput> {
-        const pkKey = schema.getPrimaryKey()?.getKey();
-        const identity = pkKey ? (entity as Record<string, unknown>)[pkKey] : undefined;
+        const identityCriteria = matchCriteriaForEntity(schema, entity);
+        const pkKey = identityCriteria.key;
+        const identity = identityCriteria.value;
 
         if (pkKey === undefined || identity === undefined) {
             throw new Error(
@@ -104,7 +106,11 @@ export default class UpdateService extends QueryService {
 
         const builder = new Builder();
 
-        builder.match(THIS_NODE, schema.getLabels(), { [pkKey]: identity });
+        if (identityCriteria.elementId) {
+            builder.match(THIS_NODE).whereId(THIS_NODE, identityCriteria.elementId);
+        } else {
+            builder.match(THIS_NODE, schema.getLabels(), { [pkKey]: identity });
+        }
 
         builder.set(THIS_NODE, set, '+=');
 

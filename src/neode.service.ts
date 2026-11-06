@@ -480,7 +480,7 @@ export default class Neode implements INeode {
     async mergeOn<T>(
         constructor: Newable,
         match: Record<string, unknown>,
-        set: Record<string, unknown>,
+        set: Record<string, unknown> = {},
         database?: string
     ): Promise<T | undefined> {
         const schema = this.getSchema(constructor);
@@ -520,6 +520,29 @@ export default class Neode implements INeode {
         database?: string
     ): Promise<T | undefined> {
         const schema = this.getSchema(constructor);
+
+        // Entity instances (or arrays of them) in the properties mean
+        // relationship writes — those go through the save() path, which
+        // already creates/relates nested relationships (neode's merge
+        // semantics: "Neode will create relationships when either a Node
+        // instance, ID property or Object containing match parameters
+        // is passed")
+        const hasRelationshipValues = schema.getRelationships().some((rel) => {
+            const value = (properties as Record<string, unknown>)[rel.getKey()];
+
+            if (value === undefined || value === null) return false;
+
+            return Array.isArray(value)
+                ? value.length > 0
+                : typeof value === 'object';
+        });
+
+        if (hasRelationshipValues) {
+            const entity = new constructor() as unknown as Record<string, unknown>;
+            Object.assign(entity, properties);
+
+            return this.save(entity as T, database);
+        }
 
         const mergeKeys = new Set(getMergeFields(schema).map((property) => property.getKey()));
         const entries = Object.entries(properties);

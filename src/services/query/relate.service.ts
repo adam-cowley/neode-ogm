@@ -2,9 +2,9 @@ import Builder from '../../query';
 import { GraphRelationship } from '../../driver/types';
 import { getModel } from '../../meta';
 import EntitySchema, { EntityType } from '../../meta/entity/entity-schema';
-import PropertySchema, { PropertyType } from '../../meta/property-schema';
+import { PropertyType } from '../../meta/property-schema';
 import RelationshipPropertySchema from '../../meta/relationship-property-schema';
-import { convertPropertyValue } from '../../utils';
+import { convertPropertyValue, matchCriteriaForEntity } from '../../utils';
 import QueryService from './query.service';
 
 /** Property types describing relationship internals, never set on the edge */
@@ -42,7 +42,7 @@ export default class RelateService extends QueryService {
         const toAlias = 'to';
         const relAlias = 'rel';
 
-        const [fromKey, fromValue] = primaryKeyValue(schema, fromEntity);
+        const fromMatch = matchCriteriaForEntity(schema, fromEntity);
 
         // Match the target by its own model, falling back to the target
         // declared on the relationship
@@ -55,12 +55,21 @@ export default class RelateService extends QueryService {
             );
         }
 
-        const [toKey, toValue] = primaryKeyValue(targetSchema, toEntity);
+        const toMatch = matchCriteriaForEntity(targetSchema, toEntity);
 
         const builder = new Builder();
 
-        builder.match(fromAlias, schema.getLabels(), { [fromKey]: fromValue })
-            .match(toAlias, targetSchema.getLabels(), { [toKey]: toValue });
+        if (fromMatch.elementId) {
+            builder.match(fromAlias).whereId(fromAlias, fromMatch.elementId);
+        } else {
+            builder.match(fromAlias, schema.getLabels(), { [fromMatch.key]: fromMatch.value });
+        }
+
+        if (toMatch.elementId) {
+            builder.match(toAlias).whereId(toAlias, toMatch.elementId);
+        } else {
+            builder.match(toAlias, targetSchema.getLabels(), { [toMatch.key]: toMatch.value });
+        }
 
         if (forceCreate) {
             builder.create(fromAlias)
@@ -132,20 +141,3 @@ export default class RelateService extends QueryService {
  * Primary key name and value of a saved entity. Relating matches nodes by
  * primary key, so an unsaved entity is a caller error.
  */
-export function primaryKeyValue(
-    schema: EntitySchema,
-    entity: object
-): [string, unknown] {
-    const key = schema
-        .getProperties()
-        .find((property: PropertySchema) => property.isPrimaryKey())!.getKey();
-    const value = (entity as Record<string, unknown>)[key];
-
-    if (value === undefined) {
-        throw new Error(
-            `Cannot match an entity without a primary key value for "${key}". Did you save it first?`
-        );
-    }
-
-    return [key, value];
-}

@@ -16,6 +16,7 @@ import type { Newable } from './meta/newable';
 import type { DeleteOptions } from './services/query/delete.service';
 import type { DetachResult } from './services/query/detach.service';
 import type { GraphRelationship } from './driver/types';
+import { toJson } from './serialise';
 
 /**
  * The Neode instance that entity instance methods operate against.
@@ -91,6 +92,7 @@ interface MethodImpl {
     save(this: object): Promise<object>;
     update(this: object, properties?: Record<string, unknown>): Promise<object>;
     delete(this: object, options?: DeleteOptions | string): Promise<void>;
+    toJson(this: object): Record<string, unknown>;
     relateTo(
         this: object,
         other: object,
@@ -106,6 +108,10 @@ const methods: MethodImpl = {
         const saved = await requireNeode().save(this);
 
         return Object.assign(this, saved);
+    },
+
+    toJson(this) {
+        return toJson(this);
     },
 
     async update(this, properties = {}) {

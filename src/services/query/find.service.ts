@@ -12,9 +12,7 @@ export default class FindService extends QueryService {
     ): Promise<unknown | undefined> {
         const builder = new Builder();
 
-        const primaryKey = schema
-            .getProperties()
-            .find((property) => property.isPrimaryKey())!.getKey();
+        const primaryKey = schema.getPrimaryKey()!.getKey();
 
         builder.match(THIS_NODE, schema.getLabels(), { [primaryKey]: value });
 

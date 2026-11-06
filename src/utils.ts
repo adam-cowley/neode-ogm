@@ -478,6 +478,46 @@ export function setPropertyInBuilder(
     return builder;
 }
 
+/**
+ * Match criteria for an entity in a write query: prefer the hydrated
+ * elementId (the @InternalId / implicit `_id` property — stable, always
+ * present on persisted entities), falling back to the primary key property
+ * value (neode matched instances by internal id; elementId is its modern,
+ * portable equivalent).
+ */
+export function matchCriteriaForEntity(
+    schema: EntitySchema,
+    entity: object
+): { elementId?: string; key: string; value: unknown } {
+    const internalId = schema
+        .getProperties()
+        .find((property) => property.getType() === PropertyType.INTERNAL_ID);
+
+    if (internalId) {
+        const elementId = (entity as Record<string, unknown>)[internalId.getKey()];
+
+        if (typeof elementId === 'string' && elementId.length) {
+            return { elementId, key: internalId.getKey(), value: elementId };
+        }
+    }
+
+    const pk = schema.getPrimaryKey();
+
+    if (!pk) {
+        throw new Error('Cannot match an entity with no primary key and no elementId');
+    }
+
+    const value = (entity as Record<string, unknown>)[pk.getKey()];
+
+    if (value === undefined) {
+        throw new Error(
+            `Cannot match an entity without a primary key value for "${pk.getKey()}". Did you save it first?`
+        );
+    }
+
+    return { key: pk.getKey(), value };
+}
+
 export function getValuesAsRecord(
     model: object,
     properties: PropertySchema[],

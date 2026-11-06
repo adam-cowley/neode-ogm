@@ -4,9 +4,9 @@ import EntitySchema from '../../meta/entity/entity-schema';
 import { Newable } from '../../meta/newable';
 import { PropertyType } from '../../meta/property-schema';
 import RelationshipPropertySchema from '../../meta/relationship-property-schema';
+import { matchCriteriaForEntity } from '../../utils';
 import FindByIdService from './find-by-id.service';
 import QueryService from './query.service';
-import { primaryKeyValue } from './relate.service';
 
 export interface DetachResult<From, To> {
     from: From | undefined;
@@ -37,15 +37,26 @@ export default class DetachService extends QueryService {
             );
         }
 
-        const [fromKey, fromValue] = primaryKeyValue(schema, fromEntity);
-        const [toKey, toValue] = primaryKeyValue(targetSchema, toEntity);
+        const fromMatch = matchCriteriaForEntity(schema, fromEntity);
+        const toMatch = matchCriteriaForEntity(targetSchema, toEntity);
 
         const builder = new Builder();
 
-        builder.match(fromAlias, schema.getLabels(), { [fromKey]: fromValue })
-            .relationship(rel.getType(), rel.getDirection(), relAlias)
-            .to(toAlias, targetSchema.getLabels(), { [toKey]: toValue })
-            .delete(relAlias);
+        if (fromMatch.elementId) {
+            builder.match(fromAlias).whereId(fromAlias, fromMatch.elementId);
+        } else {
+            builder.match(fromAlias, schema.getLabels(), { [fromMatch.key]: fromMatch.value });
+        }
+
+        builder.relationship(rel.getType(), rel.getDirection(), relAlias);
+
+        if (toMatch.elementId) {
+            builder.to(toAlias).whereId(toAlias, toMatch.elementId);
+        } else {
+            builder.to(toAlias, targetSchema.getLabels(), { [toMatch.key]: toMatch.value });
+        }
+
+        builder.delete(relAlias);
 
         const { query, params } = builder.build();
 

@@ -39,9 +39,7 @@ export default class DeleteService extends QueryService {
     ): Promise<void> {
         const builder = new Builder();
 
-        const primaryKey = schema
-            .getProperties()
-            .find((property) => property.isPrimaryKey())!.getKey();
+        const primaryKey = schema.getPrimaryKey()!.getKey();
         const value = (entity as Record<string, unknown>)[primaryKey];
 
         builder.match(THIS_NODE, schema.getLabels(), { [primaryKey]: value });

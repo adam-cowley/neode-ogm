@@ -25,7 +25,7 @@ export default class MergeService extends QueryService {
     async mergeOn(
         schema: EntitySchema,
         match: Record<string, unknown>,
-        set: Record<string, unknown>
+        set: Record<string, unknown> = {}
     ): Promise<QueryOutput> {
         // Skip undefined match values
         const matchRecord = Object.fromEntries(

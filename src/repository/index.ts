@@ -46,7 +46,7 @@ export default class Repository<Entity> {
     }
 
     getPrimaryKey(): PropertySchema {
-        return this.schema.getProperties().find(property => property.isPrimaryKey())!
+        return this.schema.getPrimaryKey()!
     }
 
     async find(id: unknown): Promise<Entity | undefined> {

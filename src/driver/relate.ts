@@ -210,7 +210,10 @@ export function normalizeRelateValue(value: unknown): unknown {
 class RelateTransactionHandle implements TransactionHandle {
     private open = true;
 
-    constructor(private readonly connection: RelateConnection) {}
+    constructor(
+        private readonly connection: RelateConnection,
+        private readonly release: () => void = () => {}
+    ) {}
 
     async run(statement: string, parameters?: QueryParams): Promise<QueryOutput> {
         if (!this.open) {
@@ -228,18 +231,37 @@ class RelateTransactionHandle implements TransactionHandle {
     }
 
     async commit(): Promise<void> {
+        if (!this.open) {
+            return;
+        }
+
         this.open = false;
         this.connection.commit();
+        this.release();
     }
 
     async rollback(): Promise<void> {
+        if (!this.open) {
+            return;
+        }
+
         this.open = false;
         this.connection.rollback();
+        this.release();
     }
 }
 
 export class RelateConnectionProvider implements ConnectionProvider {
     private readonly connection: RelateConnection;
+
+    /**
+     * The embedded engine supports ONE transaction at a time per connection.
+     * Facade flows run concurrently (e.g. Promise.all of saves), so
+     * beginTransaction serialises: each transaction holds the slot from
+     * begin() until its commit/rollback.
+     */
+    private queue: Promise<void> = Promise.resolve();
+    private txOpen = false;
 
     constructor(database: RelateDatabase, namespace = 'neo4j') {
         const client = requireRelateClient();
@@ -259,6 +281,13 @@ export class RelateConnectionProvider implements ConnectionProvider {
         _mode?: AccessMode,
         _database?: string
     ): Promise<QueryOutput> {
+        if (this.txOpen) {
+            throw new Error(
+                'A transaction is open on this connection: use the transaction\'s own ' +
+                    'methods for statements that belong to it, or commit/rollback first'
+            );
+        }
+
         const result = await this.connection.queryAsync(statement, parameters);
 
         return {
@@ -268,9 +297,20 @@ export class RelateConnectionProvider implements ConnectionProvider {
     }
 
     async beginTransaction(_mode: AccessMode = 'WRITE', _database?: string): Promise<TransactionHandle> {
+        const previous = this.queue;
+
+        let release!: () => void;
+        this.queue = new Promise<void>((resolve) => (release = resolve));
+
+        await previous;
+
+        this.txOpen = true;
         this.connection.begin();
 
-        return new RelateTransactionHandle(this.connection);
+        return new RelateTransactionHandle(this.connection, () => {
+            this.txOpen = false;
+            release();
+        });
     }
 
     async edition(): Promise<'enterprise' | 'community' | 'unknown'> {
