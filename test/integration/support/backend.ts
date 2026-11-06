@@ -29,6 +29,10 @@ export interface BackendCapabilities {
     points: boolean;
     /** Multiple databases */
     multiDatabase: boolean;
+    /** Full-text indexes and search, working end-to-end */
+    fulltext: boolean;
+    /** Vector indexes and kNN search, working end-to-end */
+    vector: boolean;
 }
 
 export interface TestBackend {
@@ -87,12 +91,65 @@ async function probeCapabilities(connection: ConnectionProvider): Promise<Backen
         multiDatabase = false;
     }
 
+    // Full-text search: some engines accept the DDL but don't index, so
+    // probe the whole cycle and require the search to return a row
+    let fulltext = false;
+
+    try {
+        await connection.run(
+            'CREATE FULLTEXT INDEX __ogm_ft_probe__ IF NOT EXISTS FOR (n:__OgmFulltextProbe__) ON EACH [n.__probe__]'
+        );
+        await connection.run("CREATE (n:__OgmFulltextProbe__ { __probe__: 'probe' })");
+
+        const result = await connection.run(
+            "CALL db.index.fulltext.queryNodes('__ogm_ft_probe__', 'probe') YIELD node, score RETURN node, score"
+        );
+        fulltext = result.records.length > 0;
+    } catch {
+        fulltext = false;
+    }
+
+    // Vector search: same end-to-end probe, requiring a scored row back
+    let vector = false;
+
+    try {
+        await connection.run(
+            'CREATE VECTOR INDEX __ogm_vec_probe__ IF NOT EXISTS FOR (n:__OgmVectorProbe__) ON (n.__probe__) ' +
+                "OPTIONS { indexConfig: { `vector.dimensions`: 2, `vector.similarity_function`: 'cosine' } }"
+        );
+        await connection.run('CREATE (n:__OgmVectorProbe__ { __probe__: [0.1, 0.2] })');
+
+        const result = await connection.run(
+            "CALL db.index.vector.queryNodes('__ogm_vec_probe__', 1, [0.1, 0.2]) YIELD node, score RETURN node, score"
+        );
+        vector = result.records.length > 0;
+    } catch {
+        vector = false;
+    }
+
+    // Clean up what the backend lets us (dropping fulltext/vector indexes is
+    // not supported everywhere; the leftover scratch objects are inert)
+    for (const cleanup of [
+        'MATCH (n:__OgmFulltextProbe__) DETACH DELETE n',
+        'DROP FULLTEXT INDEX __ogm_ft_probe__ IF EXISTS',
+        'MATCH (n:__OgmVectorProbe__) DETACH DELETE n',
+        'DROP VECTOR INDEX __ogm_vec_probe__ IF EXISTS',
+    ]) {
+        try {
+            await connection.run(cleanup);
+        } catch {
+            // ignore
+        }
+    }
+
     return {
         edition: await connection.edition(),
         constraints,
         temporals,
         points,
         multiDatabase,
+        fulltext,
+        vector,
     };
 }
 

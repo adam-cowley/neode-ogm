@@ -3,7 +3,10 @@ import { createRequire } from 'module';
 import { readdirSync } from 'fs';
 import { basename, extname, resolve } from 'path';
 import {
+    AccessMode,
+    ConnectionOptions,
     ConnectionProvider,
+    CypherOptions,
     GraphRelationship,
     QueryOutput,
     QueryParams,
@@ -12,6 +15,9 @@ import {
 } from './driver/types';
 import { Neo4jConnectionProvider } from './driver/neo4j';
 import { RelateConnectionProvider } from './driver/relate';
+import { instrumentConnectionProvider } from './driver/instrumented';
+import { jsonSafeRecord } from './driver/json-safe';
+import { hydrate } from './hydrate';
 import { setDefaultNeode } from './entity-methods';
 import { getModel, getModels, resolveRepository } from './meta';
 import { Newable } from './meta/newable';
@@ -43,16 +49,45 @@ import TransactionError, { BatchStatementError } from './transaction/errors';
 import FindByIdService from './services/query/find-by-id.service';
 import { INTERNAL_ID } from './constants';
 import Builder from './query';
+import { search, ScoredEntity } from './services/query/search.service';
+import { knn, KnnMode } from './services/query/knn.service';
+import { inspectSchema, InspectOptions, SchemaInspection } from './services/schema/inspect.service';
+import FulltextIndexService, { FulltextIndexDefinition } from './services/schema/fulltext.service';
+import VectorIndexService, { VectorIndexDefinition } from './services/schema/vector.service';
+import BulkService, { BulkChunk, BulkOptions } from './services/query/bulk.service';
+import PaginateService, {
+    Page,
+    CursorPage,
+    OffsetPaginateOptions,
+    CursorPaginateOptions,
+} from './services/query/paginate.service';
+import ProjectionService from './projection/projection.service';
+import { hasProjectedProperties } from './projection';
+import { runCypherScript, RunCypherScriptOptions } from './ops';
 
 export default class Neode implements INeode {
     private eventEmitter: EventEmitter = new EventEmitter();
 
+    private connection: ConnectionProvider;
+
     private database?: string;
 
+    private defaultRouting?: AccessMode;
+
     constructor(
-        private readonly connection: ConnectionProvider,
-        private enterprise: boolean = false
+        connection: ConnectionProvider,
+        private enterprise: boolean = false,
+        options: ConnectionOptions = {}
     ) {
+        // Every statement — raw and service queries, inside and outside
+        // transactions — funnels through this wrapper, the shared chokepoint
+        // the query:executed lifecycle event emits from
+        this.connection = instrumentConnectionProvider(connection, (event) =>
+            this.eventEmitter.emit(EventType.QUERY_EXECUTED, event)
+        );
+
+        this.defaultRouting = options.defaultRouting;
+
         // Instance methods on hydrated entities (save/update/delete/relateTo)
         // resolve their Neode through the last-constructed instance
         setDefaultNeode(this);
@@ -62,18 +97,24 @@ export default class Neode implements INeode {
      * Create a Neode instance over a neo4j-driver Driver
      * (Neo4j Community / Enterprise, Memgraph, or any Bolt server)
      */
-    static forDriver(driver: import('neo4j-driver').Driver, database?: string, enterprise = false): Neode {
-        return new Neode(new Neo4jConnectionProvider(driver, database), enterprise);
+    static forDriver(
+        driver: import('neo4j-driver').Driver,
+        database?: string,
+        enterprise = false,
+        options: ConnectionOptions = {}
+    ): Neode {
+        return new Neode(new Neo4jConnectionProvider(driver, database), enterprise, options);
     }
 
     /**
      * Create a Neode instance over an embedded Relate database
      * (in-memory or file-backed)
      */
-    static forRelate(database: unknown, namespace = 'neo4j', enterprise = false): Neode {
+    static forRelate(database: unknown, namespace = 'neo4j', enterprise = false, options: ConnectionOptions = {}): Neode {
         return new Neode(
             new RelateConnectionProvider(database as never, namespace),
-            enterprise
+            enterprise,
+            options
         );
     }
 
@@ -183,6 +224,84 @@ export default class Neode implements INeode {
 
     writeCypher(query: string, params: QueryParams = {}, database?: string): Promise<QueryOutput> {
         return this.connection.run(query, params, 'WRITE', database ?? this.database);
+    }
+
+    /**
+     * Set the routing used when a query path leaves it open — `cypher()`
+     * without a per-call `routing` option (default READ)
+     */
+    setDefaultRouting(routing: AccessMode): void {
+        this.defaultRouting = routing;
+    }
+
+    /**
+     * The unified raw query escape hatch: run any Cypher statement through
+     * the instance's connection, choosing READ or WRITE per call (`routing`,
+     * falling back to the connection's `defaultRouting`, then READ).
+     *
+     * Rows come back JSON-safe (graph values — Node, Relationship, Path,
+     * Point — serialised to plain structures). With the `hydrate` option the
+     * rows are instead hydrated into entities of the given class, read from
+     * the `alias` column ('this' by default, matching the query builder's
+     * return alias).
+     */
+    cypher(query: string, params?: QueryParams, options?: CypherOptions): Promise<QueryOutput>;
+    cypher<T>(query: string, params: QueryParams | undefined, options: CypherOptions & { hydrate: new (...args: never[]) => T }): Promise<T[]>;
+    async cypher(
+        query: string,
+        params: QueryParams = {},
+        options: CypherOptions = {}
+    ): Promise<QueryOutput | unknown[]> {
+        const output = await this.connection.run(
+            query,
+            params,
+            options.routing ?? this.defaultRouting ?? 'READ',
+            options.database ?? this.database
+        );
+
+        const rows: QueryOutput = {
+            records: output.records.map(jsonSafeRecord),
+            summary: output.summary,
+        };
+
+        if (!options.hydrate) {
+            return rows;
+        }
+
+        return hydrate(options.hydrate, rows, options.alias);
+    }
+
+    /**
+     * The server's execution plan for the given statement (`EXPLAIN`): the
+     * driver's plan tree on backends that produce plans, `undefined` on
+     * those that don't (the embedded Relate engine accepts the keyword but
+     * reports no plan). EXPLAIN never executes the statement.
+     */
+    async explain(query: string, params: QueryParams = {}, options: { database?: string } = {}): Promise<unknown> {
+        const output = await this.connection.run(
+            `EXPLAIN ${query}`,
+            params,
+            'READ',
+            options.database ?? this.database
+        );
+
+        return output.summary?.plan;
+    }
+
+    /**
+     * The server's profiled plan for the given statement (`PROFILE`): unlike
+     * EXPLAIN the statement IS executed, so it routes WRITE. `undefined` on
+     * backends that produce no profiles (see explain()).
+     */
+    async profile(query: string, params: QueryParams = {}, options: { database?: string } = {}): Promise<unknown> {
+        const output = await this.connection.run(
+            `PROFILE ${query}`,
+            params,
+            'WRITE',
+            options.database ?? this.database
+        );
+
+        return output.summary?.profile;
     }
 
     /**
@@ -330,9 +449,9 @@ export default class Neode implements INeode {
 
         const tx = await this.readTransaction(database);
 
-        const service = new FindService(tx);
-
-        const output = await service.find(constructor, schema, value);
+        const output = hasProjectedProperties(schema)
+            ? await new ProjectionService(tx).find<T>(constructor as Newable, schema, value)
+            : await new FindService(tx).find(constructor, schema, value);
 
         await tx.commit();
 
@@ -348,9 +467,9 @@ export default class Neode implements INeode {
 
         const tx = await this.readTransaction(database);
 
-        const service = new FindByIdService(tx);
-
-        const output = await service.find(constructor, schema, elementId);
+        const output = hasProjectedProperties(schema)
+            ? await new ProjectionService(tx).findById<T>(constructor as Newable, schema, elementId)
+            : await new FindByIdService(tx).find(constructor, schema, elementId);
 
         await tx.commit();
 
@@ -368,9 +487,9 @@ export default class Neode implements INeode {
 
         const tx = await this.readTransaction(database);
 
-        const service = new GetService(tx);
-
-        const results = await service.get<T>(constructor, schema, params, limit, skip);
+        const results = hasProjectedProperties(schema)
+            ? await new ProjectionService(tx).get<T>(constructor as Newable, schema, params, limit, skip)
+            : await new GetService(tx).get<T>(constructor, schema, params, limit, skip);
 
         await tx.commit();
 
@@ -675,6 +794,142 @@ export default class Neode implements INeode {
      * ALL nodes of the given constructor, optionally filtered by properties,
      * ordered, limited and skipped (neode's all())
      */
+    /**
+     * Full-text search over a full-text index (NTS-123): hydrated entities
+     * with their relevance score, best match first. Pass user text through
+     * `toFulltextQuery()` — the query is bound as a parameter, but Lucene
+     * syntax characters in it are still parsed as such.
+     */
+    async search<T>(
+        constructor: new (...args: never[]) => T,
+        indexName: string,
+        query: string,
+        limit?: number
+    ): Promise<ScoredEntity<T>[]> {
+        return search<T>(this.connection, constructor, indexName, query, limit);
+    }
+
+    /**
+     * k-nearest-neighbour search over a vector index (NTS-127): hydrated
+     * entities with their similarity score, best match first
+     */
+    async knn<T>(
+        constructor: new (...args: never[]) => T,
+        indexName: string,
+        vector: number[],
+        k: number,
+        mode?: KnnMode
+    ): Promise<ScoredEntity<T>[]> {
+        return knn<T>(this.connection, constructor, indexName, vector, k, mode);
+    }
+
+    /**
+     * Read the installed database schema (SHOW CONSTRAINTS / SHOW INDEXES)
+     * and diff it against the declared schema of the registered models
+     * (NTS-142)
+     */
+    async inspectSchema(options: InspectOptions = {}): Promise<SchemaInspection> {
+        return inspectSchema(this.connection, { enterprise: this.enterprise, ...options });
+    }
+
+    /** Install the given full-text index definitions (NTS-123) */
+    async installFulltextIndexes(definitions: FulltextIndexDefinition[]): Promise<SchemaResult[]> {
+        return new FulltextIndexService(this.connection, definitions).create();
+    }
+
+    /** Drop the given full-text index definitions (NTS-123) */
+    async dropFulltextIndexes(definitions: FulltextIndexDefinition[]): Promise<SchemaResult[]> {
+        return new FulltextIndexService(this.connection, definitions).drop();
+    }
+
+    /** Install the given vector index definitions (NTS-127) */
+    async installVectorIndexes(definitions: VectorIndexDefinition[]): Promise<SchemaResult[]> {
+        return new VectorIndexService(this.connection, definitions).create();
+    }
+
+    /** Drop the given vector index definitions (NTS-127) */
+    async dropVectorIndexes(definitions: VectorIndexDefinition[]): Promise<SchemaResult[]> {
+        return new VectorIndexService(this.connection, definitions).drop();
+    }
+
+    /**
+     * CREATE every row in chunks of `UNWIND $rows ...` (NTS-126): one managed
+     * write transaction per chunk, rows validated like create() before the
+     * first write
+     */
+    async createMany<T>(
+        constructor: new (...args: never[]) => T,
+        rows: Record<string, unknown>[] = [],
+        options: BulkOptions = {},
+        database?: string
+    ): Promise<BulkChunk<T>[]> {
+        return new BulkService(this.connection).createMany<T>(
+            constructor,
+            this.getSchema(constructor),
+            rows,
+            { ...options, database }
+        );
+    }
+
+    /**
+     * MERGE every row in chunks on the model's merge fields (NTS-126): one
+     * managed write transaction per chunk; every row must merge on the same
+     * merge fields
+     */
+    async mergeMany<T>(
+        constructor: new (...args: never[]) => T,
+        rows: Record<string, unknown>[] = [],
+        options: BulkOptions = {},
+        database?: string
+    ): Promise<BulkChunk<T>[]> {
+        return new BulkService(this.connection).mergeMany<T>(
+            constructor,
+            this.getSchema(constructor),
+            rows,
+            { ...options, database }
+        );
+    }
+
+    /**
+     * Pagination helper (NTS-125). Offset mode — `{ page, limit, order? }` —
+     * returns `{ items, total, page, limit, totalPages }`; keyset mode —
+     * `{ limit, orderBy?, after?/before? }` — walks a temporal property and
+     * returns `{ items, nextCursor, hasMore }`
+     */
+    async paginate<T>(
+        constructor: new (...args: never[]) => T,
+        filter: Record<string, unknown>,
+        options: OffsetPaginateOptions
+    ): Promise<Page<T>>;
+    async paginate<T>(
+        constructor: new (...args: never[]) => T,
+        filter: Record<string, unknown>,
+        options: CursorPaginateOptions
+    ): Promise<CursorPage<T>>;
+    async paginate<T>(
+        constructor: new (...args: never[]) => T,
+        filter: Record<string, unknown> = {},
+        options: OffsetPaginateOptions | CursorPaginateOptions = { limit: 25 }
+    ): Promise<Page<T> | CursorPage<T>> {
+        return new PaginateService(this.connection).paginate<T>(
+            constructor as Newable,
+            this.getSchema(constructor),
+            filter,
+            options
+        );
+    }
+
+    /**
+     * Run a semicolon-split Cypher script sequentially (NTS-134), one
+     * autocommit statement at a time, fail-fast
+     */
+    async runCypherScript(
+        content: string,
+        options: RunCypherScriptOptions = {}
+    ): Promise<QueryOutput[]> {
+        return runCypherScript(this.getRunner(), content, options);
+    }
+
     async all<T>(
         constructor: new (...args: never[]) => T,
         params: Record<string, unknown> = {},
@@ -688,14 +943,23 @@ export default class Neode implements INeode {
         const tx = await this.readTransaction(database);
 
         try {
-            const results = await new GetService(tx).get<T>(
-                constructor,
-                schema,
-                params,
-                limit,
-                skip,
-                order
-            );
+            const results = hasProjectedProperties(schema)
+                ? await new ProjectionService(tx).get<T>(
+                    constructor as Newable,
+                    schema,
+                    params,
+                    limit,
+                    skip,
+                    order
+                )
+                : await new GetService(tx).get<T>(
+                    constructor,
+                    schema,
+                    params,
+                    limit,
+                    skip,
+                    order
+                );
 
             await tx.commit();
 

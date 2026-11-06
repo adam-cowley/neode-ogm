@@ -12,6 +12,8 @@ export enum ConstraintType {
     UNIQUE = 'UNIQUE',
     EXISTS = 'EXISTS',
     INDEX = 'INDEX',
+    FULLTEXT = 'FULLTEXT',
+    VECTOR = 'VECTOR',
 }
 
 export interface SchemaResult {
@@ -19,10 +21,16 @@ export interface SchemaResult {
     type: ConstraintType;
     label: string;
     property: string;
+    /** All indexed properties (full-text indexes cover more than one) */
+    properties?: string[];
     statement: string;
     success: boolean;
     error?: Error;
 }
+
+/** Deterministic schema object name: `<label>_<property>_<type>` (PLAN §G) */
+export const schemaObjectName = (label: string, property: string, type: string): string =>
+    `${label.toLowerCase()}_${property}_${type.toLowerCase()}`;
 
 export default class SchemaService {
     constructor(
@@ -163,7 +171,7 @@ export default class SchemaService {
         const guard =
             action === ConstraintAction.CREATE ? 'IF NOT EXISTS' : 'IF EXISTS';
 
-        const name = `${label.toLowerCase()}_${property}_${type.toLowerCase()}`;
+        const name = schemaObjectName(label, property, type);
 
         const kind = type === ConstraintType.INDEX ? 'INDEX' : 'CONSTRAINT';
 

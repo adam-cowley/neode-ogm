@@ -16,6 +16,7 @@ const models: Map<Newable, EntitySchema> = new Map()
 const METAMODEL_KEYS = new Set([
     'type', 'primary', 'unique', 'array', 'default', 'onCreateSet', 'onMatchSet',
     'alwaysSet', 'required', 'hidden', 'protected', 'readonly', 'index', 'exists',
+    'fields', 'where', 'minHops', 'maxHops', 'label', 'expression', 'compute',
 ])
 
 export function getModels() {
@@ -114,6 +115,37 @@ export function mergeProperty(constructor: any, key: string, type: PropertyType,
 
     if ( Object.hasOwn(config, 'alwaysSet') ) {
         property.setAlwaysSet(config.alwaysSet as boolean)
+    }
+
+    // Read-model projection config (NTS-135/136/137/138)
+    const projection = config as Record<string, unknown>;
+
+    if ( Array.isArray(projection.fields) ) {
+        property.setFields(projection.fields as string[])
+    }
+
+    if ( typeof projection.where === 'string' ) {
+        property.setWhere(projection.where)
+    }
+
+    if ( typeof projection.minHops === 'number' ) {
+        property.setMinHops(projection.minHops)
+    }
+
+    if ( typeof projection.maxHops === 'number' ) {
+        property.setMaxHops(projection.maxHops)
+    }
+
+    if ( typeof projection.label === 'string' ) {
+        property.setLabel(projection.label)
+    }
+
+    if ( typeof projection.expression === 'string' ) {
+        property.setExpression(projection.expression)
+    }
+
+    if ( typeof projection.compute === 'function' ) {
+        property.setCompute(projection.compute as (entity: any) => unknown)
     }
 
     // Persist every config key the metamodel has no flag for as a validation rule

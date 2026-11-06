@@ -3,7 +3,7 @@ import { INTERNAL_ID, THIS_NODE } from '../../constants';
 import { QueryOutput } from '../../driver/types';
 import { getModel } from '../../meta';
 import EntitySchema, { EntityType } from '../../meta/entity/entity-schema';
-import PropertySchema, { PropertyType } from '../../meta/property-schema';
+import PropertySchema, { PropertyType, isProjectedProperty } from '../../meta/property-schema';
 import RelationshipPropertySchema from '../../meta/relationship-property-schema';
 import { getValueOrDefault, getValuesAsRecord, setPropertyInBuilder } from '../../utils';
 import { modelPropertyValues } from '../write-utils';
@@ -42,6 +42,7 @@ export default class MergeService extends QueryService {
 
         schema.getProperties().forEach((property) => {
             if (Object.hasOwn(matchRecord, property.getKey())) return;
+            if (isProjectedProperty(property)) return;
 
             const value = getValueOrDefault(set, property, schema);
 
@@ -62,8 +63,10 @@ export default class MergeService extends QueryService {
         schema.getProperties().forEach((property) => {
             const key = property.getKey();
 
-            // Match properties are inline in the MERGE, not set
+            // Match properties are inline in the MERGE, not set; projected
+            // read-model values are never written
             if (Object.hasOwn(matchRecord, key)) return;
+            if (isProjectedProperty(property)) return;
 
             const value = getValueOrDefault(set, property, schema);
 
@@ -122,6 +125,9 @@ export default class MergeService extends QueryService {
 
         // Set Properties
         schema.getProperties().forEach((property) => {
+            // Projected read-model values are never written
+            if (isProjectedProperty(property)) return;
+
             const value = getValueOrDefault(model, property, schema);
 
             // If property is not set then ignore it

@@ -22,6 +22,12 @@ export interface DeleteOptions {
 
     /** Maximum cascade depth, defaults to {@link MAX_CASCADE_DEPTH} */
     depth?: number;
+
+    /**
+     * Soft delete: SET this label on the node instead of deleting it
+     * (labels-as-state lifecycle). Cascade options are ignored.
+     */
+    soft?: string;
 }
 
 export default class DeleteService extends QueryService {
@@ -43,6 +49,17 @@ export default class DeleteService extends QueryService {
         const value = (entity as Record<string, unknown>)[primaryKey];
 
         builder.match(THIS_NODE, schema.getLabels(), { [primaryKey]: value });
+
+        // Soft delete: SET the label instead of deleting the node
+        if (options?.soft) {
+            builder.set(`${THIS_NODE}:${options.soft}`, undefined);
+
+            const { query, params } = builder.build();
+
+            await this.runner.run(query, params);
+
+            return;
+        }
 
         const cascade = options?.cascade === true || options?.mode !== undefined;
 

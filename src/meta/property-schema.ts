@@ -32,6 +32,16 @@ export enum PropertyType {
     ONE_TO_ONE,
     ONE_TO_MANY,
 
+    // Read-model projections (NTS-135/136/137/138): composed into the RETURN
+    // map projection of the read query — one Cypher query per read
+    RELATED_ONE,
+    RELATED_MANY,
+    RELATIONSHIP_COUNT,
+    RELATIONSHIP_EXISTS,
+    LABEL_PRESENT,
+    COMPUTED,
+    EXPRESSION,
+
     START_NODE,
     END_NODE,
     OTHER_NODE,
@@ -39,6 +49,23 @@ export enum PropertyType {
     NODE,
     RELATIONSHIP
 }
+
+/**
+ * Property types that project read-model values: RELATED_ONE / RELATED_MANY
+ * eager subsets, RELATIONSHIP_COUNT, RELATIONSHIP_EXISTS, LABEL_PRESENT and
+ * EXPRESSION compose extra reads into the RETURN projection;
+ * COMPUTED derives a value in TypeScript after hydration.
+ * Any of these on a model means reads must go through the projection path.
+ */
+export const ProjectedPropertyTypes = [
+    PropertyType.RELATED_ONE,
+    PropertyType.RELATED_MANY,
+    PropertyType.RELATIONSHIP_COUNT,
+    PropertyType.RELATIONSHIP_EXISTS,
+    PropertyType.LABEL_PRESENT,
+    PropertyType.EXPRESSION,
+    PropertyType.COMPUTED,
+];
 
 /** Property types that map onto Neo4j temporal values */
 export const TemporalTypes = [
@@ -213,4 +240,108 @@ export default class PropertySchema {
     getRules() {
         return this.rules
     }
+
+    // ---- Read-model projection configuration (NTS-135/136/137/138) ----
+
+    /** @RelatedOne / @RelatedMany: relationship type, e.g. 'IN_COURSE' ('A|B' allowed) */
+    private relationshipType: string | undefined;
+
+    /** @RelatedOne / @RelatedMany: field subset; undefined = full-entity eager loading */
+    private fields: string[] | undefined;
+
+    /** @RelatedOne / @RelatedMany / @RelationshipCount / @RelationshipExists direction */
+    private projectionDirection: import('../query').Direction | undefined;
+
+    /** WHERE fragment inside COUNT { } / EXISTS { }; `node` is the target node */
+    private where: string | undefined;
+
+    /** @RelationshipCount variable-length hop bounds */
+    private minHops: number | undefined;
+    private maxHops: number | undefined;
+
+    /** @LabelPresent: the label tested for */
+    private label: string | undefined;
+
+    /** @Expression: raw Cypher projected into the read query */
+    private expression: string | undefined;
+
+    /** @Computed: derives the value in TypeScript after hydration */
+    private compute: ((entity: any) => unknown) | undefined;
+
+    setRelationshipType(relationshipType: string) {
+        this.relationshipType = relationshipType
+    }
+
+    getRelationshipType() {
+        return this.relationshipType
+    }
+
+    setFields(fields: string[]) {
+        this.fields = fields
+    }
+
+    getFields() {
+        return this.fields
+    }
+
+    setDirection(direction: import('../query').Direction) {
+        this.projectionDirection = direction
+    }
+
+    getDirection(): import('../query').Direction | undefined {
+        return this.projectionDirection
+    }
+
+    setWhere(where: string) {
+        this.where = where
+    }
+
+    getWhere() {
+        return this.where
+    }
+
+    setMinHops(minHops: number) {
+        this.minHops = minHops
+    }
+
+    getMinHops() {
+        return this.minHops
+    }
+
+    setMaxHops(maxHops: number) {
+        this.maxHops = maxHops
+    }
+
+    getMaxHops() {
+        return this.maxHops
+    }
+
+    setLabel(label: string) {
+        this.label = label
+    }
+
+    getLabel() {
+        return this.label
+    }
+
+    setExpression(expression: string) {
+        this.expression = expression
+    }
+
+    getExpression() {
+        return this.expression
+    }
+
+    setCompute(compute: (entity: any) => unknown) {
+        this.compute = compute
+    }
+
+    getCompute() {
+        return this.compute
+    }
+}
+
+/** True when the property projects a read-model value (see ProjectedPropertyTypes) */
+export function isProjectedProperty(property: PropertySchema): boolean {
+    return ProjectedPropertyTypes.includes(property.getType());
 }

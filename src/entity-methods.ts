@@ -16,6 +16,8 @@ import type { Newable } from './meta/newable';
 import type { DeleteOptions } from './services/query/delete.service';
 import type { DetachResult } from './services/query/detach.service';
 import type { GraphRelationship } from './driver/types';
+import { getModel } from './meta';
+import { PropertyType } from './meta/property-schema';
 import { toJson } from './serialise';
 
 /**
@@ -49,6 +51,51 @@ function constructorOf(entity: object): new (...args: never[]) => object {
 }
 
 /**
+ * The elementId of a hydrated entity (carried by its InternalId property)
+ */
+function elementIdOf(entity: object): string {
+    const schema = getModel(constructorOf(entity));
+
+    if (!schema) {
+        throw new Error('Entity is not a registered model — cannot resolve its elementId');
+    }
+
+    const idKey = schema
+        .getProperties()
+        .find((property) => property.getType() === PropertyType.INTERNAL_ID)
+        ?.getKey();
+
+    const elementId = idKey ? (entity as Record<string, unknown>)[idKey] : undefined;
+
+    if (!elementId) {
+        throw new Error('Entity has no elementId — save() it before changing its labels');
+    }
+
+    return elementId as string;
+}
+
+/**
+ * SET / REMOVE a label on the node matched by elementId (autocommit — labels
+ * cannot be parameterised), then re-hydrate the entity in place
+ */
+async function changeLabel(entity: object, label: string, verb: 'SET' | 'REMOVE'): Promise<object> {
+    const neode = requireNeode();
+    const elementId = elementIdOf(entity);
+
+    await neode.writeCypher(`MATCH (n) WHERE elementId(n) = $elementId ${verb} n:${label}`, {
+        elementId,
+    });
+
+    const hydrated = await neode.findById(constructorOf(entity), elementId);
+
+    if (hydrated) {
+        Object.assign(entity, hydrated);
+    }
+
+    return entity;
+}
+
+/**
  * The methods wired onto hydrated entities. Uses polymorphic `this` so
  * `WithMethods<Person>` chains as `Promise<WithMethods<Person>>`.
  */
@@ -59,8 +106,19 @@ export interface EntityMethods {
     /** `+=` update the given properties, then re-hydrate onto this entity */
     update(properties?: Record<string, unknown>): Promise<this>;
 
-    /** Delete this node from the graph (cascade options as in neode.delete) */
-    delete(options?: DeleteOptions | string): Promise<void>;
+    /**
+     * Delete this node from the graph (cascade options as in neode.delete).
+     * With `{ soft: label }` the label is SET instead and the refreshed
+     * entity is returned; without it the node is deleted and the same
+     * (detached) instance is returned.
+     */
+    delete(options?: DeleteOptions | string): Promise<this>;
+
+    /** Add a label to this node's state (SET n:Label) and re-hydrate */
+    addLabel(label: string): Promise<this>;
+
+    /** Remove a label from this node's state (REMOVE n:Label) and re-hydrate */
+    removeLabel(label: string): Promise<this>;
 
     /**
      * Relate this entity to another saved entity, resolving the
@@ -91,7 +149,9 @@ export type WithMethods<T extends object> = T & EntityMethods;
 interface MethodImpl {
     save(this: object): Promise<object>;
     update(this: object, properties?: Record<string, unknown>): Promise<object>;
-    delete(this: object, options?: DeleteOptions | string): Promise<void>;
+    delete(this: object, options?: DeleteOptions | string): Promise<object>;
+    addLabel(this: object, label: string): Promise<object>;
+    removeLabel(this: object, label: string): Promise<object>;
     toJson(this: object): Record<string, unknown>;
     relateTo(
         this: object,
@@ -125,7 +185,25 @@ const methods: MethodImpl = {
     },
 
     async delete(this, options) {
+        const soft = options && typeof options === 'object' ? (options as DeleteOptions).soft : undefined;
+
+        // Labels-as-state: SET the soft-delete label instead of deleting,
+        // returning the refreshed entity
+        if (soft) {
+            return changeLabel(this, soft, 'SET');
+        }
+
         await requireNeode().delete(this, options);
+
+        return this;
+    },
+
+    addLabel(this, label) {
+        return changeLabel(this, label, 'SET');
+    },
+
+    removeLabel(this, label) {
+        return changeLabel(this, label, 'REMOVE');
     },
 
     async relateTo(this, other, relationshipKey, properties = {}, forceCreate = false) {

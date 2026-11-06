@@ -4,6 +4,8 @@ import EntitySchema from './meta/entity/entity-schema';
 import { EagerRelationship, hydrateNode } from './utils';
 import Collection from './collection';
 
+export { hydrateProjection } from './projection';
+
 const DEFAULT_ALIAS = 'this';
 
 function requireSchema(constructor: new (...args: never[]) => unknown): EntitySchema {

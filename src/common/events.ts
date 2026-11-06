@@ -16,6 +16,10 @@
  * | RELATIONSHIP_MERGED    | relate() (MERGE, the default)       | GraphRelationship  |
  * | RELATIONSHIP_UPDATED   | reserved                            | —                  |
  * | RELATIONSHIP_DELETED   | reserved (detach)                   | —                  |
+ * | QUERY_EXECUTED         | every statement run through the     | QueryExecutedEvent |
+ * |                        | instance's connection (raw +        |                    |
+ * |                        | service queries, inside and outside |                    |
+ * |                        | transactions)                       |                    |
  *
  * Events are emitted synchronously on an EventEmitter scoped to the Neode
  * instance.
@@ -29,6 +33,19 @@ export enum EventType {
     RELATIONSHIP_MERGED = 'relationship:merged',
     RELATIONSHIP_UPDATED = 'relationship:updated',
     RELATIONSHIP_DELETED = 'relationship:deleted',
+    QUERY_EXECUTED = 'query:executed',
+}
+
+/** Payload of QUERY_EXECUTED, emitted once per executed statement. */
+export interface QueryExecutedEvent {
+    /** The statement that ran */
+    cypher: string;
+    /** The statement parameters */
+    params: Record<string, unknown>;
+    /** Wall-clock duration in milliseconds */
+    duration: number;
+    /** Resolved database (undefined = the server's default) */
+    database?: string;
 }
 
 /** Handler for a lifecycle event; the payload shape depends on the event. */

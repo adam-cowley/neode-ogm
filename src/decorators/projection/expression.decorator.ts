@@ -1,0 +1,28 @@
+import { mergeProperty } from '../../meta';
+import { PropertyType } from '../../meta/property-schema';
+
+/**
+ * NTS-138 — raw Cypher expression projected into the read query: the escape
+ * hatch for graph context the projection builder cannot express yet. The
+ * expression references the root node as `this`.
+ *
+ * shortcut: the embedded Relate engine rejects pattern expressions (patterns
+ * inside function calls, e.g. `size((this)-[:R]->())`) inside RETURN
+ * projections — prefer @RelationshipCount (COUNT { }) there; plain Neo4j
+ * accepts them. Upgrade when Relate lifts the restriction.
+ *
+ * Example:
+ * ```ts
+ * @Expression('size((this)-[:KNOWS]->())')
+ * friendCount: number;
+ * ```
+ */
+export default function Expression(expression: string) {
+    return function(target: any, propertyKey: string, _descriptor?: any): void {
+        const constructor = target.constructor
+
+        const property = mergeProperty(constructor, propertyKey, PropertyType.EXPRESSION, {});
+
+        property.setExpression(expression)
+    }
+}

@@ -459,4 +459,210 @@ describe('QueryBuilder', () => {
             );
         });
     });
+
+    describe('list and string predicates', () => {
+        it('supports whereIn', () => {
+            const builder = new Builder();
+            const { query, params } = builder
+                .match('n', 'Person')
+                .whereIn('n.name', ['Adam', 'Ada'])
+                .return('n')
+                .build();
+
+            expect(query).toBe('MATCH (n:Person)\nWHERE (n.name IN $where_n_name)\nRETURN n');
+            expect(params).toEqual({ where_n_name: ['Adam', 'Ada'] });
+        });
+
+        it('supports whereContains, whereStartsWith and whereEndsWith', () => {
+            const builder = new Builder();
+            const { query, params } = builder
+                .match('n', 'Person')
+                .whereContains('n.name', 'Ada')
+                .return('n')
+                .build();
+
+            expect(query).toBe('MATCH (n:Person)\nWHERE (n.name CONTAINS $where_n_name)\nRETURN n');
+            expect(params).toEqual({ where_n_name: 'Ada' });
+
+            const builder2 = new Builder();
+            const { query: query2 } = builder2
+                .match('n', 'Person')
+                .whereStartsWith('n.name', 'Ada')
+                .return('n')
+                .build();
+
+            expect(query2).toBe(
+                'MATCH (n:Person)\nWHERE (n.name STARTS WITH $where_n_name)\nRETURN n'
+            );
+
+            const builder3 = new Builder();
+            const { query: query3 } = builder3
+                .match('n', 'Person')
+                .whereEndsWith('n.name', 'am')
+                .return('n')
+                .build();
+
+            expect(query3).toBe('MATCH (n:Person)\nWHERE (n.name ENDS WITH $where_n_name)\nRETURN n');
+        });
+
+        it('supports whereNot with the string predicates', () => {
+            const builder = new Builder();
+            const { query } = builder
+                .match('n', 'Person')
+                .whereNot('n.name', 'Ada')
+                .whereContains('n.name', 'Ada')
+                .return('n')
+                .build();
+
+            expect(query).toBe(
+                'MATCH (n:Person)\nWHERE (NOT n.name = $where_n_name AND n.name CONTAINS $where_n_name_2)\nRETURN n'
+            );
+        });
+
+        it('joins whereIn with the clause before it using and', () => {
+            const builder = new Builder();
+            const { query } = builder
+                .match('n', 'Person')
+                .where('n.age', '>', 30)
+                .or('n.name', 'Adam')
+                .whereIn('n.name', ['Adam', 'Ada'])
+                .return('n')
+                .build();
+
+            // Connectors are per clause: the or() applies to the clause
+            // after it, the whereIn rejoins with AND (AND binds tighter)
+            expect(query).toBe(
+                'MATCH (n:Person)\nWHERE (n.age > $where_n_age OR n.name = $where_n_name AND n.name IN $where_n_name_2)\nRETURN n'
+            );
+        });
+    });
+
+    describe('null predicates', () => {
+        it('supports whereNull and whereNotNull', () => {
+            const builder = new Builder();
+            const { query } = builder.match('n', 'Person').whereNull('n.deletedAt').return('n').build();
+
+            expect(query).toBe('MATCH (n:Person)\nWHERE (n.deletedAt IS NULL)\nRETURN n');
+
+            const builder2 = new Builder();
+            const { query: query2 } = builder2
+                .match('n', 'Person')
+                .whereNotNull('n.deletedAt')
+                .return('n')
+                .build();
+
+            expect(query2).toBe('MATCH (n:Person)\nWHERE (n.deletedAt IS NOT NULL)\nRETURN n');
+        });
+    });
+
+    describe('subquery predicates', () => {
+        it('supports whereExists with a pattern fragment', () => {
+            const builder = new Builder();
+            const { query } = builder
+                .match('n', 'Person')
+                .whereExists('(n)-[:KNOWS]->(:Person)')
+                .return('n')
+                .build();
+
+            expect(query).toBe(
+                'MATCH (n:Person)\nWHERE (EXISTS { (n)-[:KNOWS]->(:Person) })\nRETURN n'
+            );
+        });
+
+        it('supports whereAny over a list expression', () => {
+            const builder = new Builder();
+            const { query } = builder
+                .match('n', 'Person')
+                .whereAny('t', 'n.tags', "t = 'admin'")
+                .return('n')
+                .build();
+
+            expect(query).toBe(
+                "MATCH (n:Person)\nWHERE (ANY(t IN n.tags WHERE t = 'admin'))\nRETURN n"
+            );
+        });
+    });
+
+    describe('whereLabel', () => {
+        it('adds a label predicate', () => {
+            const builder = new Builder();
+            const { query } = builder.match('n', 'Person').whereLabel('n', 'Completed').return('n').build();
+
+            expect(query).toBe('MATCH (n:Person)\nWHERE (n:Completed)\nRETURN n');
+        });
+
+        it('supports multiple labels', () => {
+            const builder = new Builder();
+            const { query } = builder
+                .match('n', 'Person')
+                .whereLabel('n', ['Completed', 'Archived'])
+                .return('n')
+                .build();
+
+            expect(query).toBe('MATCH (n:Person)\nWHERE (n:Completed:Archived)\nRETURN n');
+        });
+
+        it('supports negation', () => {
+            const builder = new Builder();
+            const { query } = builder
+                .match('n', 'Person')
+                .whereLabel('n', 'Completed', true)
+                .return('n')
+                .build();
+
+            expect(query).toBe('MATCH (n:Person)\nWHERE (NOT n:Completed)\nRETURN n');
+        });
+
+        it('composes with other predicates through or', () => {
+            const builder = new Builder();
+            const { query } = builder
+                .match('n', 'Person')
+                .whereLabel('n', 'Completed')
+                .or('n.age', '>', 30)
+                .return('n')
+                .build();
+
+            expect(query).toBe(
+                'MATCH (n:Person)\nWHERE (n:Completed OR n.age > $where_n_age)\nRETURN n'
+            );
+        });
+    });
+
+    describe('orderBy expressions and labels', () => {
+        it('supports raw expression fragments', () => {
+            const builder = new Builder();
+            const { query } = builder.match('n', 'Person').orderBy('size(n.pets)').return('n').build();
+
+            expect(query).toBe('MATCH (n:Person)\nRETURN n\nORDER BY size(n.pets)');
+        });
+
+        it('supports label predicates via orderByLabel', () => {
+            const builder = new Builder();
+            const { query } = builder
+                .match('n', 'Person')
+                .orderByLabel('n', 'Completed', 'DESC')
+                .return('n')
+                .build();
+
+            expect(query).toBe('MATCH (n:Person)\nRETURN n\nORDER BY n:Completed DESC');
+        });
+
+        it('supports orderByLabel without a direction and with multiple labels', () => {
+            const builder = new Builder();
+            const { query } = builder.match('n', 'Person').orderByLabel('n', ['A', 'B']).return('n').build();
+
+            expect(query).toBe('MATCH (n:Person)\nRETURN n\nORDER BY n:A:B');
+        });
+
+        it('accepts a label predicate directly through orderBy', () => {
+            const builder = new Builder();
+            const { query } = builder
+                .match('n', 'Person')
+                .orderBy('n:Completed', 'DESC')
+                .return('n')
+                .build();
+
+            expect(query).toBe('MATCH (n:Person)\nRETURN n\nORDER BY n:Completed DESC');
+        });
+    });
 });

@@ -4,14 +4,28 @@ import Property from './Property';
 import Relationship from './Relationship';
 import Statement from './Statement';
 import Where, { OPERATOR_EQUALS } from './Where';
+import LabelPredicate from './LabelPredicate';
 import WhereBetween from './WhereBetween';
 import WhereId from './WhereId';
+import WhereNull from './WhereNull';
 import WhereRaw from './WhereRaw';
 import WhereStatement from './WhereStatement';
 import { Direction } from './Direction';
 import WithDistinctStatement from './WithDistinctStatement';
 import WithStatement from './WithStatement';
 import { AccessMode, ConnectionProvider, QueryOutput, Runner } from '../driver/types';
+import EntitySchema from '../meta/entity/entity-schema';
+
+/**
+ * Identity criteria for a persisted entity, as produced by
+ * matchCriteriaForEntity: the elementId when known, else the primary key
+ * property to match on
+ */
+export interface EntityMatchCriteria {
+    elementId?: string;
+    key: string;
+    value: unknown;
+}
 
 export const mode = {
     READ: 'READ',
@@ -263,6 +277,108 @@ export default class Builder {
     }
 
     /**
+     * Membership test: `alias IN $param` over the given values
+     */
+    whereIn(property: string, values: unknown[]): Builder {
+        const variable = this.addParameter(property, values);
+
+        this.whereClause!.append(new Where(property, 'IN', `$${variable}`));
+
+        return this;
+    }
+
+    /**
+     * Substring test: `property CONTAINS $param`
+     */
+    whereContains(property: string, value: string): Builder {
+        return this.whereStringOperator(property, value, 'CONTAINS');
+    }
+
+    /**
+     * Prefix test: `property STARTS WITH $param`
+     */
+    whereStartsWith(property: string, value: string): Builder {
+        return this.whereStringOperator(property, value, 'STARTS WITH');
+    }
+
+    /**
+     * Suffix test: `property ENDS WITH $param`
+     */
+    whereEndsWith(property: string, value: string): Builder {
+        return this.whereStringOperator(property, value, 'ENDS WITH');
+    }
+
+    private whereStringOperator(property: string, value: string, operator: string): Builder {
+        const variable = this.addParameter(property, value);
+
+        this.whereClause!.append(new Where(property, operator, `$${variable}`));
+
+        return this;
+    }
+
+    /**
+     * `property IS NULL`
+     */
+    whereNull(property: string): Builder {
+        this.whereClause!.append(new WhereNull(property));
+
+        return this;
+    }
+
+    /**
+     * `property IS NOT NULL`
+     */
+    whereNotNull(property: string): Builder {
+        this.whereNull(property);
+
+        const last = this.whereClause!.last();
+
+        if (last && typeof (last as WhereNull).setNegative === 'function') {
+            (last as WhereNull).setNegative();
+        }
+
+        return this;
+    }
+
+    /**
+     * Existential subquery: `EXISTS { pattern }`. The fragment is taken
+     * verbatim - pass a node/relationship pattern or an inner
+     * `MATCH ... RETURN ...` subquery; values inside cannot be parameterised.
+     */
+    whereExists(pattern: string): Builder {
+        return this.whereRaw(`EXISTS { ${pattern} }`);
+    }
+
+    /**
+     * `ANY(variable IN list WHERE predicate)` over a list expression
+     * (a property holding a list, or a literal list). The predicate is
+     * taken verbatim - inline literals or use whereRaw for parameters.
+     */
+    whereAny(variable: string, list: string, predicate: string): Builder {
+        return this.whereRaw(`ANY(${variable} IN ${list} WHERE ${predicate})`);
+    }
+
+    /**
+     * Label predicate: `alias:Label` (or `NOT alias:Label`), optionally
+     * over several labels - all of them must be present
+     */
+    whereLabel(alias: string, label: string | string[], negate = false): Builder {
+        this.whereClause!.append(new LabelPredicate(alias, label, negate));
+
+        return this;
+    }
+
+    /**
+     * Order by a label predicate: `ORDER BY alias:Label [direction]`
+     * (shares the label-predicate machinery with whereLabel)
+     */
+    orderByLabel(alias: string, label: string | string[], direction: string = ''): Builder {
+        this.current!.order(new Order(new LabelPredicate(alias, label).toString(), direction));
+
+        return this;
+    }
+
+    /**
      * Add a `DELETE` clause
      */
     delete(...values: string[]): Builder {
@@ -502,6 +618,31 @@ export default class Builder {
         this.current!.match(new Match(alias, labels, this.convertPropertyMap(alias, properties)));
 
         return this;
+    }
+
+    /**
+     * Match a node by an entity's identity (as produced by
+     * matchCriteriaForEntity): elementId when known, else the primary key
+     * property. One implementation keeps read and write paths in lockstep.
+     */
+    matchEntity(alias: string, schema: EntitySchema, criteria: EntityMatchCriteria): Builder {
+        if (criteria.elementId) {
+            return this.match(alias).whereId(alias, criteria.elementId);
+        }
+
+        return this.match(alias, schema.getLabels(), { [criteria.key]: criteria.value });
+    }
+
+    /**
+     * Complete a relationship with a target node matched by an entity's
+     * identity (the `to(...)` counterpart of matchEntity)
+     */
+    toEntity(alias: string, schema: EntitySchema, criteria: EntityMatchCriteria): Builder {
+        if (criteria.elementId) {
+            return this.to(alias).whereId(alias, criteria.elementId);
+        }
+
+        return this.to(alias, schema.getLabels(), { [criteria.key]: criteria.value });
     }
 
     /**

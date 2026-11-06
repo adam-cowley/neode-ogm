@@ -9,6 +9,7 @@ import RelationshipPropertySchema from './meta/relationship-property-schema';
 import PropertySchema, { PropertyType } from './meta/property-schema';
 import Neode from './neode.service';
 import { EAGER_ID, EAGER_LABELS, EAGER_TYPE } from './query/eager-utils';
+import { ELEMENT_ID } from './constants';
 import { Direction } from './query';
 import { applyEntityMethods } from './entity-methods';
 
@@ -212,6 +213,13 @@ export function hydrateNode<T>(
         elementId = (node as GraphNode).elementId;
         properties = (node as GraphNode).properties;
         eagerValues = eager;
+    }
+
+    // Stash the elementId so matching works without the deprecated
+    // @InternalId property (non-enumerable: not data — must not leak into
+    // serialisation or structural copies)
+    if (elementId) {
+        Object.defineProperty(entity, ELEMENT_ID, { value: elementId });
     }
 
     targetSchema.getProperties().forEach((property) => {
@@ -479,29 +487,51 @@ export function setPropertyInBuilder(
 }
 
 /**
+ * The elementId carried by a hydrated entity: the runtime stash written by
+ * hydration (every persisted entity has one), or the deprecated @InternalId
+ * property for entities hydrated before it existed. Undefined for entities
+ * that have never been persisted.
+ */
+export function elementIdOfEntity(schema: EntitySchema, entity: object): string | undefined {
+    const stashed = (entity as Record<symbol, unknown>)[ELEMENT_ID];
+
+    if (typeof stashed === 'string' && stashed.length) {
+        return stashed;
+    }
+
+    const internalId = schema
+        .getProperties()
+        .find((property) => property.getType() === PropertyType.INTERNAL_ID);
+
+    const viaProperty = internalId
+        ? (entity as Record<string, unknown>)[internalId.getKey()]
+        : undefined;
+
+    return typeof viaProperty === 'string' && viaProperty.length ? viaProperty : undefined;
+}
+
+/**
  * Match criteria for an entity in a write query: prefer the hydrated
- * elementId (the @InternalId / implicit `_id` property — stable, always
- * present on persisted entities), falling back to the primary key property
- * value (neode matched instances by internal id; elementId is its modern,
- * portable equivalent).
+ * elementId (stable, always present on persisted entities), falling back to
+ * the primary key property value (neode matched instances by internal id;
+ * elementId is its modern, portable equivalent).
  */
 export function matchCriteriaForEntity(
     schema: EntitySchema,
     entity: object
 ): { elementId?: string; key: string; value: unknown } {
-    const internalId = schema
-        .getProperties()
-        .find((property) => property.getType() === PropertyType.INTERNAL_ID);
-
-    if (internalId) {
-        const elementId = (entity as Record<string, unknown>)[internalId.getKey()];
-
-        if (typeof elementId === 'string' && elementId.length) {
-            return { elementId, key: internalId.getKey(), value: elementId };
-        }
-    }
-
     const pk = schema.getPrimaryKey();
+    const elementId = elementIdOfEntity(schema, entity);
+
+    if (elementId) {
+        // key / value describe the pk fallback match, used only when the
+        // caller cannot match by elementId
+        return {
+            elementId,
+            key: pk?.getKey() ?? '',
+            value: pk ? (entity as Record<string, unknown>)[pk.getKey()] : undefined,
+        };
+    }
 
     if (!pk) {
         throw new Error('Cannot match an entity with no primary key and no elementId');

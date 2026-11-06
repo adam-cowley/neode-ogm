@@ -62,10 +62,81 @@ export interface RelationshipDefinition {
     eager?: boolean;
 }
 
+/**
+ * Read-model projection definitions (NTS-135/136/137/138) — the map-based
+ * API for @RelatedOne / @RelatedMany / @RelationshipCount /
+ * @RelationshipExists / @LabelPresent / @Expression / @Computed.
+ */
+
+/** @RelatedOne: `fields` omitted = full-entity eager loading */
+export interface RelatedOneDefinition {
+    type: 'relatedOne';
+    relationship: string;
+    direction?: string;
+    target?: string;
+    fields?: string[];
+}
+
+/** @RelatedMany: a single-field subset projects a scalar array */
+export interface RelatedManyDefinition {
+    type: 'relatedMany';
+    relationship: string;
+    direction?: string;
+    target?: string;
+    fields?: string[];
+}
+
+/** @RelationshipCount: multi-type via pipe ('A|B'); `where` uses `node` for the target node */
+export interface RelationshipCountDefinition {
+    type: 'relationshipCount';
+    relationship: string;
+    direction?: string;
+    target?: string;
+    where?: string;
+    minHops?: number;
+    maxHops?: number;
+}
+
+/** @RelationshipExists: `EXISTS { }` boolean */
+export interface RelationshipExistsDefinition {
+    type: 'relationshipExists';
+    relationship: string;
+    direction?: string;
+    where?: string;
+}
+
+/** @LabelPresent: true when the node carries the label */
+export interface LabelPresentDefinition {
+    type: 'labelPresent';
+    label: string;
+}
+
+/** @Expression: raw Cypher projected into the read query (root node is `this`) */
+export interface ExpressionDefinition {
+    type: 'expression';
+    expression: string;
+}
+
+/** @Computed: derived in TypeScript after hydration */
+export interface ComputedDefinition {
+    type: 'computed';
+    compute: (entity: any) => unknown;
+}
+
+export type ProjectionDefinition =
+    | RelatedOneDefinition
+    | RelatedManyDefinition
+    | RelationshipCountDefinition
+    | RelationshipExistsDefinition
+    | LabelPresentDefinition
+    | ExpressionDefinition
+    | ComputedDefinition;
+
 export type SchemaDefinitionEntry =
     | PropertyTypeName
     | PropertyDefinition
-    | RelationshipDefinition;
+    | RelationshipDefinition
+    | ProjectionDefinition;
 
 /**
  * Map-based schema definition for a model (neode parity).

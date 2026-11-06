@@ -181,6 +181,10 @@ export class Neo4jConnectionProvider implements ConnectionProvider {
                               )
                           )
                         : {},
+                    // Populated by EXPLAIN / PROFILE statements (query options
+                    // are not used; the keywords prefix the statement itself)
+                    plan: result.summary.plan,
+                    profile: result.summary.profile,
                 },
             };
         } finally {

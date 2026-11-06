@@ -3,7 +3,7 @@ import { INTERNAL_ID, THIS_NODE } from '../constants';
 import { Runner } from '../driver/types';
 import { getModel } from '../meta';
 import EntitySchema, { EntityType } from '../meta/entity/entity-schema';
-import PropertySchema, { PropertyType } from '../meta/property-schema';
+import PropertySchema, { PropertyType, isProjectedProperty } from '../meta/property-schema';
 import RelationshipPropertySchema from '../meta/relationship-property-schema';
 import { getValueOrDefault, setPropertyInBuilder } from '../utils';
 
@@ -44,6 +44,9 @@ export function modelPropertyValues(model: object, schema: EntitySchema): Record
     const values: Record<string, unknown> = {};
 
     schema.getProperties().forEach((property) => {
+        // Projected read-model values (counts, DTOs, computed) are never written
+        if (isProjectedProperty(property)) return;
+
         const value = getValueOrDefault(model, property, schema);
 
         if (value !== undefined) {
@@ -65,11 +68,12 @@ async function createNode(runner: Runner, schema: EntitySchema, model: object): 
     const properties: Record<string, unknown> = {};
 
     schema.getProperties().forEach((property) => {
-        // Mapped / internal properties are not writable
+        // Mapped / internal / projected properties are not writable
         if (
             property.getType() === PropertyType.INTERNAL_ID ||
             property.getType() === PropertyType.ALL_PROPERTIES ||
-            property.getType() === PropertyType.NODE
+            property.getType() === PropertyType.NODE ||
+            isProjectedProperty(property)
         ) {
             return;
         }

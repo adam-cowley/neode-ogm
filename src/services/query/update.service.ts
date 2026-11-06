@@ -2,7 +2,7 @@ import Builder from '../../query';
 import { INTERNAL_ID, THIS_NODE } from '../../constants';
 import { matchCriteriaForEntity } from '../../utils';
 import { GraphNode, QueryOutput } from '../../driver/types';
-import { PropertyType } from '../../meta/property-schema';
+import { PropertyType, isProjectedProperty } from '../../meta/property-schema';
 import EntitySchema from '../../meta/entity/entity-schema';
 import { validate } from '../../validation';
 import QueryService from './query.service';
@@ -36,15 +36,6 @@ export default class UpdateService extends QueryService {
         properties: Record<string, unknown>
     ): Promise<QueryOutput> {
         const identityCriteria = matchCriteriaForEntity(schema, entity);
-        const pkKey = identityCriteria.key;
-        const identity = identityCriteria.value;
-
-        if (pkKey === undefined || identity === undefined) {
-            throw new Error(
-                `Cannot update ${schema.getLabels().join(':') || 'entity'}: ` +
-                    'no primary key value to match on'
-            );
-        }
 
         // Properties an update must never overwrite
         const guarded = new Set(
@@ -56,6 +47,7 @@ export default class UpdateService extends QueryService {
                         property.isProtected() ||
                         property.isHidden() ||
                         property.isReadonly() ||
+                        isProjectedProperty(property) ||
                         NON_VALUE_TYPES.has(property.getType())
                 )
                 .map((property) => property.getKey())
@@ -106,14 +98,9 @@ export default class UpdateService extends QueryService {
 
         const builder = new Builder();
 
-        if (identityCriteria.elementId) {
-            builder.match(THIS_NODE).whereId(THIS_NODE, identityCriteria.elementId);
-        } else {
-            builder.match(THIS_NODE, schema.getLabels(), { [pkKey]: identity });
-        }
+        builder.matchEntity(THIS_NODE, schema, identityCriteria);
 
         builder.set(THIS_NODE, set, '+=');
-
         builder.return(THIS_NODE, `elementId(${THIS_NODE}) AS ${INTERNAL_ID}`);
 
         const { query, params } = builder.build();

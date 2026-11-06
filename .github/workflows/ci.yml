@@ -3,9 +3,11 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
 
 jobs:
+  # Fast path on every commit: Relate embedded engine, zero external setup
   test:
     runs-on: ubuntu-latest
     steps:
@@ -24,26 +26,46 @@ jobs:
         run: cargo build -p relate-ffi --release
         working-directory: ../relate
 
+      - name: Install Relate JS client dependencies
+        run: npm install
+        working-directory: ../relate/clients/javascript
+
       - name: Install dependencies
         run: npm install
 
       - name: Lint
-        run: npx turbo run lint
+        run: npm run lint
 
       - name: Unit tests
-        run: npx turbo run test:unit
+        run: npm run test:unit
 
       - name: Integration tests (Relate embedded backend)
-        run: npx turbo run test:integration
+        run: npm run test:integration
 
       - name: Build
-        run: npx turbo run build
+        run: npm run build
 
-  # Optional: run the integration suite against a real Neo4j server
-  # by providing NEO4J_URI / NEO4J_USERNAME / NEO4J_PASSWORD secrets.
-  neo4j:
-    if: ${{ secrets.NEO4J_URI != '' }}
+  # Real Neo4j servers in Docker on every commit: Community + Enterprise
+  neo4j-docker:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [community, enterprise]
+    services:
+      neo4j:
+        image: neo4j:5.26-${{ matrix.edition }}
+        env:
+          NEO4J_AUTH: neo4j/password123
+          # Accepted (and required) by the enterprise image, ignored by community
+          NEO4J_ACCEPT_LICENSE_AGREEMENT: 'yes'
+        ports:
+          - 7687:7687
+        options: >-
+          --health-cmd "cypher-shell -u neo4j -p password123 'RETURN 1'"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 30
     steps:
       - uses: actions/checkout@v4
 
@@ -54,19 +76,113 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Integration tests (Neo4j backend)
-        run: npx turbo run test:integration
+      - name: Integration tests (Neo4j ${{ matrix.edition }}, Docker)
+        run: npm run test:integration
         env:
             OGM_TEST_BACKEND: neo4j
-            NEO4J_URI: ${{ secrets.NEO4J_URI }}
-            NEO4J_USERNAME: ${{ secrets.NEO4J_USERNAME }}
-            NEO4J_PASSWORD: ${{ secrets.NEO4J_PASSWORD }}
+            # bolt:// — skips cluster routing discovery, which advertises
+            # the container's internal hostname
+            NEO4J_URI: bolt://localhost:7687
+            NEO4J_USERNAME: neo4j
+            NEO4J_PASSWORD: password123
+
+  # Optional: external Neo4j/Memgraph via secrets. Inert until
+  # NEO4J_URI / NEO4J_USERNAME / NEO4J_PASSWORD are configured.
+  neo4j:
+    runs-on: ubuntu-latest
+    env:
+        NEO4J_URI: ${{ secrets.NEO4J_URI }}
+        NEO4J_USERNAME: ${{ secrets.NEO4J_USERNAME }}
+        NEO4J_PASSWORD: ${{ secrets.NEO4J_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+            node-version: 22
+
+      - name: Check secrets
+        id: secrets
+        if: env.NEO4J_URI != '' && env.NEO4J_USERNAME != '' && env.NEO4J_PASSWORD != ''
+        run: echo 'enabled=true' >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        if: steps.secrets.outputs.enabled == 'true'
+        run: npm install
+
+      - name: Integration tests (external Neo4j backend)
+        if: steps.secrets.outputs.enabled == 'true'
+        run: npm run test:integration
+        env:
+            OGM_TEST_BACKEND: neo4j
             NEO4J_DATABASE: ${{ secrets.NEO4J_DATABASE }}
 
-  # Tag-triggered publish (P8.3): inert until a v* tag is pushed AND the
-  # NPM_TOKEN secret is configured. See docs/RELEASE.md before first use.
+  # Release-only: spins up a throwaway AuraDB Free instance with the Aura CLI,
+  # runs the integration suite against it, tears it down afterwards.
+  # Requires AURA_CLIENT_ID / AURA_CLIENT_SECRET / AURA_TENANT_ID secrets
+  # (Aura console > Account > API Keys) and uses the tenant's one free-db slot.
+  aura:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    env:
+        AURA_CLIENT_ID: ${{ secrets.AURA_CLIENT_ID }}
+        AURA_CLIENT_SECRET: ${{ secrets.AURA_CLIENT_SECRET }}
+        AURA_TENANT_ID: ${{ secrets.AURA_TENANT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+            node-version: 22
+
+      - name: Check secrets
+        id: secrets
+        if: env.AURA_CLIENT_ID != '' && env.AURA_CLIENT_SECRET != '' && env.AURA_TENANT_ID != ''
+        run: echo 'enabled=true' >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        if: steps.secrets.outputs.enabled == 'true'
+        run: npm install
+
+      - name: Install Aura CLI
+        if: steps.secrets.outputs.enabled == 'true'
+        run: |
+            curl -sSL -o aura-cli.tar.gz https://github.com/neo4j/aura-cli/releases/download/v1.9.1/aura-cli_1.9.1_Linux_x86_64.tar.gz
+            tar -xzf aura-cli.tar.gz
+            ./aura-cli credential add --name ci --client-id "$AURA_CLIENT_ID" --client-secret "$AURA_CLIENT_SECRET"
+
+      - name: Create Aura instance
+        id: create
+        if: steps.secrets.outputs.enabled == 'true'
+        run: |
+            ./aura-cli instance create --name "neode-ogm-ci-${GITHUB_RUN_ID}" \
+              --type free-db --tenant-id "$AURA_TENANT_ID" --await --output json | tee aura-create.json
+            # CLI prints prose lines around the JSON — pull out the JSON block
+            JSON=$(awk '/^\{/,/^\}/' aura-create.json)
+            echo "::add-mask::$(jq -r '.data.password' <<<"$JSON")"
+            echo "id=$(jq -r '.data.id' <<<"$JSON")" >> "$GITHUB_OUTPUT"
+            echo "username=$(jq -r '.data.username' <<<"$JSON")" >> "$GITHUB_OUTPUT"
+            echo "password=$(jq -r '.data.password' <<<"$JSON")" >> "$GITHUB_OUTPUT"
+            echo "uri=$(jq -r '.data.connection_url' <<<"$JSON")" >> "$GITHUB_OUTPUT"
+
+      - name: Integration tests (Aura free-db)
+        if: steps.secrets.outputs.enabled == 'true'
+        run: npm run test:integration
+        env:
+            OGM_TEST_BACKEND: neo4j
+            NEO4J_URI: ${{ steps.create.outputs.uri }}
+            NEO4J_USERNAME: ${{ steps.create.outputs.username }}
+            NEO4J_PASSWORD: ${{ steps.create.outputs.password }}
+
+      - name: Delete Aura instance
+        if: always() && steps.secrets.outputs.enabled == 'true' && steps.create.outputs.id != ''
+        run: ./aura-cli instance delete "${{ steps.create.outputs.id }}"
+
+  # Publishes on a v* tag push, after the test job passes. Requires the
+  # NPM_TOKEN secret. See docs/RELEASE.md before first use.
   release:
     if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -79,12 +195,7 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build
-        run: npm run build
-
-      - name: Unit tests
-        run: npm run test:unit
-
+      # prepublishOnly runs build + unit tests before the publish goes out
       - name: Publish
         run: npm publish
         env:

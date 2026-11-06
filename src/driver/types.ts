@@ -7,6 +7,7 @@
  *    (Neo4j Community/Enterprise, Memgraph, Aura, `relate serve`)
  *  - `RelateConnectionProvider` — the embedded Relate engine, in-process
  */
+import { Newable } from '../meta/newable';
 
 /** A node value in a normalized shape, as returned in result records. */
 export interface GraphNode {
@@ -39,6 +40,13 @@ export interface QueryOutput {
 
 export interface QuerySummary {
     counters?: Record<string, number>;
+    /**
+     * The server's execution plan, as returned for EXPLAIN statements
+     * (the driver's plan tree; backends that produce no plans leave it unset)
+     */
+    plan?: unknown;
+    /** The profiled execution plan, as returned for PROFILE statements */
+    profile?: unknown;
 }
 
 export type QueryParams = Record<string, unknown>;
@@ -55,6 +63,27 @@ export interface TransactionHandle extends Runner {
 }
 
 export type AccessMode = 'READ' | 'WRITE';
+
+/** Options a Neode instance accepts alongside its ConnectionProvider. */
+export interface ConnectionOptions {
+    /**
+     * Routing used when a query path leaves it open — `Neode#cypher` without
+     * a per-call `routing` (defaultRouting itself defaults to 'READ')
+     */
+    defaultRouting?: AccessMode;
+}
+
+/** Options for the unified raw query entry, `Neode#cypher`. */
+export interface CypherOptions {
+    /** 'READ' (default) or 'WRITE' — wins over the connection's defaultRouting */
+    routing?: AccessMode;
+    /** Per-call database override */
+    database?: string;
+    /** Hydrate each row into a registered entity of this class */
+    hydrate?: Newable;
+    /** Column that holds the node to hydrate (default 'this') */
+    alias?: string;
+}
 
 /** The connection port implemented by every backend. */
 export interface ConnectionProvider {

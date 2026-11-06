@@ -41,5 +41,15 @@ export { default as StartNode } from './relationship/start-node.decorator'
 export { default as EndNode } from './relationship/end-node.decorator'
 export { default as OtherNode } from './relationship/other-node.decorator'
 
+// Read-model projections (NTS-135/136/137/138)
+export { default as RelatedOne } from './projection/related-one.decorator'
+export { default as RelatedMany } from './projection/related-many.decorator'
+export { default as RelationshipCount } from './projection/relationship-count.decorator'
+export { default as RelationshipExists } from './projection/relationship-exists.decorator'
+export { default as LabelPresent } from './projection/label-present.decorator'
+export { default as Computed } from './projection/computed.decorator'
+export { default as Expression } from './projection/expression.decorator'
+export type { RelatedConfig, RelationshipCountConfig, RelationshipExistsConfig, ProjectionDirection } from './projection/projection-config.interface'
+
 // Repositories
 export { default as EntityRepository } from './repository.decorator'
