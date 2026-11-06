@@ -3,15 +3,12 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "ESNext.Decorators"],
 
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "./dist",
-
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
 
     "strict": true,
     "noUncheckedIndexedAccess": true,

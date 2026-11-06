@@ -54,6 +54,8 @@ export interface PropertyDefinition {
   Opt in to a property-type constraint generated from the declared type (NTS-141): `REQUIRE n.prop IS :: STRING`.
   */
   typed?: boolean
+  /** Declare a full-text index over the property (NTS-123/436). */
+  fulltext?: boolean
   /**
   Read-side fallbacks applied at hydration when the stored/projected
   value is null or absent (NTS-139, the Zod `.catch()` analogue): a

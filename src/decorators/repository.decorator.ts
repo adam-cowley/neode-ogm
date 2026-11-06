@@ -15,7 +15,7 @@ export default function EntityRepository(entity: Newable) {
     throw new Error('@EntityRepository requires an entity class to link the repository to')
   }
 
-  return function (repository: RepositoryConstructor) {
+  return function (repository: RepositoryConstructor, _context: ClassDecoratorContext): void {
     registerRepository(entity, repository)
   }
 }

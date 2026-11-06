@@ -1,16 +1,19 @@
 import type { Newable } from '../../meta/newable.js'
 import { mergeProperty, mergeRelationshipModel } from '../../meta/index.js'
 import { PropertyType } from '../../meta/property-schema.js'
+import { addRegistration, memberName } from '../registrations.js'
 
 export default function StartNode(entity: () => Newable) {
-  return function (target: any, propertyKey: string, _descriptor?: any): void {
-    const constructor = target.constructor
+  return function (_value: undefined, context: ClassFieldDecoratorContext): void {
+    const propertyKey = memberName(context)
 
-    mergeRelationshipModel(constructor)
+    addRegistration(context.metadata, (constructor) => {
+      mergeRelationshipModel(constructor)
 
-    // Merge Property Key
-    const property = mergeProperty(constructor, propertyKey, PropertyType.START_NODE)
+      // Merge Property Key
+      const property = mergeProperty(constructor, propertyKey, PropertyType.START_NODE)
 
-    property.setEntity(entity())
+      property.setEntity(entity())
+    })
   }
 }

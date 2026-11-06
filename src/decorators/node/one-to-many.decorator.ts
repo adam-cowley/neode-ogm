@@ -1,6 +1,7 @@
 import type { Newable } from '../../meta/newable.js'
 import { Direction } from '../../query/index.js'
 import { mergeRelationshipProperty } from '../../meta/index.js'
+import { addRegistration, memberName } from '../registrations.js'
 
 export default function OneToMany(
   entity: () => Newable,
@@ -8,18 +9,20 @@ export default function OneToMany(
   direction?: Direction,
   eager?: boolean,
 ) {
-  return function (target: any, propertyKey: string, _descriptor?: any): void {
-    const constructor = target.constructor
+  return function (_value: undefined, context: ClassFieldDecoratorContext): void {
+    const propertyKey = memberName(context)
 
-    // Merge Property Key
-    mergeRelationshipProperty(
-      constructor,
-      propertyKey,
-      type ?? '',
-      entity(),
-      direction ?? Direction.BOTH,
-      true,
-      eager,
-    )
+    addRegistration(context.metadata, (constructor) => {
+      // Merge Property Key
+      mergeRelationshipProperty(
+        constructor,
+        propertyKey,
+        type ?? '',
+        entity(),
+        direction ?? Direction.BOTH,
+        true,
+        eager,
+      )
+    })
   }
 }

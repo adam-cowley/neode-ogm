@@ -1,6 +1,7 @@
 import { mergeProperty } from '../meta/index.js'
 import { PropertyType } from '../meta/property-schema.js'
 import type PropertyConfig from './property-config.interface.js'
+import { addRegistration, memberName } from './registrations.js'
 
 const TYPE_ALIASES: Record<string, PropertyType> = {
   string: PropertyType.STRING,
@@ -27,8 +28,8 @@ Register a property with an explicit type and config, e.g.
 Prefer this over `@String` to avoid shadowing global types.
 */
 export default function Property(config: PropertyConfig = {}) {
-  return function (target: unknown, propertyKey: string, _descriptor?: unknown): void {
-    const constructor = (target as { constructor: object }).constructor
+  return function (_value: undefined, context: ClassFieldDecoratorContext): void {
+    const propertyKey = memberName(context)
 
     let type: PropertyType = PropertyType.ANY
 
@@ -44,7 +45,10 @@ export default function Property(config: PropertyConfig = {}) {
       type = mapped
     }
 
-    // Merge Property Key (config.type is not a PropertySchema option, mergeProperty ignores it)
-    mergeProperty(constructor, propertyKey, type, config)
+    // Registration is deferred: the entity's class decorator replays it with
+    // the real constructor (config.type is not a PropertySchema option, mergeProperty ignores it)
+    addRegistration(context.metadata, (constructor) => {
+      mergeProperty(constructor, propertyKey, type, config)
+    })
   }
 }

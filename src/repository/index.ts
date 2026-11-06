@@ -7,6 +7,12 @@ import type PropertySchema from '../meta/property-schema.js'
 import type INeode from '../neode.interface.js'
 import type { GraphNode, QueryOutput } from '../driver/types.js'
 import { hydrateNode } from '../utils.js'
+import { fulltextIndexName } from '../services/schema/fulltext.service.js'
+import type { ScoredEntity } from '../services/query/search.service.js'
+
+export interface SearchOptions {
+  limit?: number
+}
 
 /**
 Ordering spec, matching neode's all() forms:
@@ -181,6 +187,80 @@ export default class Repository<Entity> {
     }
 
     return Repository.toCount(firstRecord.get('count'))
+  }
+
+  /**
+  Atomically bump a numeric property: one server-side statement
+  `SET n.prop = coalesce(n.prop, 0) + by` — safe under concurrency where
+  read-modify-write via update() would lose updates.
+
+  The property must be declared on the schema (its name is interpolated
+  into the Cypher — property names cannot be parameters).
+  */
+  async increment(
+    target: Entity | string | number,
+    property: keyof Entity & string,
+    by = 1,
+  ): Promise<number> {
+    const declared = this.schema.getProperties().find((schemaProperty) => schemaProperty.getKey() === property)
+
+    if (declared === undefined) {
+      throw new Error(
+        `Cannot increment: "${property}" is not a declared property on ${this.getLabels().join(':')}`,
+      )
+    }
+
+    if (typeof by !== 'number' || !Number.isFinite(by)) {
+      throw new TypeError('Cannot increment: step must be a finite number')
+    }
+
+    // The step is a validated finite number, so inlining it into the raw
+    // set is injection-safe; the Builder's raw set has no parameter channel
+    const key = declared.getKey().replaceAll('`', '``')
+    const primaryKey = this.getPrimaryKey().getKey()
+    const id =
+      target !== null && typeof target === 'object'
+        ? (target as unknown as Record<string, unknown>)[primaryKey]
+        : target
+
+    const builder = new Builder().match(THIS_NODE, this.schema.getLabels(), { [primaryKey]: id })
+    builder.set(`${THIS_NODE}.\`${key}\` = coalesce(${THIS_NODE}.\`${key}\`, 0) + (${by})`)
+    builder.return(`${THIS_NODE}.\`${key}\` AS value`)
+
+    const { query, params } = builder.build()
+    const output = await this.neode.writeCypher(query, params, this.database)
+
+    const firstRecord = output.records[0]
+
+    if (firstRecord === undefined) {
+      throw new Error(`Cannot increment: entity not found for ${String(target)}`)
+    }
+
+    return Repository.toCount(firstRecord.get('value'))
+  }
+
+  /**
+  Full-text search over the index `installSchema()` created for this
+  model's `fulltext: true` properties (NTS-436): hydrated entities with
+  their relevance score, best match first. Pass user text through
+  `toFulltextQuery()` first — the query is bound as a parameter, but
+  Lucene syntax characters in it are still parsed as such.
+  */
+  async search(query: string, options: { limit?: number } = {}): Promise<ScoredEntity<Entity>[]> {
+    const fields = this.schema
+      .getProperties()
+      .filter((schemaProperty) => schemaProperty.getFulltext())
+      .map((schemaProperty) => schemaProperty.getKey())
+
+    if (fields.length === 0) {
+      throw new Error(
+        `Cannot search ${this.getLabels().join(':')}: no property is declared fulltext: true — declare one, or use neode.search(entity, indexName, query) with installFulltextIndexes()`,
+      )
+    }
+
+    const indexName = fulltextIndexName({ label: this.getLabels()[0]!, properties: fields })
+
+    return this.neode.search(this.entity, indexName, query, options.limit)
   }
 
   matchEntity(variable: string = THIS_NODE, object: Entity): Builder {

@@ -39,6 +39,7 @@ describe('Decorators', () => {
 
     @OneToOne({
       type,
+      target: () => EntitySchema,
       direction: Direction.OUTGOING,
       eager: true,
     })

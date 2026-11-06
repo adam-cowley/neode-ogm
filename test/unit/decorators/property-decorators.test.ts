@@ -1,4 +1,5 @@
 import {
+  NodeEntity,
   Property,
   Boolean,
   Float,
@@ -26,6 +27,7 @@ import PropertySchema, { PropertyType } from '../../../src/meta/property-schema'
 
 describe('Property Decorators (NTS-12)', () => {
   describe('@Property', () => {
+    @NodeEntity()
     class TypedProperties {
       @Property({ type: 'string' }) propString: string
       @Property({ type: 'number' }) propNumber: number
@@ -72,6 +74,7 @@ describe('Property Decorators (NTS-12)', () => {
     })
 
     it('should merge config options onto the property', () => {
+      @NodeEntity()
       class ConfiguredProperties {
         @Property({ type: 'string', index: true, required: true })
         configured: string
@@ -104,6 +107,7 @@ describe('Property Decorators (NTS-12)', () => {
   })
 
   describe('sugar type decorators', () => {
+    @NodeEntity()
     class SugarProperties {
       @Boolean() booleanProp: boolean
       @Float() floatProp: number
@@ -168,6 +172,7 @@ describe('Property Decorators (NTS-12)', () => {
   })
 
   describe('option decorators', () => {
+    @NodeEntity()
     class OptionProperties {
       @Default('foo') literalDefault: string
       @Default(() => 'bar') functionDefault: string
@@ -233,6 +238,7 @@ describe('Property Decorators (NTS-12)', () => {
   })
 
   describe('decorator stacking', () => {
+    @NodeEntity()
     class StackedProperties {
       @Uuid()
       @Index()

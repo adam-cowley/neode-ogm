@@ -1,23 +1,23 @@
 import { mergeRelationshipProperty } from '../../meta/index.js'
 import type RelationshipConfig from '../relationship-config.interface.js'
+import { addRegistration, memberName } from '../registrations.js'
 
 export default function OneToOne(config: RelationshipConfig) {
-  return function (target: any, propertyKey: string, _descriptor?: any): void {
-    const constructor = target.constructor
+  return function (_value: undefined, context: ClassFieldDecoratorContext): void {
+    const propertyKey = memberName(context)
 
-    // An explicit target() overrides design:type, which SWC cannot emit for
-    // self-referential property types (it falls back to Object)
-    const entity = config.target?.() ?? Reflect.getMetadata('design:type', target, propertyKey)
-
-    // Merge Property Key
-    mergeRelationshipProperty(
-      constructor,
-      propertyKey,
-      config.type,
-      entity,
-      config.direction,
-      false,
-      config.eager,
-    )
+    // An explicit target() is now required: standard decorators have no
+    // design:type reflection to infer the related entity
+    addRegistration(context.metadata, (constructor) => {
+      mergeRelationshipProperty(
+        constructor,
+        propertyKey,
+        config.type,
+        config.target(),
+        config.direction,
+        false,
+        config.eager,
+      )
+    })
   }
 }

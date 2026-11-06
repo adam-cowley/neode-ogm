@@ -1,5 +1,6 @@
 import { mergeProperty } from '../../meta/index.js'
 import { PropertyType } from '../../meta/property-schema.js'
+import { addRegistration, memberName } from '../registrations.js'
 
 /**
 NTS-137 — label predicate boolean: true when the node has the given label.
@@ -11,11 +12,13 @@ isOptional: boolean;
 ```
 */
 export default function LabelPresent(label: string) {
-  return function (target: any, propertyKey: string, _descriptor?: any): void {
-    const constructor = target.constructor
+  return function (_value: undefined, context: ClassFieldDecoratorContext): void {
+    const propertyKey = memberName(context)
 
-    const property = mergeProperty(constructor, propertyKey, PropertyType.LABEL_PRESENT, {})
+    addRegistration(context.metadata, (constructor) => {
+      const property = mergeProperty(constructor, propertyKey, PropertyType.LABEL_PRESENT, {})
 
-    property.setLabel(label)
+      property.setLabel(label)
+    })
   }
 }

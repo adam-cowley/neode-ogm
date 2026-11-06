@@ -10,6 +10,7 @@ import type RelationshipPropertySchema from './relationship-property-schema.js'
 import EntitySchema, { EntityType } from './entity/entity-schema.js'
 import type PropertyConfig from '../decorators/property-config.interface.js'
 import type { PropertyDefinition } from './schema-definition.interface.js'
+import { replayRegistrations } from '../decorators/registrations.js'
 import Repository from '../repository/index.js'
 
 const models = new Map<Newable, EntitySchema>()
@@ -28,6 +29,7 @@ const METAMODEL_KEYS = new Set([
   'alwaysSet',
   'required',
   'hidden',
+  'fulltext',
   'protected',
   'readonly',
   'index',
@@ -48,10 +50,17 @@ export function getModels() {
 }
 
 export function getModel(constructor: any): EntitySchema {
+  // Bare classes (no class decorator) register their field decorators lazily
+  replayRegistrations(constructor)
+
   return getModels().get(constructor)!
 }
 
 export function mergeModel(constructor: any): EntitySchema {
+  // Field decorators queue registrations on the class's Symbol.metadata;
+  // replay them before resolving so bare classes register lazily too
+  replayRegistrations(constructor)
+
   if (!getModels().has(constructor)) {
     getModels().set(constructor, new EntitySchema())
   }
@@ -156,6 +165,10 @@ export function mergeProperty(
 
   if (Object.hasOwn(config, 'alwaysSet')) {
     property.setAlwaysSet(config.alwaysSet)
+  }
+
+  if (config?.fulltext === true) {
+    property.setFulltext(true)
   }
 
   // Read-model projection config (NTS-135/136/137/138)

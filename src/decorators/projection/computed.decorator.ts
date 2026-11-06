@@ -1,5 +1,6 @@
 import { mergeProperty } from '../../meta/index.js'
 import { PropertyType } from '../../meta/property-schema.js'
+import { addRegistration, memberName } from '../registrations.js'
 
 /**
 NTS-138 — derived field, computed in TypeScript after hydration from the
@@ -12,11 +13,13 @@ fullName: string;
 ```
 */
 export default function Computed(compute: (entity: any) => unknown) {
-  return function (target: any, propertyKey: string, _descriptor?: any): void {
-    const constructor = target.constructor
+  return function (_value: undefined, context: ClassFieldDecoratorContext): void {
+    const propertyKey = memberName(context)
 
-    const property = mergeProperty(constructor, propertyKey, PropertyType.COMPUTED, {})
+    addRegistration(context.metadata, (constructor) => {
+      const property = mergeProperty(constructor, propertyKey, PropertyType.COMPUTED, {})
 
-    property.setCompute(compute)
+      property.setCompute(compute)
+    })
   }
 }

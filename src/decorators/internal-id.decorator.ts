@@ -1,11 +1,14 @@
 import { mergeProperty } from '../meta/index.js'
 import { PropertyType } from '../meta/property-schema.js'
+import { addRegistration, memberName } from './registrations.js'
 
 export default function InternalId() {
-  return function (target: any, propertyKey: string, _descriptor?: any): void {
-    const constructor = target.constructor
+  return function (_value: undefined, context: ClassFieldDecoratorContext): void {
+    const propertyKey = memberName(context)
 
-    // Merge Property Key
-    mergeProperty(constructor, propertyKey, PropertyType.INTERNAL_ID)
+    addRegistration(context.metadata, (constructor) => {
+      // Merge Property Key
+      mergeProperty(constructor, propertyKey, PropertyType.INTERNAL_ID)
+    })
   }
 }

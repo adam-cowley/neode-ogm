@@ -1,9 +1,13 @@
 import type { Newable } from '../../meta/newable.js'
 import { mergeModel } from '../../meta/index.js'
 import type NodeConfig from '../node-config.interface.js'
+import { replayRegistrations } from '../registrations.js'
 
 export default function NodeEntity(config: NodeConfig = {}) {
-  return function (constructor: Newable) {
+  return function (constructor: Newable, _context: ClassDecoratorContext): void {
+    // Replay field registrations queued by property/relationship decorators
+    replayRegistrations(constructor)
+
     // Merge Model into map
     const model = mergeModel(constructor)
 

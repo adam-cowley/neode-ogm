@@ -3,7 +3,11 @@ import type { Direction } from '../query/index.js'
 
 export default interface RelationshipConfig {
   type: string
-  target?: () => Newable
+  /**
+  Factory returning the related entity class. Required: standard (TC39)
+  decorators have no design:type reflection to infer it.
+  */
+  target: () => Newable
   direction: Direction
   eager?: boolean
 }

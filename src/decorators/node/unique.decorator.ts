@@ -1,13 +1,16 @@
 import { mergeProperty } from '../../meta/index.js'
 import { PropertyType } from '../../meta/property-schema.js'
+import { addRegistration, memberName } from '../registrations.js'
 
 export default function Unique() {
-  return function (target: any, propertyKey: string, _descriptor?: any): void {
-    const constructor = target.constructor
+  return function (_value: undefined, context: ClassFieldDecoratorContext): void {
+    const propertyKey = memberName(context)
 
-    // Merge Property Key
-    const property = mergeProperty(constructor, propertyKey, PropertyType.ANY)
+    addRegistration(context.metadata, (constructor) => {
+      // Merge Property Key
+      const property = mergeProperty(constructor, propertyKey, PropertyType.ANY)
 
-    property.setUnique()
+      property.setUnique()
+    })
   }
 }

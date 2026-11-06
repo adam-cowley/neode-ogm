@@ -2,7 +2,14 @@ import { vi } from 'vitest'
 import Repository from '../../src/repository'
 import INeode from '../../src/neode.interface'
 import { GraphNode, QueryOutput, QueryRecord } from '../../src/driver/types'
-import { NodeEntity, InternalId, Uuid, String, Number } from '../../src/decorators'
+import {
+  NodeEntity,
+  InternalId,
+  Uuid,
+  String,
+  Number as NumberProperty,
+} from '../../src/decorators'
+import { fulltextIndexName } from '../../src/services/schema/fulltext.service'
 
 // ---- Fixtures (decorator registry is global per module registry) -----------
 
@@ -17,7 +24,7 @@ class Movie {
   @String({ unique: true })
   title: string
 
-  @Number()
+  @NumberProperty()
   released: number
 
   static build(values: Record<string, unknown>): Movie {
@@ -54,6 +61,15 @@ function stubNeode(output: Partial<QueryOutput> = {}) {
       vi.fn<
         (query: string, params: Record<string, unknown>, database?: string) => Promise<QueryOutput>
       >(),
+    search:
+      vi.fn<
+        (
+          constructor: unknown,
+          indexName: string,
+          query: string,
+          limit?: number,
+        ) => Promise<unknown[]>
+      >(),
   }
 
   mocks.find.mockResolvedValue(undefined)
@@ -62,6 +78,7 @@ function stubNeode(output: Partial<QueryOutput> = {}) {
   mocks.delete.mockResolvedValue(undefined)
   mocks.readCypher.mockResolvedValue({ records: [], ...output })
   mocks.writeCypher.mockResolvedValue({ records: [], ...output })
+  mocks.search.mockResolvedValue([])
 
   return { neode: mocks as unknown as INeode, mocks }
 }
@@ -368,6 +385,103 @@ describe('Repository', () => {
 
       // @ts-expect-error "bogus" is not a property of Movie
       await repo.findBy({ bogus: true })
+    })
+  })
+
+  describe('increment', () => {
+    it('writes one atomic coalesce statement and returns the new value', async () => {
+      const { neode, mocks } = stubNeode({ records: [keyedRecord({ value: 5 })] })
+
+      const repo = new Repository<Movie>(neode, Movie)
+      const value = await repo.increment('u1', 'released', 2)
+
+      const [query] = mocks.writeCypher.mock.calls[0]
+
+      expect(query).toContain('MATCH (this:Movie { id: $this_id })')
+      expect(query).toContain('SET this.`released` = coalesce(this.`released`, 0) + (2)')
+      expect(query).toContain('RETURN this.`released` AS value')
+      expect(value).toBe(5)
+    })
+
+    it('accepts an entity instance and matches on its primary key', async () => {
+      const { neode, mocks } = stubNeode({ records: [keyedRecord({ value: 1 })] })
+
+      const repo = new Repository<Movie>(neode, Movie)
+      await repo.increment(Movie.build({ id: 'u1' }), 'released')
+
+      const [query, params] = mocks.writeCypher.mock.calls[0]
+
+      expect(query).toContain('MATCH (this:Movie { id: $')
+      expect(Object.values(params)).toContain('u1')
+    })
+
+    it('rejects undeclared properties', async () => {
+      const { neode } = stubNeode()
+      const repo = new Repository<Movie>(neode, Movie)
+
+      // @ts-expect-error "bogus" is not a property of Movie
+      await expect(repo.increment('u1', 'bogus')).rejects.toThrow('not a declared property')
+    })
+
+    it('rejects non-finite steps', async () => {
+      const { neode } = stubNeode()
+      const repo = new Repository<Movie>(neode, Movie)
+
+      await expect(repo.increment('u1', 'released', Number.NaN)).rejects.toThrow('finite number')
+      await expect(repo.increment('u1', 'released', Number.POSITIVE_INFINITY)).rejects.toThrow(
+        'finite number',
+      )
+    })
+  })
+
+  describe('search', () => {
+    @NodeEntity()
+    class Searchable {
+      @InternalId()
+      _id: string
+
+      @Uuid({ primary: true })
+      id: string
+
+      @String()
+      title: string
+
+      @String({ fulltext: true })
+      plot: string
+
+      static build(values: Record<string, unknown>): Searchable {
+        return Object.assign(new Searchable(), values) as unknown as Searchable
+      }
+    }
+
+    it('resolves the index name from the declared fulltext properties', async () => {
+      const { neode, mocks } = stubNeode()
+      const repo = new Repository<Searchable>(neode, Searchable)
+
+      await repo.search('alien')
+
+      const [constructor, indexName, query, limit] = mocks.search.mock.calls[0]
+
+      expect(constructor).toBe(Searchable)
+      expect(indexName).toBe(fulltextIndexName({ label: 'Searchable', properties: ['plot'] }))
+      expect(query).toBe('alien')
+      expect(limit).toBeUndefined()
+    })
+
+    it('passes the limit through', async () => {
+      const { neode, mocks } = stubNeode()
+      const repo = new Repository<Searchable>(neode, Searchable)
+
+      await repo.search('alien', { limit: 5 })
+
+      expect(mocks.search.mock.calls[0][3]).toBe(5)
+    })
+
+    it('throws when the model declares no fulltext properties', async () => {
+      const { neode } = stubNeode()
+      const repo = new Repository<Movie>(neode, Movie)
+
+      await expect(repo.search('alien')).rejects.toThrow('fulltext: true')
     })
   })
 })

@@ -2,6 +2,7 @@ import { mergeProperty } from '../../meta/index.js'
 import { PropertyType } from '../../meta/property-schema.js'
 import { toDirection } from '../../query/index.js'
 import type { RelationshipCountConfig } from './projection-config.interface.js'
+import { addRegistration, memberName } from '../registrations.js'
 
 /**
 NTS-136 — relationship count projected as an inline `COUNT { }` subquery
@@ -15,21 +16,23 @@ requiredLessonsCount: number;
 ```
 */
 export default function RelationshipCount(config: RelationshipCountConfig) {
-  return function (target: any, propertyKey: string, _descriptor?: any): void {
-    const constructor = target.constructor
+  return function (_value: undefined, context: ClassFieldDecoratorContext): void {
+    const propertyKey = memberName(context)
 
-    const property = mergeProperty(constructor, propertyKey, PropertyType.RELATIONSHIP_COUNT, {
-      where: config.where,
-      minHops: config.minHops,
-      maxHops: config.maxHops,
+    addRegistration(context.metadata, (constructor) => {
+      const property = mergeProperty(constructor, propertyKey, PropertyType.RELATIONSHIP_COUNT, {
+        where: config.where,
+        minHops: config.minHops,
+        maxHops: config.maxHops,
+      })
+
+      property.setRelationshipType(config.type)
+      property.setDirection(toDirection(config.direction))
+
+      // Optional: labels of the counted node
+      if (config.target) {
+        property.setEntity(config.target())
+      }
     })
-
-    property.setRelationshipType(config.type)
-    property.setDirection(toDirection(config.direction))
-
-    // Optional: labels of the counted node
-    if (config.target) {
-      property.setEntity(config.target())
-    }
   }
 }

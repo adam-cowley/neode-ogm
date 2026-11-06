@@ -21,6 +21,8 @@ import MergeService from '../services/query/merge.service.js'
 import RelateService from '../services/query/relate.service.js'
 import UpdateService from '../services/query/update.service.js'
 import WithinDistanceService from '../services/query/within-distance.service.js'
+import { search, type ScoredEntity } from '../services/query/search.service.js'
+
 
 export default class TransactionalService implements INeode {
   private readonly handle: TransactionHandle
@@ -265,6 +267,15 @@ export default class TransactionalService implements INeode {
     const schema = this.getSchema(constructor)
 
     return new GetService(this.handle).get<T>(constructor, schema, parameters, limit, skip, order)
+  }
+
+  async search<T>(
+    constructor: new (...arguments_: never[]) => T,
+    indexName: string,
+    query: string,
+    limit?: number,
+  ): Promise<ScoredEntity<T>[]> {
+    return search<T>(this.handle, constructor, indexName, query, limit)
   }
 
   /**
