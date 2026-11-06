@@ -9,6 +9,26 @@ export enum PropertyType {
     STRING,
     INTEGER,
 
+    // Numbers
+    FLOAT,
+    NUMBER,
+
+    BOOLEAN,
+
+    // Temporal
+    DATE,
+    TIME,
+    DATETIME,
+    LOCALTIME,
+    LOCALDATETIME,
+
+    // Spatial
+    POINT,
+
+    // Durations
+    DURATION,
+
+    // Relationships
     ONE_TO_ONE,
     ONE_TO_MANY,
 
@@ -19,6 +39,15 @@ export enum PropertyType {
     NODE,
     RELATIONSHIP
 }
+
+/** Property types that map onto Neo4j temporal values */
+export const TemporalTypes = [
+    PropertyType.DATE,
+    PropertyType.TIME,
+    PropertyType.DATETIME,
+    PropertyType.LOCALTIME,
+    PropertyType.LOCALDATETIME,
+];
 
 export const RelationshipTypes = [
     PropertyType.ONE_TO_ONE,
