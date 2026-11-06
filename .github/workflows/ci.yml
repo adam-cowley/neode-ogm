@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout Relate (embedded test backend)
+        run: git clone --depth 1 https://github.com/relatedb/relate ../relate
+
+      - uses: actions/setup-node@v4
+        with:
+            node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Relate FFI library
+        run: cargo build -p relate-ffi --release
+        working-directory: ../relate
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Lint
+        run: npx turbo run lint
+
+      - name: Unit tests
+        run: npx turbo run test:unit
+
+      - name: Integration tests (Relate embedded backend)
+        run: npx turbo run test:integration
+
+      - name: Build
+        run: npx turbo run build
+
+  # Optional: run the integration suite against a real Neo4j server
+  # by providing NEO4J_URI / NEO4J_USERNAME / NEO4J_PASSWORD secrets.
+  neo4j:
+    if: ${{ secrets.NEO4J_URI != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+            node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Integration tests (Neo4j backend)
+        run: npx turbo run test:integration
+        env:
+            OGM_TEST_BACKEND: neo4j
+            NEO4J_URI: ${{ secrets.NEO4J_URI }}
+            NEO4J_USERNAME: ${{ secrets.NEO4J_USERNAME }}
+            NEO4J_PASSWORD: ${{ secrets.NEO4J_PASSWORD }}
+            NEO4J_DATABASE: ${{ secrets.NEO4J_DATABASE }}

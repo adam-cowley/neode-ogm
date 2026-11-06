@@ -1,3 +1,4 @@
+import { Newable } from "../newable";
 import PropertySchema from "../property-schema";
 import RelationshipPropertySchema from "../relationship-property-schema";
 
@@ -11,7 +12,7 @@ export default class EntitySchema {
     protected relationships: Map<string, RelationshipPropertySchema> = new Map;
 
     private labels: string[] = [];
-    private objectConstructor: ObjectConstructor;
+    private objectConstructor: Newable;
 
 
     constructor(protected entityType: EntityType = EntityType.NodeEntity) {}
@@ -34,7 +35,7 @@ export default class EntitySchema {
     }
 
     getRelationship(key: string): RelationshipPropertySchema {
-        return this.relationships.get(key)
+        return this.relationships.get(key)!
     }
 
 
@@ -42,7 +43,7 @@ export default class EntitySchema {
         return Array.from( this.relationships.values() )
     }
 
-    setConstructor(constructor: ObjectConstructor) {
+    setConstructor(constructor: Newable) {
         this.objectConstructor = constructor
     }
 
@@ -68,7 +69,7 @@ export default class EntitySchema {
     }
 
     getProperty(key: string) {
-        return this.properties.get(key)
+        return this.properties.get(key)!
     }
 
     addProperty(key: string) {

@@ -1,21 +1,21 @@
-import { Driver, session as SessionMode } from "neo4j-driver";
-import { getModels } from "../../meta";
-import EntitySchema from "../../meta/entity/entity-schema"
-import PropertySchema from "../../meta/property-schema";
+import { ConnectionProvider } from '../../driver/types';
+import { getModels } from '../../meta';
+import EntitySchema from '../../meta/entity/entity-schema';
+import PropertySchema from '../../meta/property-schema';
 
-enum ConstraintAction {
+export enum ConstraintAction {
     CREATE = 'CREATE',
-    DROP = 'DROP'
+    DROP = 'DROP',
 }
 
-enum ConstraintType {
-    UNIQUE,
-    EXISTS
+export enum ConstraintType {
+    UNIQUE = 'UNIQUE',
+    EXISTS = 'EXISTS',
 }
 
 export interface SchemaResult {
-    action: ConstraintAction,
-    type: ConstraintType,
+    action: ConstraintAction;
+    type: ConstraintType;
     label: string;
     property: string;
     statement: string;
@@ -24,60 +24,127 @@ export interface SchemaResult {
 }
 
 export default class SchemaService {
-    constructor(private readonly driver: Driver, private readonly enterprise: boolean = false) {}
+    constructor(
+        private readonly connection: ConnectionProvider,
+        private readonly enterprise: boolean = false
+    ) {}
 
     create(): Promise<SchemaResult[]> {
-        return this.runSchemaStatements(ConstraintAction.CREATE)
+        return this.runSchemaStatements(ConstraintAction.CREATE);
     }
 
     drop(): Promise<SchemaResult[]> {
-        return this.runSchemaStatements(ConstraintAction.DROP)
+        return this.runSchemaStatements(ConstraintAction.DROP);
     }
 
     private async runSchemaStatements(action: ConstraintAction): Promise<SchemaResult[]> {
-        const output = await Promise.all(Array.from(getModels().values())
-            .map(async model => await this.runSchemaStatementsForModel(action, model))
-        )
+        const output = await Promise.all(
+            Array.from(getModels().values()).map((model) =>
+                this.runSchemaStatementsForModel(action, model)
+            )
+        );
 
-        return output.reduce((acc: SchemaResult[], current: SchemaResult[]) => acc.concat(current) , []) as SchemaResult[]
+        return output.reduce(
+            (acc: SchemaResult[], current: SchemaResult[]) => acc.concat(current),
+            []
+        );
     }
 
-    async runSchemaStatementsForModel(action: ConstraintAction, model: EntitySchema): Promise<SchemaResult[]> {
-        const output = await Promise.all(model.getLabels()
-            .map(label => this.runSchemaStatementsForLabel(action, model, label))
-        )
+    private async runSchemaStatementsForModel(
+        action: ConstraintAction,
+        model: EntitySchema
+    ): Promise<SchemaResult[]> {
+        const output = await Promise.all(
+            model.getLabels().map((label) => this.runSchemaStatementsForLabel(action, model, label))
+        );
 
-        return output.reduce((acc: SchemaResult[], current: SchemaResult[]) => acc.concat(current) , []) as SchemaResult[]
+        return output.reduce(
+            (acc: SchemaResult[], current: SchemaResult[]) => acc.concat(current),
+            []
+        );
     }
 
-    async runSchemaStatementsForLabel(action: ConstraintAction, model: EntitySchema, label: string): Promise<SchemaResult[]> {
-        let output: SchemaResult[] = (await this.runUniqueConstraintStatementsForLabel(action, model.getProperties(), label))
-            .reduce((acc: SchemaResult[], value: SchemaResult) => acc.concat(value), [])
+    private async runSchemaStatementsForLabel(
+        action: ConstraintAction,
+        model: EntitySchema,
+        label: string
+    ): Promise<SchemaResult[]> {
+        const output = await this.runUniqueConstraintStatementsForLabel(
+            action,
+            model.getProperties(),
+            label
+        );
 
+        if (this.enterprise) {
+            const exists = await this.runExistsConstraintStatementsForLabel(
+                action,
+                model.getProperties(),
+                label
+            );
 
-        if ( this.enterprise ) {
-            return output.concat(...await this.runExistsConstraintStatementsForLabel(action, model.getProperties(), label))
+            return output.concat(...exists);
         }
 
-        return output
+        return output;
     }
 
-    runUniqueConstraintStatementsForLabel(action: ConstraintAction, properties: PropertySchema[], label: string): Promise<SchemaResult[]> {
-        return Promise.all(properties.filter(property => property.isUnique())
-            .map(property => this.constraintStatement(action, ConstraintType.UNIQUE, label, property.getKey()))
-        )
+    private runUniqueConstraintStatementsForLabel(
+        action: ConstraintAction,
+        properties: PropertySchema[],
+        label: string
+    ): Promise<SchemaResult[]> {
+        return Promise.all(
+            properties
+                .filter((property) => property.isUnique())
+                .map((property) =>
+                    this.constraintStatement(
+                        action,
+                        ConstraintType.UNIQUE,
+                        label,
+                        property.getKey()
+                    )
+                )
+        );
     }
 
-    runExistsConstraintStatementsForLabel(action: ConstraintAction, properties: PropertySchema[], label: string): Promise<SchemaResult[]> {
-        return Promise.all(properties.filter(property => property.isUnique())
-            .map(property => this.constraintStatement(action, ConstraintType.EXISTS, label, property.getKey()))
-        )
+    private runExistsConstraintStatementsForLabel(
+        action: ConstraintAction,
+        properties: PropertySchema[],
+        label: string
+    ): Promise<SchemaResult[]> {
+        return Promise.all(
+            properties
+                .filter((property) => property.isUnique())
+                .map((property) =>
+                    this.constraintStatement(
+                        action,
+                        ConstraintType.EXISTS,
+                        label,
+                        property.getKey()
+                    )
+                )
+        );
     }
 
-    async constraintStatement(action: ConstraintAction, type: ConstraintType, label: string, property: string): Promise<SchemaResult> {
-        const session = this.driver.session({ defaultAccessMode: SessionMode.WRITE })
+    private async constraintStatement(
+        action: ConstraintAction,
+        type: ConstraintType,
+        label: string,
+        property: string
+    ): Promise<SchemaResult> {
+        // Modern (Neo4j 4.4+/5.x) constraint syntax, with IF NOT/DOES NOT
+        // EXIST guards so install and drop are idempotent
+        const predicate =
+            type === ConstraintType.UNIQUE
+                ? `n.\`${property}\` IS UNIQUE`
+                : `n.\`${property}\` IS NOT NULL`;
 
-        const statement = type === ConstraintType.UNIQUE ? `n.\`${property}\` IS UNIQUE` : `exists(n.\`${property}\`)`
+        const guard =
+            action === ConstraintAction.CREATE ? 'IF NOT EXISTS' : 'IF EXISTS';
+
+        const name = `${label.toLowerCase()}_${property}_${type === ConstraintType.UNIQUE ? 'unique' : 'exists'}`;
+
+        const statement = `${action} CONSTRAINT ${name} ${guard} FOR (n:${label}) REQUIRE ${predicate}`;
 
         const output: SchemaResult = {
             action,
@@ -85,20 +152,17 @@ export default class SchemaService {
             label,
             property,
             statement,
-            success: false
-        }
+            success: false,
+        };
 
         try {
-            await session.writeTransaction(tx => tx.run(`${action} CONSTRAINT ON (n:${label}) ASSERT ${statement}`))
+            await this.connection.run(statement, {}, 'WRITE');
 
-            output.success = true
+            output.success = true;
+        } catch (e) {
+            output.error = e as Error;
         }
-        catch (e) {
-            output.error = e
-        }
 
-        await session.close()
-
-        return output
+        return output;
     }
 }

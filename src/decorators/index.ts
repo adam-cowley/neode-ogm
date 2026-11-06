@@ -6,6 +6,7 @@ export { default as InternalId } from './internal-id.decorator'
 export { default as Primary } from './node/primary.decorator'
 export { default as Uuid } from './node/uuid.decorator'
 export { default as String } from './node/string.decorator'
+export { default as Number } from './node/number.decorator'
 export { default as OneToOne } from './node/one-to-one.decorator'
 export { default as OneToMany } from './node/one-to-many.decorator'
 

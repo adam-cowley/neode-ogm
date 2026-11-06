@@ -1,335 +1,287 @@
-import neo4j, { Driver, QueryResult, Session, Transaction } from "neo4j-driver";
-import { getModel, getModels } from "./meta";
-import EntitySchema from "./meta/entity/entity-schema";
 import { EventEmitter } from 'events';
-import FindService from "./services/query/find.service";
-import MergeService from "./services/query/merge.service";
-import { INTERNAL_ID } from "./constants";
-import { EventType } from "./common/events";
-import DeleteService from "./services/query/delete.service";
-import INeode from "./neode.interface";
-import GetService from "./services/query/get.service";
-import SchemaService, { SchemaResult } from "./services/schema/schema.service";
-import { Repository } from ".";
-import TransactionalService from "./transaction/transactional.service";
-import FindByIdService from "./services/query/find-by-id.service";
+import {
+    ConnectionProvider,
+    QueryOutput,
+    QueryParams,
+    Runner,
+    TransactionHandle,
+} from './driver/types';
+import { Neo4jConnectionProvider } from './driver/neo4j';
+import { RelateConnectionProvider } from './driver/relate';
+import { getModel, getModels } from './meta';
+import EntitySchema from './meta/entity/entity-schema';
+import { EventType } from './common/events';
+import FindService from './services/query/find.service';
+import MergeService from './services/query/merge.service';
+import DeleteService from './services/query/delete.service';
+import INeode from './neode.interface';
+import GetService from './services/query/get.service';
+import SchemaService, { SchemaResult } from './services/schema/schema.service';
+import { Repository } from '.';
+import TransactionalService from './transaction/transactional.service';
+import FindByIdService from './services/query/find-by-id.service';
 
 export default class Neode implements INeode {
-
-    private driver: Driver;
     private eventEmitter: EventEmitter = new EventEmitter();
-    private database: string;
-    private enterprise: boolean;
 
-    constructor(driver: Driver, database?: string, enterprise: boolean = false) {
-        this.driver = driver
-        this.database = database
-        this.enterprise = enterprise
+    constructor(
+        private readonly connection: ConnectionProvider,
+        private enterprise: boolean = false
+    ) {}
+
+    /**
+     * Create a Neode instance over a neo4j-driver Driver
+     * (Neo4j Community / Enterprise, Memgraph, or any Bolt server)
+     */
+    static forDriver(driver: import('neo4j-driver').Driver, database?: string, enterprise = false): Neode {
+        return new Neode(new Neo4jConnectionProvider(driver, database), enterprise);
     }
 
-    getDriver(): Driver {
-        return this.driver
+    /**
+     * Create a Neode instance over an embedded Relate database
+     * (in-memory or file-backed)
+     */
+    static forRelate(database: unknown, namespace = 'neo4j', enterprise = false): Neode {
+        return new Neode(
+            new RelateConnectionProvider(database as never, namespace),
+            enterprise
+        );
+    }
+
+    getConnection(): ConnectionProvider {
+        return this.connection;
+    }
+
+    getRunner(): Runner {
+        return this.connection;
     }
 
     isEnterprise(): boolean {
-        return this.enterprise
+        return this.enterprise;
     }
 
-    private getSchema(constructor: any): EntitySchema {
-        if ( !getModel(constructor) ) {
-            throw new Error(`Couldn't find a model for "${constructor.name}".  Registered model(s) are: ${ Array.from( getModels().keys() ).map(model => (model as Record<string, any>).name)}`)
+    setEnterprise(enterprise: boolean): void {
+        this.enterprise = enterprise;
+    }
+
+    private getSchema(constructor: unknown): EntitySchema {
+        const found = getModel(constructor);
+
+        if (!found) {
+            const name = (constructor as { name?: string })?.name || 'unknown';
+
+            throw new Error(
+                `Couldn't find a model for "${name}". Registered model(s) are: ${Array.from(
+                    getModels().keys()
+                )
+                    .map((model) => (model as { name?: string }).name)
+                    .join(', ')}`
+            );
         }
 
-        return getModel(constructor)
+        return found;
     }
 
     /**
-     * @deprecated
-     * Create a new Session in the Neo4j Driver.
-     *
-     * @param {String} database
-     * @return {Session}
+     * Run a single statement in an implicit transaction
      */
-    session(database: string = this.database): Session {
-        console.warn('neode.session() is deprecated - use .readSession() or .writeSession() instead')
-        return this.readSession(database);
+    readCypher(query: string, params: QueryParams = {}, _database?: string): Promise<QueryOutput> {
+        return this.connection.run(query, params, 'READ');
+    }
+
+    writeCypher(query: string, params: QueryParams = {}, _database?: string): Promise<QueryOutput> {
+        return this.connection.run(query, params, 'WRITE');
     }
 
     /**
-     * Create an explicit Read Session
-     *
-     * @param {String} database
-     * @return {Session}
+     * Open an explicit READ transaction
      */
-    readSession(database: string = this.database): Session {
-        return this.driver.session({
-            database,
-            defaultAccessMode: neo4j.session.READ,
-        });
+    async readTransaction(_database?: string): Promise<TransactionHandle> {
+        return this.connection.beginTransaction('READ');
     }
 
     /**
-     * Create an explicit Write Session
-     *
-     * @param {String} database
-     * @return {Session}
+     * Open an explicit WRITE transaction
      */
-    writeSession(database: string = this.database): Session {
-        return this.driver.session({
-            database,
-            defaultAccessMode: neo4j.session.WRITE,
-        });
+    async writeTransaction(_database?: string): Promise<TransactionHandle> {
+        return this.connection.beginTransaction('WRITE');
     }
 
     /**
-     * Run a read query against the database in an auto-commit transaction
-     * and return the QueryResult directly from the neo4j driver
-     *
-     * @param {String} query
-     * @param {Record<string, any>} params
-     * @param database
+     * Open a transaction and return a TransactionalService
+     * (remember to call .commit() or .rollback())
      */
-    readCypher(query: string, params: Record<string, any> = {}, database?: string): Promise<QueryResult> {
-        const session = this.readSession(database)
+    async openReadTransaction(database?: string): Promise<TransactionalService> {
+        const handle = await this.readTransaction(database);
 
-        return session.run(query, params)
-            .then(res => {
-                session.close()
-
-                return res
-            })
+        return new TransactionalService(handle, this.eventEmitter);
     }
 
     /**
-     * Run a write query against the database in an auto-commit transaction
-     * and return the QueryResult directly from the neo4j driver
-     *
-     * @param {String} query
-     * @param {Record<string, any>} params
-     * @param database
+     * Open a transaction and return a TransactionalService
+     * (remember to call .commit() or .rollback())
      */
-    writeCypher(query: string, params: Record<string, any> = {}, database?: string): Promise<QueryResult> {
-        const session = this.writeSession(database)
+    async openWriteTransaction(database?: string): Promise<TransactionalService> {
+        const handle = await this.writeTransaction(database);
 
-        return session.run(query, params)
-            .then(res => {
-                session.close()
-
-                return res
-            })
+        return new TransactionalService(handle, this.eventEmitter);
     }
 
     /**
-     * Begin a Read Transaction
-     *
-     * @param {String} database
-     * @return {Transaction}
+     * Run a unit of work within a READ transaction
      */
-    readTransaction(database: string = this.database): Transaction {
-        const session = this.readSession(database)
+    async inReadTransaction<T>(
+        work: (tx: TransactionalService) => Promise<T>,
+        database?: string
+    ): Promise<T> {
+        const tx = await this.openReadTransaction(database);
 
-        return session.beginTransaction()
+        return work(tx);
     }
 
     /**
-     * Begin a Write Transaction
-     *
-     * @param {String} database
-     * @return {Transaction}
+     * Run a unit of work within a WRITE transaction
      */
-    writeTransaction(database: string = this.database): Transaction {
-        const session = this.writeSession(database)
+    async inWriteTransaction<T>(
+        work: (tx: TransactionalService) => Promise<T>,
+        database?: string
+    ): Promise<T> {
+        const tx = await this.openWriteTransaction(database);
 
-        return session.beginTransaction()
-    }
-
-    /**
-     * Open a new transaction and return a TransactionalService
-     * (Remember to call .commit())
-     *
-     * @param database
-     */
-    openReadTransaction(database?: string): TransactionalService {
-        const session = this.readSession(database)
-        const transaction = session.beginTransaction()
-
-        return new TransactionalService(session, transaction, this.eventEmitter)
-    }
-
-    /**
-     * Open a new transaction and return a TransactionalService
-     * (Remember to call .commit())
-     *
-     * @param database
-     */
-    openWriteTransaction(database?: string): TransactionalService {
-        const session = this.writeSession(database)
-        const transaction = session.beginTransaction()
-
-        return new TransactionalService(session, transaction, this.eventEmitter)
-    }
-
-    /**
-     * Run a unit of work within a READ transaction (Remember to call .commit())
-     *
-     * @param work
-     * @param database
-     */
-    inReadTransaction(work: (tx: TransactionalService) => any, database?: string): Promise<any> {
-        const tx = this.openReadTransaction(database)
-
-        return work(tx)
-    }
-
-    /**
-     * Run a unit of work within a WRITE transaction (Remember to call .commit())
-     *
-     * @param work
-     * @param database
-     */
-    inWriteTransaction(work: (tx: TransactionalService) => any, database?: string): Promise<any> {
-        const tx = this.openWriteTransaction(database)
-
-        return work(tx)
+        return work(tx);
     }
 
     /**
      * Run statements to create the schema
      */
     installSchema(): Promise<SchemaResult[]> {
-        const service = new SchemaService(this.driver)
+        const service = new SchemaService(this.connection, this.enterprise);
 
-        return service.create()
+        return service.create();
     }
 
     /**
      * Run statements to drop the schema
      */
     dropSchema(): Promise<SchemaResult[]> {
-        const service = new SchemaService(this.driver)
+        const service = new SchemaService(this.connection, this.enterprise);
 
-        return service.drop()
+        return service.drop();
     }
 
     /**
      * Create a Repository
-     *
-     * @param {Object} entity
-     * @param {String} database
-     * @return {Repository<T>}
      */
-    getRepository<T>(entity: T, database?: string): Repository<T> {
-        return new Repository<T>(this, entity, database)
+    getRepository<Entity>(entity: new (...args: never[]) => Entity, database?: string): Repository<Entity> {
+        return new Repository<Entity>(this, entity, database);
     }
 
+    async find<T>(
+        constructor: new (...args: never[]) => T,
+        value: string,
+        _database?: string
+    ): Promise<T | undefined> {
+        const schema = this.getSchema(constructor);
 
-    async find<T extends Object>(constructor: any, value: string, database?: string): Promise<T | undefined> {
-        // Get Schema
-        const schema = this.getSchema(constructor)
+        const tx = await this.readTransaction(_database);
 
-        // Open Tx
-        const tx = this.readTransaction(database)
+        const service = new FindService(tx);
 
-        const service = new FindService(tx)
+        const output = await service.find(constructor, schema, value);
 
-        const output = await service.find(constructor, schema, value)
+        await tx.commit();
 
-        // Commit
-        await tx.commit()
-
-        return output
+        return output as T | undefined;
     }
 
-    async findById<T extends Object>(constructor: any, id: number, database?: string): Promise<T | undefined> {
-        // Get Schema
-        const schema = this.getSchema(constructor)
+    async findById<T>(
+        constructor: new (...args: never[]) => T,
+        elementId: string,
+        _database?: string
+    ): Promise<T | undefined> {
+        const schema = this.getSchema(constructor);
 
-        // Open Tx
-        const tx = this.readTransaction(database)
+        const tx = await this.readTransaction(_database);
 
-        const service = new FindByIdService(tx)
+        const service = new FindByIdService(tx);
 
-        const output = await service.find(constructor, schema, id)
+        const output = await service.find(constructor, schema, elementId);
 
-        // Commit
-        await tx.commit()
+        await tx.commit();
 
-        return output
+        return output as T | undefined;
     }
 
-    async get<T extends Object>(constructor: any, params: Record<string, any>, limit?: number, skip?: number, database?: string): Promise<T[]> {
-        // Get Schema
-        const schema = this.getSchema(constructor)
+    async get<T>(
+        constructor: new (...args: never[]) => T,
+        params: Record<string, unknown>,
+        limit?: number,
+        skip?: number,
+        database?: string
+    ): Promise<T[]> {
+        const schema = this.getSchema(constructor);
 
-        // Open Tx
-        const tx = this.readTransaction(database)
+        const tx = await this.readTransaction(database);
 
-        const service = new GetService(tx)
+        const service = new GetService(tx);
 
-        const results = await service.get<T>(constructor, schema, params, limit, skip)
+        const results = await service.get<T>(constructor, schema, params, limit, skip);
 
-        // Commit the transaction and clear it from memory
-        await tx.commit()
+        await tx.commit();
 
-        return results
+        return results;
     }
 
-    async getFirst<T>(constructor: any, params: Record<string, any>, database?: string): Promise<T | undefined> {
-        const records = await this.get<T>(constructor, params, 1, 0, database)
+    async getFirst<T>(
+        constructor: new (...args: never[]) => T,
+        params: Record<string, unknown>,
+        database?: string
+    ): Promise<T | undefined> {
+        const records = await this.get<T>(constructor, params, 1, 0, database);
 
-        return records[0]
+        return records[0];
     }
 
+    async save<T>(entity: T, database?: string): Promise<T> {
+        const entityRecord = entity as unknown as Record<string, unknown>;
+        const schema = this.getSchema(entityRecord.constructor);
 
-    async save<T extends Object>(entity: T, database?: string): Promise<T> {
-        try {
-            // Get Schema
-            const schema = this.getSchema(entity.constructor)
+        const res = await this.inWriteTransaction(async (tx) => {
+            const mergeService = new MergeService(tx.getRunner());
 
-            // Open Tx
-            const res = await this.inWriteTransaction(async tx => {
-                const mergeService = new MergeService(tx.getTransaction())
+            const { elementId } = await mergeService.save(entity as object, schema);
 
-                const res = await mergeService.save(entity, schema)
+            const findService = new FindByIdService(tx.getRunner());
 
-                const internalId = res.records[0].get(INTERNAL_ID).toNumber()
+            const hydrated = await findService.find(
+                entityRecord.constructor as new (...args: never[]) => T,
+                getModel(entityRecord.constructor),
+                elementId
+            );
 
-                const findService = new FindByIdService(tx.getTransaction())
+            await tx.commit();
 
-                const hydrated = await findService.find(entity.constructor, getModel(entity.constructor), internalId)
+            return hydrated as T;
+        }, database);
 
-                await tx.commit()
+        // Emit event
+        this.eventEmitter.emit(EventType.NODE_CREATED, res);
 
-                return hydrated
-            })
-
-            // Emit event
-            this.eventEmitter.emit(EventType.NODE_CREATED, res)
-
-            return res
-        }
-        catch (e) {
-            throw e
-        }
+        return res;
     }
 
-    async delete<T extends Object>(entity: T, database?: string): Promise<void> {
-        try {
-            const schema = this.getSchema(entity.constructor)
+    async delete<T>(entity: T, database?: string): Promise<void> {
+        const schema = this.getSchema((entity as unknown as Record<string, unknown>).constructor);
 
-            // Open Tx
-            const tx = this.writeTransaction(database)
+        const tx = await this.writeTransaction(database);
 
-            const service = new DeleteService(tx)
+        const service = new DeleteService(tx);
 
-            await service.delete(schema, entity)
+        await service.delete(schema, entity as object);
 
-            // Emit event
-            this.eventEmitter.emit(EventType.NODE_DELETED, entity)
-        }
-        catch(e) {
-            throw e
-        }
+        await tx.commit();
 
+        // Emit event
+        this.eventEmitter.emit(EventType.NODE_DELETED, entity);
     }
 }

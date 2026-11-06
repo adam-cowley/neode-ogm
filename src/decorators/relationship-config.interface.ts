@@ -1,8 +1,9 @@
-import { Direction } from "@neode/querybuilder";
+import { Newable } from "../meta/newable";
+import { Direction } from "../query";
 
 export default interface RelationshipConfig {
     type: string;
-    target?: () => ObjectConstructor;
+    target?: () => Newable;
     direction: Direction;
     eager?: boolean;
 }

@@ -1,0 +1,192 @@
+/**
+ * Integration test backend.
+ *
+ * Selects the database backend for integration tests:
+ *
+ *   OGM_TEST_BACKEND=relate   (default) embedded Relate engine, in-memory,
+ *                             zero setup — anything Cypher compatible
+ *   OGM_TEST_BACKEND=neo4j    external Neo4j (Community or Enterprise) via
+ *                             NEO4J_URI / NEO4J_USERNAME / NEO4J_PASSWORD
+ *   OGM_TEST_BACKEND=memgraph external Memgraph — same env vars
+ *
+ * Every test file calls `openBackend()` and gets an isolated provider.
+ */
+import { resolve } from 'path';
+import { existsSync } from 'fs';
+import { ConnectionProvider } from '../../../src/driver/types';
+import { Neo4jConnectionProvider } from '../../../src/driver/neo4j';
+import { RelateConnectionProvider, requireRelateClient } from '../../../src/driver/relate';
+import Neode from '../../../src/neode.service';
+
+export interface BackendCapabilities {
+    /** Server edition as reported by the backend */
+    edition: 'enterprise' | 'community' | 'unknown';
+    /** Unique/existence constraints and indexes */
+    constraints: boolean;
+    /** Temporal types (date, datetime, …) */
+    temporals: boolean;
+    /** Point type */
+    points: boolean;
+    /** Multiple databases */
+    multiDatabase: boolean;
+}
+
+export interface TestBackend {
+    name: string;
+    neode: Neode;
+    connection: ConnectionProvider;
+    capabilities: BackendCapabilities;
+    clearGraph(): Promise<void>;
+    close(): Promise<void>;
+}
+
+export const isEnterprise = (capabilities: BackendCapabilities): boolean =>
+    capabilities.edition === 'enterprise';
+
+async function probeCapabilities(connection: ConnectionProvider): Promise<BackendCapabilities> {
+    // Constraints: try to create and drop a scratch constraint
+    let constraints = false;
+
+    try {
+        await connection.run(
+            'CREATE CONSTRAINT __ogm_probe__ IF NOT EXISTS FOR (n:__OgmProbe__) REQUIRE n.__probe__ IS UNIQUE'
+        );
+        await connection.run('DROP CONSTRAINT __ogm_probe__ IF EXISTS');
+        constraints = true;
+    } catch {
+        constraints = false;
+    }
+
+    // Temporals
+    let temporals = false;
+
+    try {
+        const result = await connection.run('RETURN date() AS d');
+        temporals = result.records[0].get('d') !== undefined;
+    } catch {
+        temporals = false;
+    }
+
+    // Points
+    let points = false;
+
+    try {
+        const result = await connection.run('RETURN point({ x: 1, y: 2 }) AS p');
+        points = result.records[0].get('p') !== undefined;
+    } catch {
+        points = false;
+    }
+
+    // Multi-database support
+    let multiDatabase = false;
+
+    try {
+        await connection.run('SHOW DATABASES');
+        multiDatabase = true;
+    } catch {
+        multiDatabase = false;
+    }
+
+    return {
+        edition: await connection.edition(),
+        constraints,
+        temporals,
+        points,
+        multiDatabase,
+    };
+}
+
+async function openRelateBackend(): Promise<TestBackend> {
+    // Resolve the native library before the client loads
+    if (!process.env.RELATE_LIB) {
+        for (const profile of ['release', 'debug']) {
+            const candidate = resolve(
+                __dirname,
+                `../../../../relate/target/${profile}/librelate_ffi.dylib`
+            );
+
+            if (existsSync(candidate)) {
+                process.env.RELATE_LIB = candidate;
+                break;
+            }
+        }
+    }
+
+    // Touch the client so the native library loads before we open a database
+    requireRelateClient();
+
+    const client = requireRelateClient();
+    const database = client.Database.open(':memory:');
+
+    const connection = new RelateConnectionProvider(database);
+
+    const neode = new Neode(connection);
+
+    return {
+        name: 'relate',
+        neode,
+        connection,
+        capabilities: await probeCapabilities(connection),
+        async clearGraph() {
+            await connection.run('MATCH (n) DETACH DELETE n');
+        },
+        async close() {
+            // In-memory: nothing to persist
+        },
+    };
+}
+
+async function openBoltBackend(name: string): Promise<TestBackend> {
+    const neo4j = require('neo4j-driver');
+
+    const uri = process.env.NEO4J_URI || `${process.env.NEO4J_PROTOCOL || 'bolt'}://${process.env.NEO4J_HOST || 'localhost'}:${process.env.NEO4J_PORT || '7687'}`;
+    const username = process.env.NEO4J_USERNAME;
+    const password = process.env.NEO4J_PASSWORD;
+
+    if (!username || !password) {
+        throw new Error(
+            `OGM_TEST_BACKEND=${name} requires NEO4J_USERNAME and NEO4J_PASSWORD ` +
+                `(and optionally NEO4J_URI or NEO4J_PROTOCOL/NEO4J_HOST/NEO4J_PORT, NEO4J_DATABASE)`
+        );
+    }
+
+    const driver = neo4j.driver(uri, neo4j.auth.basic(username, password));
+
+    // Fail fast if the server is unreachable
+    await driver.getServerInfo();
+
+    const database = process.env.NEO4J_DATABASE || 'neo4j';
+    const connection = new Neo4jConnectionProvider(driver, database);
+    const neode = new Neode(connection);
+
+    return {
+        name,
+        neode,
+        connection,
+        capabilities: await probeCapabilities(connection),
+        async clearGraph() {
+            await connection.run('MATCH (n) DETACH DELETE n');
+        },
+        async close() {
+            await driver.close();
+        },
+    };
+}
+
+export async function openBackend(): Promise<TestBackend> {
+    const backend = process.env.OGM_TEST_BACKEND || 'relate';
+
+    switch (backend) {
+        case 'relate':
+            return openRelateBackend();
+
+        case 'neo4j':
+        case 'memgraph':
+            return openBoltBackend(backend);
+
+        default:
+            throw new Error(
+                `Unknown OGM_TEST_BACKEND "${backend}". Supported: relate (default), neo4j, memgraph`
+            );
+    }
+}

@@ -1,4 +1,5 @@
-import { Direction } from "@neode/querybuilder";
+import { Newable } from "../meta/newable";
+import { Direction } from "../query";
 import PropertySchema, { PropertyType } from "./property-schema";
 
 import RelationshipPropertySchema from "./relationship-property-schema";
@@ -7,14 +8,14 @@ import EntitySchema, { EntityType } from "./entity/entity-schema";
 import PropertyConfig from "../decorators/property-config.interface";
 import Repository from "../repository/index";
 
-const models: Map<ObjectConstructor, EntitySchema> = new Map()
+const models: Map<Newable, EntitySchema> = new Map()
 
 export function getModels() {
     return models
 }
 
 export function getModel(constructor: any): EntitySchema {
-    return getModels().get(constructor)
+    return getModels().get(constructor)!
 }
 
 export function mergeModel(constructor: any): EntitySchema {
@@ -22,7 +23,7 @@ export function mergeModel(constructor: any): EntitySchema {
         getModels().set(constructor, new EntitySchema())
     }
 
-    return getModels().get(constructor)
+    return getModels().get(constructor)!
 }
 
 export function mergeRelationshipModel(constructor: any): EntitySchema {
@@ -32,7 +33,7 @@ export function mergeRelationshipModel(constructor: any): EntitySchema {
         getModels().set(constructor, new EntitySchema())
     }
 
-    const model = getModels().get(constructor)
+    const model = getModels().get(constructor)!
     model.setType(EntityType.RelationshipEntity)
 
     return model
@@ -65,20 +66,20 @@ export function mergeProperty(constructor: any, key: string, type: PropertyType,
         property.setArray(true)
     }
 
-    if ( config?.hasOwnProperty('default') ) {
-        property.setDefaultValue(config.default)
+    if ( Object.hasOwn(config, 'default') ) {
+        property.setDefaultValue(config.default!)
     }
 
-    if ( config?.hasOwnProperty('onCreateSet') ) {
-        property.setOnCreateSet(config.onCreateSet)
+    if ( Object.hasOwn(config, 'onCreateSet') ) {
+        property.setOnCreateSet(config.onCreateSet!)
     }
 
-    if ( config?.hasOwnProperty('onMatchSet') ) {
-        property.setOnMatchSet(config.onMatchSet)
+    if ( Object.hasOwn(config, 'onMatchSet') ) {
+        property.setOnMatchSet(config.onMatchSet!)
     }
 
-    if ( config?.hasOwnProperty('alwaysSet') ) {
-        property.setAlwaysSet(config.alwaysSet)
+    if ( Object.hasOwn(config, 'alwaysSet') ) {
+        property.setAlwaysSet(config.alwaysSet!)
     }
 
     return property
@@ -86,18 +87,18 @@ export function mergeProperty(constructor: any, key: string, type: PropertyType,
 
 export function mergeRelationshipProperty(constructor: any, key: string,
     type: string,
-    target: ObjectConstructor,
+    target: Newable,
     direction: Direction,
     many: boolean,
     eager?: boolean
 ): RelationshipPropertySchema {
     mergeModel(constructor)
 
-    if ( !models.get(constructor).hasProperty(key) ) {
-        models.get(constructor).addRelationship(key)
+    if ( !models.get(constructor)!.hasProperty(key) ) {
+        models.get(constructor)!.addRelationship(key)
     }
 
-    const rel = models.get(constructor).getRelationship(key)
+    const rel = models.get(constructor)!.getRelationship(key)
 
     rel.setType(type)
     rel.setDirection(direction)
@@ -108,12 +109,12 @@ export function mergeRelationshipProperty(constructor: any, key: string,
     return rel
 }
 
-const repositories: Map<ObjectConstructor, Repository<any>> = new Map()
+const repositories: Map<Newable, Repository<any>> = new Map()
 
-export function registerRepository(entity: ObjectConstructor, repository: Repository<any>) {
+export function registerRepository(entity: Newable, repository: Repository<any>) {
     repositories.set(entity, repository)
 }
 
-export function getRepository<T extends ObjectConstructor>(entity: T): Repository<T> | undefined {
+export function getRepository<T extends Newable>(entity: T): Repository<T> | undefined {
     return repositories.get(entity)
 }

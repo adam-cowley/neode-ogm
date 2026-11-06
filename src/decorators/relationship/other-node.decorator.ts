@@ -1,9 +1,10 @@
+import { Newable } from "../../meta/newable";
 import { mergeProperty, mergeRelationshipModel } from "../../meta"
 import { PropertyType } from "../../meta/property-schema"
 import 'reflect-metadata'
 
-export default function OtherNode(entity: () => ObjectConstructor) {
-    return function(target: any, propertyKey: string, descriptor?: any): void {
+export default function OtherNode(entity: () => Newable) {
+    return function(target: any, propertyKey: string, _descriptor?: any): void {
         const constructor = target.constructor
 
         mergeRelationshipModel(constructor)

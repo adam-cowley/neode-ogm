@@ -2,7 +2,7 @@ import { mergeRelationshipProperty } from "../../meta"
 import RelationshipConfig from "../relationship-config.interface"
 
 export default function OneToOne(config: RelationshipConfig) {
-    return function(target: any, propertyKey: string, descriptor?: any): void {
+    return function(target: any, propertyKey: string, _descriptor?: any): void {
         const constructor = target.constructor
 
         const entity = Reflect.getMetadata("design:type", target, propertyKey)

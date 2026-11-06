@@ -1,3 +1,4 @@
+import { Newable } from "../meta/newable";
 import EntitySchema from "./entity/entity-schema";
 
 export enum PropertyType {
@@ -24,7 +25,7 @@ export const RelationshipTypes = [
     PropertyType.ONE_TO_ONE
 ]
 
-export type DefaultValue = (model: Object, schema: EntitySchema) => any | any | undefined
+export type DefaultValue = (model: object, schema: EntitySchema) => any | any | undefined
 
 export default class PropertySchema {
     private type: PropertyType = PropertyType.ANY;
@@ -37,7 +38,7 @@ export default class PropertySchema {
     private onMatchSet: boolean = false;
     private alwaysSet: boolean = false;
 
-    private entity: ObjectConstructor;
+    private entity: Newable;
 
     constructor(private readonly key: string) {}
 
@@ -110,7 +111,7 @@ export default class PropertySchema {
         return this.alwaysSet
     }
 
-    setEntity(entity: ObjectConstructor) {
+    setEntity(entity: Newable) {
         this.entity = entity
     }
 

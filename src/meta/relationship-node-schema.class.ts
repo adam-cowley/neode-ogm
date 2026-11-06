@@ -6,7 +6,7 @@ export enum NodePosition {
 
 export default class RelationshipNodeSchema {
     constructor(
-        private readonly target: Object,
+        private readonly target: object,
         private readonly position: NodePosition
     ) {}
 

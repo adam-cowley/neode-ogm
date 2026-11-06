@@ -1,4 +1,5 @@
-import { Direction } from "@neode/querybuilder";
+import { Newable } from "../meta/newable";
+import { Direction } from "../query";
 import PropertySchema, { PropertyType } from "./property-schema";
 
 export type RelationshipType = PropertyType.ONE_TO_ONE | PropertyType.ONE_TO_MANY
@@ -7,7 +8,7 @@ export default class RelationshipPropertySchema {
 
     private type: string;
     private direction: Direction;
-    private target: ObjectConstructor;
+    private target: Newable;
     private many: boolean;
     private eager: boolean = false;
 
@@ -40,7 +41,7 @@ export default class RelationshipPropertySchema {
         return this.direction
     }
 
-    setTarget(target: ObjectConstructor) {
+    setTarget(target: Newable) {
         this.target = target
     }
 

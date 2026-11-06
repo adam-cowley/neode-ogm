@@ -1,8 +1,9 @@
+import { Newable } from "../../meta/newable";
 import { mergeModel } from "../../meta";
 import NodeConfig from "../node-config.interface";
 
 export default function NodeEntity(config: NodeConfig = {}) {
-    return function(constructor: Function)  {
+    return function(constructor: Newable)  {
         // Merge Model into map
         const model = mergeModel(constructor)
 
