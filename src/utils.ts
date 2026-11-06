@@ -11,70 +11,132 @@ import Neode from './neode.service';
 import { EAGER_ID, EAGER_LABELS, EAGER_TYPE } from './query/eager-utils';
 import { Direction } from './query';
 
-export function fromEnv(): Neode {
-    // Load vars from .env
-    dotenv.config();
+const LOG_LEVELS = ['error', 'warn', 'info', 'debug'];
 
-    const protocol = process.env.NEO4J_PROTOCOL || 'bolt';
-    const host = process.env.NEO4J_HOST || 'localhost';
-    const port = process.env.NEO4J_PORT || '7687';
-    const connection_string = process.env.NEO4J_URI || `${protocol}://${host}:${port}`;
-    const username = process.env.NEO4J_USERNAME;
-    const password = process.env.NEO4J_PASSWORD;
-    const enterprise = process.env.NEO4J_ENTERPRISE === 'true';
+// The full TrustStrategy union in neo4j-driver 6 (legacy driver 4/5 values
+// such as TRUST_SIGNED_CERTIFICATES are no longer part of it)
+const TRUST_STRATEGIES = [
+    'TRUST_ALL_CERTIFICATES',
+    'TRUST_CUSTOM_CA_SIGNED_CERTIFICATES',
+    'TRUST_SYSTEM_CA_SIGNED_CERTIFICATES',
+];
 
-    // Multi-database
-    const database = process.env.NEO4J_DATABASE || 'neo4j';
+export interface EnvConnectionConfig {
+    uri: string;
+    auth: ReturnType<typeof neo4j.auth.basic> | undefined;
+    config: Record<string, unknown>;
+    database: string;
+    enterprise: boolean;
+}
 
-    // Build additional config
+function warnIgnoring(envVar: string, reason: string): void {
+    console.warn(`fromEnv: ignoring ${envVar} — ${reason}`);
+}
+
+/**
+ * Pure process-env → connection mapping used by fromEnv().
+ *
+ * Audited against the neo4j-driver 6 config surface:
+ * - `encrypted` / `trust` / `trustedCertificates` still exist, but the legacy
+ *   `TRUST_SIGNED_CERTIFICATES` value was dropped from `TrustStrategy`
+ *   (passed through with a warning).
+ * - `knownHosts` and `loadBalancingStrategy` were removed entirely —
+ *   warn + ignore.
+ * - `logging` must be a `{ level, logger }` object; a raw string throws
+ *   "Illegal logger function" at driver construction.
+ */
+export function configFromEnv(env: NodeJS.ProcessEnv): EnvConnectionConfig {
+    const protocol = env.NEO4J_PROTOCOL || 'bolt';
+    const host = env.NEO4J_HOST || 'localhost';
+    const port = env.NEO4J_PORT || '7687';
+
     const config: Record<string, unknown> = {};
 
-    const settings: Record<string, string> = {
+    const ints: Record<string, string> = {
         NEO4J_MAX_CONNECTION_POOLSIZE: 'maxConnectionPoolSize',
         NEO4J_MAX_TRANSACTION_RETRY_TIME: 'maxTransactionRetryTime',
-        NEO4J_LOAD_BALANCING_STRATEGY: 'loadBalancingStrategy',
         NEO4J_MAX_CONNECTION_LIFETIME: 'maxConnectionLifetime',
         NEO4J_CONNECTION_TIMEOUT: 'connectionTimeout',
         NEO4J_CONNECTION_ACQUISITION_TIMEOUT: 'connectionAcquisitionTimeout',
-        NEO4J_DISABLE_LOSSLESS_INTEGERS: 'disableLosslessIntegers',
-        NEO4J_LOGGING_LEVEL: 'logging',
-        NEO4J_ENCRYPTED: 'encrypted',
-        NEO4J_TRUST: 'trust',
-        NEO4J_TRUSTED_CERTIFICATES: 'trustedCertificates',
-        NEO4J_KNOWN_HOSTS: 'knownHosts',
     };
 
-    Object.keys(settings).forEach((setting) => {
-        if (Object.hasOwn(process.env, setting)) {
-            const key = settings[setting];
-            let value: unknown = process.env[setting];
-
-            if (key === 'trustedCertificates' || key === 'knownHosts') {
-                value = (value as string).split(',');
-            } else if (
-                key === 'disableLosslessIntegers' ||
-                key === 'encrypted'
-            ) {
-                value = value === 'true';
-            } else if (
-                key === 'maxTransactionRetryTime' ||
-                key === 'connectionTimeout' ||
-                key === 'connectionAcquisitionTimeout' ||
-                key === 'maxConnectionPoolSize' ||
-                key === 'maxConnectionLifetime'
-            ) {
-                value = parseInt(value as string, 10);
-            }
-
-            config[key] = value;
+    Object.entries(ints).forEach(([setting, key]) => {
+        if (Object.hasOwn(env, setting)) {
+            config[key] = parseInt(env[setting] as string, 10);
         }
     });
 
-    const driver = neo4j.driver(
-        connection_string,
-        username && password ? neo4j.auth.basic(username, password) : undefined,
-        config
-    );
+    if (Object.hasOwn(env, 'NEO4J_DISABLE_LOSSLESS_INTEGERS')) {
+        config.disableLosslessIntegers = env.NEO4J_DISABLE_LOSSLESS_INTEGERS === 'true';
+    }
+
+    if (Object.hasOwn(env, 'NEO4J_ENCRYPTION')) {
+        const value = env.NEO4J_ENCRYPTION as string;
+
+        if (value === 'true' || value === 'ENCRYPTION_ON') {
+            config.encrypted = true;
+        } else if (value === 'false' || value === 'ENCRYPTION_OFF') {
+            config.encrypted = false;
+        } else {
+            warnIgnoring('NEO4J_ENCRYPTION', `unknown value "${value}"`);
+        }
+    }
+
+    if (Object.hasOwn(env, 'NEO4J_TRUST')) {
+        const value = env.NEO4J_TRUST as string;
+
+        if (!TRUST_STRATEGIES.includes(value)) {
+            console.warn(
+                `fromEnv: NEO4J_TRUST "${value}" is not a driver 6 trust strategy (${TRUST_STRATEGIES.join(', ')}) — passing through as-is`
+            );
+        }
+
+        config.trust = value;
+    }
+
+    if (Object.hasOwn(env, 'NEO4J_TRUSTED_CERTIFICATES')) {
+        config.trustedCertificates = (env.NEO4J_TRUSTED_CERTIFICATES as string).split(',');
+    }
+
+    if (Object.hasOwn(env, 'NEO4J_LOGGING_LEVEL')) {
+        const level = env.NEO4J_LOGGING_LEVEL as string;
+
+        if (LOG_LEVELS.includes(level)) {
+            config.logging = neo4j.logging.console(
+                level as 'error' | 'warn' | 'info' | 'debug'
+            );
+        } else {
+            warnIgnoring('NEO4J_LOGGING_LEVEL', `unknown level "${level}"`);
+        }
+    }
+
+    // shortcut: removed in neo4j-driver 6 — warn + ignore, upgrade if the driver reintroduces them
+    ['NEO4J_KNOWN_HOSTS', 'NEO4J_LOAD_BALANCING_STRATEGY'].forEach((setting) => {
+        if (Object.hasOwn(env, setting)) {
+            warnIgnoring(setting, 'removed in neo4j-driver 6');
+        }
+    });
+
+    return {
+        uri: env.NEO4J_URI || `${protocol}://${host}:${port}`,
+        auth:
+            env.NEO4J_USERNAME && env.NEO4J_PASSWORD
+                ? neo4j.auth.basic(env.NEO4J_USERNAME, env.NEO4J_PASSWORD)
+                : undefined,
+        config,
+        database: env.NEO4J_DATABASE || 'neo4j',
+        enterprise: env.NEO4J_ENTERPRISE === 'true',
+    };
+}
+
+export function fromEnv(): Neode {
+    // Load vars from .env — dotenv does not clobber variables that are
+    // already set in process.env
+    dotenv.config();
+
+    const { uri, auth, config, database, enterprise } = configFromEnv(process.env);
+
+    const driver = neo4j.driver(uri, auth, config);
 
     return new Neode(new Neo4jConnectionProvider(driver, database), enterprise);
 }

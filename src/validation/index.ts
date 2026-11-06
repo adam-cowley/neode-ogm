@@ -46,7 +46,7 @@ export function validate(properties: Record<string, unknown>, schema: EntitySche
             return;
         }
 
-        const result = buildPropertySchema(property).safeParse(effective);
+        const result = buildPropertySchema(property, property.getRules()).safeParse(effective);
 
         if (!result.success) {
             result.error.issues.forEach(issue => {

@@ -1,14 +1,21 @@
 import { Newable } from "../meta/newable";
 import { Direction } from "../query";
-import PropertySchema, { PropertyType } from "./property-schema";
+import PropertySchema, { DefaultValue, PropertyType } from "./property-schema";
 
 import RelationshipPropertySchema from "./relationship-property-schema";
 
 import EntitySchema, { EntityType } from "./entity/entity-schema";
 import PropertyConfig from "../decorators/property-config.interface";
+import { PropertyDefinition } from "./schema-definition.interface";
 import Repository from "../repository/index";
 
 const models: Map<Newable, EntitySchema> = new Map()
+
+/** Config keys consumed by the metamodel; anything else is a validation rule */
+const METAMODEL_KEYS = new Set([
+    'type', 'primary', 'unique', 'array', 'default', 'onCreateSet', 'onMatchSet',
+    'alwaysSet', 'required', 'hidden', 'protected', 'readonly', 'index', 'exists',
+])
 
 export function getModels() {
     return models
@@ -39,7 +46,9 @@ export function mergeRelationshipModel(constructor: any): EntitySchema {
     return model
 }
 
-export function mergeProperty(constructor: any, key: string, type: PropertyType, config: PropertyConfig = {}): PropertySchema {
+// PropertyConfig | PropertyDefinition: decorator configs vs the map adapter's
+// (structurally compatible; PropertyDefinition just lacks the rule index signature)
+export function mergeProperty(constructor: any, key: string, type: PropertyType, config: PropertyConfig | PropertyDefinition = {}): PropertySchema {
     const model = mergeModel(constructor)
 
     if ( !model.hasProperty(key) ) {
@@ -91,20 +100,27 @@ export function mergeProperty(constructor: any, key: string, type: PropertyType,
     }
 
     if ( Object.hasOwn(config, 'default') ) {
-        property.setDefaultValue(config.default!)
+        property.setDefaultValue(config.default as DefaultValue)
     }
 
     if ( Object.hasOwn(config, 'onCreateSet') ) {
-        property.setOnCreateSet(config.onCreateSet!)
+        property.setOnCreateSet(config.onCreateSet as boolean)
     }
 
     if ( Object.hasOwn(config, 'onMatchSet') ) {
-        property.setOnMatchSet(config.onMatchSet!)
+        property.setOnMatchSet(config.onMatchSet as boolean)
     }
 
     if ( Object.hasOwn(config, 'alwaysSet') ) {
-        property.setAlwaysSet(config.alwaysSet!)
+        property.setAlwaysSet(config.alwaysSet as boolean)
     }
+
+    // Persist every config key the metamodel has no flag for as a validation rule
+    property.setRules(
+        Object.fromEntries(
+            Object.entries(config).filter(([ key ]) => !METAMODEL_KEYS.has(key))
+        )
+    )
 
     return property
 }

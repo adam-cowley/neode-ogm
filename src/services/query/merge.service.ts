@@ -6,6 +6,8 @@ import EntitySchema, { EntityType } from '../../meta/entity/entity-schema';
 import PropertySchema, { PropertyType } from '../../meta/property-schema';
 import RelationshipPropertySchema from '../../meta/relationship-property-schema';
 import { getValueOrDefault, getValuesAsRecord, setPropertyInBuilder } from '../../utils';
+import { modelPropertyValues } from '../write-utils';
+import { validate } from '../../validation';
 import QueryService from './query.service';
 
 /**
@@ -33,6 +35,22 @@ export default class MergeService extends QueryService {
         if (Object.keys(matchRecord).length === 0) {
             throw new Error('mergeOn requires at least one match property');
         }
+
+        // Validate the combined match + set values before writing (neode
+        // validates both), with the same defaults the set clause applies
+        const written: Record<string, unknown> = { ...matchRecord };
+
+        schema.getProperties().forEach((property) => {
+            if (Object.hasOwn(matchRecord, property.getKey())) return;
+
+            const value = getValueOrDefault(set, property, schema);
+
+            if (value !== undefined) {
+                written[ property.getKey() ] = value;
+            }
+        });
+
+        validate(written, schema);
 
         const builder = new Builder();
 
@@ -74,6 +92,9 @@ export default class MergeService extends QueryService {
     }
 
     async save(model: object, schema: EntitySchema): Promise<{ elementId: string }> {
+        // Validate the model's own values (defaults resolved) before any write
+        validate(modelPropertyValues(model, schema), schema);
+
         const builder = new Builder();
 
         let mergeOn: Record<string, unknown>;

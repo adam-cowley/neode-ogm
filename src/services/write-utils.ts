@@ -36,6 +36,25 @@ export async function createNodeAndRelationships(
 }
 
 /**
+ * The model's schema-known property values as the write paths apply them:
+ * own values with schema defaults resolved (neode validates after
+ * GenerateDefaultValues)
+ */
+export function modelPropertyValues(model: object, schema: EntitySchema): Record<string, unknown> {
+    const values: Record<string, unknown> = {};
+
+    schema.getProperties().forEach((property) => {
+        const value = getValueOrDefault(model, property, schema);
+
+        if (value !== undefined) {
+            values[ property.getKey() ] = value;
+        }
+    });
+
+    return values;
+}
+
+/**
  * CREATE (this:Label { ... }) RETURN elementId(this) AS __id
  *
  * neode parity (WriteUtils.splitProperties in create mode): every property

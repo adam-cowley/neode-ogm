@@ -75,6 +75,9 @@ export default class PropertySchema {
 
     private entity: Newable;
 
+    /** neode validation rules (min, max, email, regex, …) beyond the metamodel flags */
+    private rules: Record<string, unknown> = {};
+
     constructor(private readonly key: string) {}
 
     getKey(): string {
@@ -200,5 +203,14 @@ export default class PropertySchema {
 
     getEntity() {
         return this.entity
+    }
+
+    /** Merge the given rules over any previously stored ones */
+    setRules(rules: Record<string, unknown>) {
+        this.rules = { ...this.rules, ...rules }
+    }
+
+    getRules() {
+        return this.rules
     }
 }

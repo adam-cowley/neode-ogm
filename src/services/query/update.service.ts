@@ -3,6 +3,7 @@ import { INTERNAL_ID, THIS_NODE } from '../../constants';
 import { GraphNode, QueryOutput } from '../../driver/types';
 import { PropertyType } from '../../meta/property-schema';
 import EntitySchema from '../../meta/entity/entity-schema';
+import { validate } from '../../validation';
 import QueryService from './query.service';
 
 /** Property types that reference entities or internals — never plain values */
@@ -97,6 +98,9 @@ export default class UpdateService extends QueryService {
         if (Object.keys(set).length === 0) {
             return { records: [] };
         }
+
+        // Validate the values about to be written (post-refill)
+        validate(set, schema);
 
         const builder = new Builder();
 

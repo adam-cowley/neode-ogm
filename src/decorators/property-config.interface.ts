@@ -16,4 +16,7 @@ export default interface PropertyConfig {
     readonly?: boolean;
     index?: boolean;
     exists?: boolean;
+
+    /** neode validation rules (min, max, email, regex, …) — persisted as-is */
+    [ rule: string ]: unknown;
 }

@@ -4,6 +4,7 @@ import { readdirSync } from 'fs';
 import { basename, extname, resolve } from 'path';
 import {
     ConnectionProvider,
+    GraphRelationship,
     QueryOutput,
     QueryParams,
     Runner,
@@ -14,6 +15,8 @@ import { RelateConnectionProvider } from './driver/relate';
 import { getModel, getModels } from './meta';
 import { Newable } from './meta/newable';
 import EntitySchema from './meta/entity/entity-schema';
+import { PropertyType } from './meta/property-schema';
+import RelationshipPropertySchema from './meta/relationship-property-schema';
 import {
     defineModel,
     extendModel,
@@ -25,9 +28,13 @@ import { EventType } from './common/events';
 import FindService from './services/query/find.service';
 import MergeService from './services/query/merge.service';
 import CreateService from './services/query/create.service';
-import DeleteService from './services/query/delete.service';
+import DeleteService, { DeleteOptions } from './services/query/delete.service';
+import DetachService, { DetachResult } from './services/query/detach.service';
 import INeode from './neode.interface';
-import GetService from './services/query/get.service';
+import GetService, { OrderSpec } from './services/query/get.service';
+import RelateService from './services/query/relate.service';
+import UpdateService from './services/query/update.service';
+import WithinDistanceService from './services/query/within-distance.service';
 import SchemaService, { SchemaResult } from './services/schema/schema.service';
 import { Repository } from '.';
 import TransactionalService from './transaction/transactional.service';
@@ -96,6 +103,20 @@ export default class Neode implements INeode {
     }
 
     /**
+     * The relationship declared on the schema under the given key
+     * (neode's relateTo resolves the relationship by definition key)
+     */
+    private requireRelationship(schema: EntitySchema, key: string): RelationshipPropertySchema {
+        if (!schema.hasRelationship(key)) {
+            throw new Error(
+                `Unknown relationship "${key}" on ${schema.getLabels().join(':') || 'entity'}`
+            );
+        }
+
+        return schema.getRelationship(key);
+    }
+
+    /**
      * Run a single statement in an implicit transaction
      */
     readCypher(query: string, params: QueryParams = {}, _database?: string): Promise<QueryOutput> {
@@ -149,7 +170,12 @@ export default class Neode implements INeode {
     ): Promise<T> {
         const tx = await this.openReadTransaction(database);
 
-        return work(tx);
+        try {
+            return await work(tx);
+        } catch (e) {
+            await tx.rollback().catch(() => {});
+            throw e;
+        }
     }
 
     /**
@@ -161,7 +187,12 @@ export default class Neode implements INeode {
     ): Promise<T> {
         const tx = await this.openWriteTransaction(database);
 
-        return work(tx);
+        try {
+            return await work(tx);
+        } catch (e) {
+            await tx.rollback().catch(() => {});
+            throw e;
+        }
     }
 
     /**
@@ -362,6 +393,194 @@ export default class Neode implements INeode {
     }
 
     /**
+     * UPDATE the given properties on a node (`+=` semantics: provided keys
+     * only, matched by the entity's primary key), then re-hydrate it
+     */
+    async update<T>(
+        entity: T,
+        properties: Record<string, unknown> = {},
+        database?: string
+    ): Promise<T | undefined> {
+        const entityRecord = entity as unknown as Record<string, unknown>;
+        const schema = this.getSchema(entityRecord.constructor);
+
+        const tx = await this.writeTransaction(database);
+
+        try {
+            await new UpdateService(tx).update(schema, entity as object, properties);
+
+            const idKey = schema
+                .getProperties()
+                .find((property) => property.getType() === PropertyType.INTERNAL_ID)
+                ?.getKey();
+            const elementId = idKey ? entityRecord[idKey] : undefined;
+
+            const hydrated = elementId
+                ? await new FindByIdService(tx).find(
+                      entityRecord.constructor as new (...args: never[]) => T,
+                      schema,
+                      elementId as string
+                  )
+                : undefined;
+
+            await tx.commit();
+
+            return hydrated as T | undefined;
+        } catch (error) {
+            await tx.rollback();
+
+            throw error;
+        }
+    }
+
+    /**
+     * Relate two saved nodes, resolving the relationship by its KEY on the
+     * from-entity's schema (neode's node.relateTo(node, relationshipName)):
+     * MERGE the relationship, or CREATE with `forceCreate`
+     */
+    async relate<From extends object, To extends object>(
+        constructor: new (...args: never[]) => From,
+        from: From,
+        to: To,
+        relationshipKey: string,
+        properties: Record<string, unknown> = {},
+        forceCreate = false,
+        database?: string
+    ): Promise<GraphRelationship | undefined> {
+        const schema = this.getSchema(constructor);
+        const rel = this.requireRelationship(schema, relationshipKey);
+
+        const tx = await this.writeTransaction(database);
+
+        try {
+            const result = await new RelateService(tx).relate(
+                schema,
+                from,
+                to,
+                rel,
+                properties,
+                forceCreate
+            );
+
+            await tx.commit();
+
+            return result;
+        } catch (error) {
+            await tx.rollback();
+
+            throw error;
+        }
+    }
+
+    /**
+     * Remove the relationship of the given key between two nodes and return
+     * both re-hydrated
+     */
+    async detach<From extends object, To extends object>(
+        constructor: new (...args: never[]) => From,
+        from: From,
+        to: To,
+        relationshipKey: string,
+        database?: string
+    ): Promise<DetachResult<From, To>> {
+        const schema = this.getSchema(constructor);
+        const rel = this.requireRelationship(schema, relationshipKey);
+
+        const tx = await this.writeTransaction(database);
+
+        try {
+            const result = await new DetachService(tx).detach(schema, from, to, rel);
+
+            await tx.commit();
+
+            return result;
+        } catch (error) {
+            await tx.rollback();
+
+            throw error;
+        }
+    }
+
+    /**
+     * ALL nodes of the given constructor, optionally filtered by properties,
+     * ordered, limited and skipped (neode's all())
+     */
+    async all<T>(
+        constructor: new (...args: never[]) => T,
+        params: Record<string, unknown> = {},
+        order?: OrderSpec,
+        limit?: number,
+        skip?: number,
+        database?: string
+    ): Promise<T[]> {
+        const schema = this.getSchema(constructor);
+
+        const tx = await this.readTransaction(database);
+
+        try {
+            const results = await new GetService(tx).get<T>(
+                constructor,
+                schema,
+                params,
+                limit,
+                skip,
+                order
+            );
+
+            await tx.commit();
+
+            return results;
+        } catch (error) {
+            await tx.rollback();
+
+            throw error;
+        }
+    }
+
+    /**
+     * Nodes of the given constructor within `distance` of the given point,
+     * ordered by distance when `order` is 'distance'
+     * (neode's FindWithinDistance)
+     */
+    async withinDistance<T>(
+        constructor: new (...args: never[]) => T,
+        locationProperty: string,
+        point: unknown,
+        distance: number,
+        params: Record<string, unknown> = {},
+        order?: OrderSpec,
+        limit?: number,
+        skip?: number,
+        database?: string
+    ): Promise<T[]> {
+        const schema = this.getSchema(constructor);
+
+        const tx = await this.readTransaction(database);
+
+        try {
+            const results = await new WithinDistanceService(tx).withinDistance<T>(
+                constructor,
+                schema,
+                locationProperty,
+                point,
+                distance,
+                params,
+                order,
+                limit,
+                skip
+            );
+
+            await tx.commit();
+
+            return results;
+        } catch (error) {
+            await tx.rollback();
+
+            throw error;
+        }
+    }
+
+    /**
      * Define a model from a map-based schema definition (neode parity), or,
      * when no schema is given, look up a previously defined model by name.
      */
@@ -417,14 +636,23 @@ export default class Neode implements INeode {
         return extendModel(name, as, schema);
     }
 
-    async delete<T>(entity: T, database?: string): Promise<void> {
+    /**
+     * Delete a node. `options` threads the cascade modes through to the
+     * delete service; the legacy form `delete(entity, database)` — a string
+     * second argument, as accepted by INeode — is kept working.
+     */
+    async delete<T>(entity: T, options?: DeleteOptions | string, database?: string): Promise<void> {
         const schema = this.getSchema((entity as unknown as Record<string, unknown>).constructor);
 
-        const tx = await this.writeTransaction(database);
+        const tx = await this.writeTransaction(typeof options === 'string' ? options : database);
 
         const service = new DeleteService(tx);
 
-        await service.delete(schema, entity as object);
+        await service.delete(
+            schema,
+            entity as object,
+            typeof options === 'string' ? undefined : options
+        );
 
         await tx.commit();
 
