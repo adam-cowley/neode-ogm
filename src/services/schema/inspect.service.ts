@@ -1,27 +1,35 @@
-import { ConnectionProvider } from '../../driver/types'
-import { getModels } from '../../meta'
+import type { ConnectionProvider } from '../../driver/types.js'
+import { getModels } from '../../meta/index.js'
 import {
   ConstraintType,
   compositeSchemaObjectName,
   cypherPropertyType,
   schemaObjectName,
-} from './schema.service'
-import { FulltextIndexDefinition, fulltextIndexName } from './fulltext.service'
-import { VectorIndexDefinition, vectorIndexName } from './vector.service'
+} from './schema.service.js'
+import { type FulltextIndexDefinition, fulltextIndexName } from './fulltext.service.js'
+import { type VectorIndexDefinition, vectorIndexName } from './vector.service.js'
 
-/** Push a schema object into the declared list unless its name is already declared */
+/**
+Push a schema object into the declared list unless its name is already declared
+*/
 function declared(list: SchemaObject[], object: SchemaObject): void {
-  if (!list.some((existing) => existing.name === object.name)) {
+  if (list.every((existing) => existing.name !== object.name)) {
     list.push(object)
   }
 }
 
 export interface InspectOptions {
-  /** Full-text index definitions to include in the declared set */
+  /**
+  Full-text index definitions to include in the declared set
+  */
   fulltext?: FulltextIndexDefinition[]
-  /** Vector index definitions to include in the declared set */
+  /**
+  Vector index definitions to include in the declared set
+  */
   vector?: VectorIndexDefinition[]
-  /** Existence constraints are Enterprise-only: include them in the declared set */
+  /**
+  Existence constraints are Enterprise-only: include them in the declared set
+  */
   enterprise?: boolean
 }
 
@@ -33,13 +41,21 @@ export interface SchemaObject {
 }
 
 export interface SchemaDiff {
-  /** Objects found on the database */
+  /**
+  Objects found on the database
+  */
   installed: SchemaObject[]
-  /** Objects the registered schemas would install */
+  /**
+  Objects the registered schemas would install
+  */
   declared: SchemaObject[]
-  /** Declared but not installed */
+  /**
+  Declared but not installed
+  */
   missing: string[]
-  /** Installed but not declared */
+  /**
+  Installed but not declared
+  */
   extra: string[]
 }
 
@@ -48,7 +64,9 @@ export interface SchemaInspection {
   indexes: SchemaDiff
 }
 
-/** The schema objects the registered models (plus the given definitions) would install */
+/**
+The schema objects the registered models (plus the given definitions) would install
+*/
 export function declaredSchemaObjects(options: InspectOptions = {}): {
   constraints: SchemaObject[]
   indexes: SchemaObject[]
@@ -147,7 +165,9 @@ export function declaredSchemaObjects(options: InspectOptions = {}): {
   return { constraints, indexes }
 }
 
-/** Read the installed schema (SHOW CONSTRAINTS / SHOW INDEXES) and diff it against the declared schema */
+/**
+Read the installed schema (SHOW CONSTRAINTS / SHOW INDEXES) and diff it against the declared schema
+*/
 export async function inspectSchema(
   connection: ConnectionProvider,
   options: InspectOptions = {},
@@ -176,14 +196,8 @@ export async function inspectSchema(
   }): SchemaObject | null => {
     const object = rowToObject(row)
 
-    if (
-      object.type === 'LOOKUP' ||
-      (row.has('owningConstraint') && row.get('owningConstraint') != null)
-    ) {
-      return null
-    }
-
-    return object
+    return object.type === 'LOOKUP' ||
+      (row.has('owningConstraint') && row.get('owningConstraint') != null) ? null : object;
   }
 
   const installedConstraints = constraintRows.records.map(rowToObject)

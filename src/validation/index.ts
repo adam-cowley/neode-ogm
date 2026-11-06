@@ -1,10 +1,12 @@
-import EntitySchema from '../meta/entity/entity-schema'
-import { PropertyType } from '../meta/property-schema'
-import { buildPropertySchema } from './rule-table'
-import ValidationError, { ValidationDetail } from './validation-error'
+import type EntitySchema from '../meta/entity/entity-schema.js'
+import { PropertyType } from '../meta/property-schema.js'
+import { buildPropertySchema } from './rule-table.js'
+import ValidationError, { type ValidationDetail } from './validation-error.js'
 
-/** Property types that reference entities or internals — never validated as values */
-const SKIPPED_TYPES = new Set([
+/**
+Property types that reference entities or internals — never validated as values
+*/
+const SKIPPED_TYPES = new Set<PropertyType>([
   PropertyType.INTERNAL_ID,
   PropertyType.ONE_TO_ONE,
   PropertyType.ONE_TO_MANY,
@@ -16,21 +18,21 @@ const SKIPPED_TYPES = new Set([
 ])
 
 /**
- * Validate an object against an entity schema. Runs the Zod schema for every
- * registered property (type base + rules), collecting all issues — like
- * Joi's abortEarly: false — and throwing a ValidationError when anything
- * fails.
- *
- * Unknown keys are always allowed (allowUnknown): only registered properties
- * are validated. undefined is skipped unless the property is required; null
- * behaves the same (a required property fails with `"<key>" is required`,
- * an optional property passes).
- */
+Validate an object against an entity schema. Runs the Zod schema for every
+registered property (type base + rules), collecting all issues — like
+Joi's abortEarly: false — and throwing a ValidationError when anything
+fails.
+
+Unknown keys are always allowed (allowUnknown): only registered properties
+are validated. undefined is skipped unless the property is required; null
+behaves the same (a required property fails with `"<key>" is required`,
+an optional property passes).
+*/
 export function validate(properties: Record<string, unknown>, schema: EntitySchema): void {
   const details: ValidationDetail[] = []
 
-  schema.getProperties().forEach((property) => {
-    if (SKIPPED_TYPES.has(property.getType())) return
+  for (const property of schema.getProperties()) {
+    if (SKIPPED_TYPES.has(property.getType())) {continue}
 
     const key = property.getKey()
     const value = Object.hasOwn(properties, key) ? properties[key] : undefined
@@ -43,26 +45,28 @@ export function validate(properties: Record<string, unknown>, schema: EntitySche
         details.push({ message: `"${key}" is required`, path: [key], type: 'any.required' })
       }
 
-      return
+      continue
     }
 
     const result = buildPropertySchema(property, property.getRules()).safeParse(effective)
 
     if (!result.success) {
-      result.error.issues.forEach((issue) => {
+      for (const issue of result.error.issues) {
         details.push({
           message: issue.message,
           path: [key, ...issue.path.map(String)],
           type: issue.code,
         })
-      })
+      }
     }
-  })
+  }
 
-  if (details.length) {
+  if (details.length > 0) {
     throw new ValidationError(details, properties)
   }
 }
 
-export { buildPropertySchema }
-export { default as ValidationError, ERROR_VALIDATION } from './validation-error'
+
+export { default as ValidationError, ERROR_VALIDATION } from './validation-error.js'
+
+export {buildPropertySchema} from './rule-table.js'

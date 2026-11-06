@@ -1,14 +1,16 @@
-import Builder, { EntityMatchCriteria } from '../../query'
-import { INTERNAL_ID, THIS_NODE } from '../../constants'
-import { matchCriteriaForEntity } from '../../utils'
-import { GraphNode, QueryOutput } from '../../driver/types'
-import { PropertyType, isProjectedProperty } from '../../meta/property-schema'
-import EntitySchema from '../../meta/entity/entity-schema'
-import { validate } from '../../validation'
-import QueryService from './query.service'
+import Builder, { type EntityMatchCriteria } from '../../query/index.js'
+import { INTERNAL_ID, THIS_NODE } from '../../constants.js'
+import { matchCriteriaForEntity } from '../../utils.js'
+import type { GraphNode, QueryOutput } from '../../driver/types.js'
+import { PropertyType, isProjectedProperty } from '../../meta/property-schema.js'
+import type EntitySchema from '../../meta/entity/entity-schema.js'
+import { validate } from '../../validation/index.js'
+import QueryService from './query.service.js'
 
-/** Property types that reference entities or internals — never plain values */
-const NON_VALUE_TYPES = new Set([
+/**
+Property types that reference entities or internals — never plain values
+*/
+const NON_VALUE_TYPES = new Set<PropertyType>([
   PropertyType.INTERNAL_ID,
   PropertyType.ALL_PROPERTIES,
   PropertyType.ONE_TO_ONE,
@@ -22,14 +24,14 @@ const NON_VALUE_TYPES = new Set([
 
 export default class UpdateService extends QueryService {
   /**
-   * Update a node's properties, matched by the entity's primary key value.
-   *
-   * `+=` semantics: only the provided keys are written. Primary key,
-   * protected, readonly and hidden properties are never overwritten, and
-   * neither are relationship / node / internal-id properties. Required
-   * properties that would end up unset keep their current stored value
-   * (matching neode's Node#update, which re-reads required properties).
-   */
+  Update a node's properties, matched by the entity's primary key value.
+  
+  `+=` semantics: only the provided keys are written. Primary key,
+  protected, readonly and hidden properties are never overwritten, and
+  neither are relationship / node / internal-id properties. Required
+  properties that would end up unset keep their current stored value
+  (matching neode's Node#update, which re-reads required properties).
+  */
   async update<T extends object>(
     schema: EntitySchema,
     entity: T,
@@ -53,37 +55,37 @@ export default class UpdateService extends QueryService {
         .map((property) => property.getKey()),
     )
 
-    schema.getRelationships().forEach((rel) => guarded.add(rel.getKey()))
+    for (const rel of schema.getRelationships()) {guarded.add(rel.getKey())}
 
     // Provided keys only (`+=`); undefined means "not provided", null unsets
     const set: Record<string, unknown> = {}
 
-    Object.entries(properties).forEach(([key, value]) => {
-      if (value === undefined || guarded.has(key)) return
+    for (const [key, value] of Object.entries(properties)) {
+      if (value === undefined || guarded.has(key)) {continue}
 
       set[key] = value
-    })
+    }
 
     // Required refill: a required property that would end up unset keeps
     // its current stored value
     const refill = schema.getProperties().filter((property) => {
-      if (!property.isRequired()) return false
+      if (!property.isRequired()) {return false}
 
       const value = set[property.getKey()]
 
       return value === undefined || value === null
     })
 
-    if (refill.length) {
+    if (refill.length > 0) {
       const node = await this.readNode(schema, identityCriteria)
 
-      refill.forEach((property) => {
+      for (const property of refill) {
         const stored = node?.properties[property.getKey()]
 
         if (stored !== undefined && stored !== null) {
           set[property.getKey()] = stored
         }
-      })
+      }
     }
 
     // Nothing left to write
@@ -106,7 +108,9 @@ export default class UpdateService extends QueryService {
     return this.runner.run(query, params)
   }
 
-  /** Read the node's current properties (required-property refill source) */
+  /**
+  Read the node's current properties (required-property refill source)
+  */
   private async readNode(
     schema: EntitySchema,
     criteria: EntityMatchCriteria,

@@ -1,26 +1,25 @@
-import Neode from './neode.service'
-export default Neode
+;
 
-export { EventType } from './common/events'
-export { fromEnv } from './utils'
+export { EventType } from './common/events.js'
+export { fromEnv } from './utils.js'
 export {
   NeodeError,
   ConstraintViolationError,
   TransientError,
   classifyError,
   isTransientError,
-} from './errors'
-export { default as Repository } from './repository'
-export { default as TransactionalService } from './transaction/transactional.service'
-export { registerRepository, getRepository, resolveRepository } from './meta'
-export { mergeRelationshipProperty } from './meta'
-export type { RepositoryConstructor } from './meta'
-export { default as Collection } from './collection'
-export { toJson, valueToJson } from './serialise'
+} from './errors/index.js'
+export { default as Repository } from './repository/index.js'
+export { default as TransactionalService } from './transaction/transactional.service.js'
+export { registerRepository, getRepository, resolveRepository } from './meta/index.js'
+export { mergeRelationshipProperty } from './meta/index.js'
+export type { RepositoryConstructor } from './meta/index.js'
+export { default as Collection } from './collection.js'
+export { toJson, valueToJson } from './serialise.js'
 
 // Active-record instance methods on hydrated entities (P7.2)
-export { applyEntityMethods, setDefaultNeode } from './entity-methods'
-export type { EntityMethods, WithMethods } from './entity-methods'
+export { applyEntityMethods, setDefaultNeode } from './entity-methods.js'
+export type { EntityMethods, WithMethods } from './entity-methods.js'
 
 // Map-based schema definitions
 export {
@@ -28,23 +27,23 @@ export {
   extendModel,
   getModelByName,
   getModelsByName,
-} from './meta/map-schema'
+} from './meta/map-schema.js'
 export type {
   PropertyTypeName,
   PropertyDefinition,
   RelationshipDefinition,
   SchemaDefinition,
   SchemaDefinitionEntry,
-} from './meta/schema-definition.interface'
+} from './meta/schema-definition.interface.js'
 
 // Query builder
-export { Builder, Direction, toDirection } from './query'
+export { Builder, Direction, toDirection } from './query/index.js'
 
 // Hydration of raw query results (P4.11 parity)
-export { hydrate, hydrateFirst, toCollection } from './hydrate'
+export { hydrate, hydrateFirst, toCollection } from './hydrate.js'
 
 // Database drivers
-export {
+export type {
   ConnectionProvider,
   TransactionHandle,
   Runner,
@@ -57,14 +56,14 @@ export {
   GraphNode,
   GraphRelationship,
   AccessMode,
-} from './driver/types'
-export { Neo4jConnectionProvider } from './driver/neo4j'
-export { RelateConnectionProvider } from './driver/relate'
+} from './driver/types.js'
+export { Neo4jConnectionProvider } from './driver/neo4j.js'
+export { RelateConnectionProvider } from './driver/relate.js'
 
 // Raw-cypher helpers + instrumented provider (NTS-122/124/132/133)
-export { jsonSafe, jsonSafeRecord } from './driver/json-safe'
-export { instrumentConnectionProvider } from './driver/instrumented'
-export type { QueryExecutedEvent } from './common/events'
+export { jsonSafe, jsonSafeRecord } from './driver/json-safe.js'
+export { instrumentConnectionProvider } from './driver/instrumented.js'
+export type { QueryExecutedEvent } from './common/events.js'
 
 // Read-model projections (NTS-135/136/137/138)
 export {
@@ -72,7 +71,7 @@ export {
   projectionNode,
   hasProjectedProperties,
   hydrateProjection,
-} from './projection'
+} from './projection/index.js'
 export type {
   RelatedOneDefinition,
   RelatedManyDefinition,
@@ -81,37 +80,37 @@ export type {
   LabelPresentDefinition,
   ExpressionDefinition,
   ComputedDefinition,
-} from './meta/schema-definition.interface'
+} from './meta/schema-definition.interface.js'
 
 // Full-text + vector search (NTS-123/127)
-export { search } from './services/query/search.service'
-export type { ScoredEntity } from './services/query/search.service'
-export { knn } from './services/query/knn.service'
-export type { KnnMode } from './services/query/knn.service'
-export { toFulltextQuery } from './services/index-support/lucene'
-export { default as FulltextIndexService } from './services/schema/fulltext.service'
-export type { FulltextIndexDefinition } from './services/schema/fulltext.service'
-export { default as VectorIndexService } from './services/schema/vector.service'
-export type { VectorIndexDefinition } from './services/schema/vector.service'
-export { inspectSchema } from './services/schema/inspect.service'
+export { search } from './services/query/search.service.js'
+export type { ScoredEntity } from './services/query/search.service.js'
+export { knn } from './services/query/knn.service.js'
+export type { KnnMode } from './services/query/knn.service.js'
+export { toFulltextQuery } from './services/index-support/lucene.js'
+export { default as FulltextIndexService } from './services/schema/fulltext.service.js'
+export type { FulltextIndexDefinition } from './services/schema/fulltext.service.js'
+export { default as VectorIndexService } from './services/schema/vector.service.js'
+export type { VectorIndexDefinition } from './services/schema/vector.service.js'
+export { inspectSchema } from './services/schema/inspect.service.js'
 export type {
   SchemaInspection,
   SchemaDiff,
   SchemaObject,
   InspectOptions,
-} from './services/schema/inspect.service'
+} from './services/schema/inspect.service.js'
 
 // Bulk writes + pagination (NTS-125/126)
-export { default as BulkService } from './services/query/bulk.service'
-export type { BulkChunk, BulkOptions } from './services/query/bulk.service'
-export { default as PaginateService } from './services/query/paginate.service'
+export { default as BulkService } from './services/query/bulk.service.js'
+export type { BulkChunk, BulkOptions } from './services/query/bulk.service.js'
+export { default as PaginateService } from './services/query/paginate.service.js'
 export type {
   Page,
   CursorPage,
   PaginateOptions,
   OffsetPaginateOptions,
   CursorPaginateOptions,
-} from './services/query/paginate.service'
+} from './services/query/paginate.service.js'
 
 // Ops helpers + consumer test utilities (NTS-130/134/146)
 export {
@@ -120,16 +119,18 @@ export {
   ConnectivityTimeoutError,
   splitCypherStatements,
   runCypherScript,
-} from './ops'
+} from './ops/index.js'
 export type {
   ConnectivityConfig,
   WaitUntilReachableOptions,
   RunCypherScriptOptions,
-} from './ops'
-export { wipe, testId } from './testing'
-export type { WipeTarget } from './testing'
+} from './ops/index.js'
+export { wipe, testId } from './testing/index.js'
+export type { WipeTarget } from './testing/index.js'
 
 // Query builder additions (NTS-143/144/128)
-export { WhereNull, LabelPredicate } from './query'
+export { WhereNull, LabelPredicate } from './query/index.js'
 
-export * from './decorators'
+export * from './decorators/index.js'
+
+export {default} from './neode.service.js'

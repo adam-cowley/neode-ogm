@@ -1,7 +1,10 @@
 export default class WhereNull {
   private negative = false
+  private readonly property: string
 
-  constructor(private readonly property: string) {}
+  constructor(property: string) {
+    this.property = property
+  }
 
   setNegative(): void {
     this.negative = true

@@ -1,18 +1,22 @@
-import { Newable } from '../meta/newable'
-import { Direction } from '../query'
-import INeode from '../neode.interface'
-import PropertySchema, { DefaultValue, PropertyType } from './property-schema'
+import type { Newable } from '../meta/newable.js'
+import type { Direction } from '../query/index.js'
+import type INeode from '../neode.interface.js'
+export type { DefaultValue } from './property-schema.js';
+import type PropertySchema from './property-schema.js';
+import { PropertyType } from './property-schema.js'
 
-import RelationshipPropertySchema from './relationship-property-schema'
+import type RelationshipPropertySchema from './relationship-property-schema.js'
 
-import EntitySchema, { EntityType } from './entity/entity-schema'
-import PropertyConfig from '../decorators/property-config.interface'
-import { PropertyDefinition } from './schema-definition.interface'
-import Repository from '../repository/index'
+import EntitySchema, { EntityType } from './entity/entity-schema.js'
+import type PropertyConfig from '../decorators/property-config.interface.js'
+import type { PropertyDefinition } from './schema-definition.interface.js'
+import Repository from '../repository/index.js'
 
-const models: Map<Newable, EntitySchema> = new Map()
+const models = new Map<Newable, EntitySchema>()
 
-/** Config keys consumed by the metamodel; anything else is a validation rule */
+/**
+Config keys consumed by the metamodel; anything else is a validation rule
+*/
 const METAMODEL_KEYS = new Set([
   'type',
   'primary',
@@ -82,7 +86,7 @@ export function mergeProperty(
     model.addProperty(key)
   }
 
-  const property = model.getProperty(key) as PropertySchema
+  const property = model.getProperty(key)
 
   // If specificially set, then overwrite the type
   if (type !== PropertyType.ANY) {
@@ -139,55 +143,55 @@ export function mergeProperty(
   }
 
   if (Object.hasOwn(config, 'default')) {
-    property.setDefaultValue(config.default as DefaultValue)
+    property.setDefaultValue(config.default!)
   }
 
   if (Object.hasOwn(config, 'onCreateSet')) {
-    property.setOnCreateSet(config.onCreateSet as boolean)
+    property.setOnCreateSet(config.onCreateSet)
   }
 
   if (Object.hasOwn(config, 'onMatchSet')) {
-    property.setOnMatchSet(config.onMatchSet as boolean)
+    property.setOnMatchSet(config.onMatchSet)
   }
 
   if (Object.hasOwn(config, 'alwaysSet')) {
-    property.setAlwaysSet(config.alwaysSet as boolean)
+    property.setAlwaysSet(config.alwaysSet)
   }
 
   // Read-model projection config (NTS-135/136/137/138)
   const projection = config as Record<string, unknown>
 
-  if (Array.isArray(projection.fields)) {
-    property.setFields(projection.fields as string[])
+  if (Array.isArray(projection['fields'])) {
+    property.setFields(projection['fields'] as string[])
   }
 
-  if (typeof projection.where === 'string') {
-    property.setWhere(projection.where)
+  if (typeof projection['where'] === 'string') {
+    property.setWhere(projection['where'])
   }
 
-  if (typeof projection.minHops === 'number') {
-    property.setMinHops(projection.minHops)
+  if (typeof projection['minHops'] === 'number') {
+    property.setMinHops(projection['minHops'])
   }
 
-  if (typeof projection.maxHops === 'number') {
-    property.setMaxHops(projection.maxHops)
+  if (typeof projection['maxHops'] === 'number') {
+    property.setMaxHops(projection['maxHops'])
   }
 
-  if (typeof projection.label === 'string') {
-    property.setLabel(projection.label)
+  if (typeof projection['label'] === 'string') {
+    property.setLabel(projection['label'])
   }
 
-  if (typeof projection.expression === 'string') {
-    property.setExpression(projection.expression)
+  if (typeof projection['expression'] === 'string') {
+    property.setExpression(projection['expression'])
   }
 
-  if (typeof projection.compute === 'function') {
-    property.setCompute(projection.compute as (entity: any) => unknown)
+  if (typeof projection['compute'] === 'function') {
+    property.setCompute(projection['compute'] as (entity: any) => unknown)
   }
 
   // Hydration defaults (NTS-139): literal or sibling-property coalesce
-  if (typeof projection.coalesce === 'string' || Array.isArray(projection.coalesce)) {
-    property.setCoalesce(projection.coalesce as string | string[])
+  if (typeof projection['coalesce'] === 'string' || Array.isArray(projection['coalesce'])) {
+    property.setCoalesce(projection['coalesce'] as string | string[])
   }
 
   // Persist every config key the metamodel has no flag for as a validation rule
@@ -225,16 +229,16 @@ export function mergeRelationshipProperty(
 }
 
 /**
- * A (custom) repository class, registered per entity. Instances are created
- * with (neode, entity, database?) at resolution time — never stored.
- */
+A (custom) repository class, registered per entity. Instances are created
+with (neode, entity, database?) at resolution time — never stored.
+*/
 export type RepositoryConstructor = new (
   neode: INeode,
   entity: any,
   database?: string,
 ) => Repository<any>
 
-const repositories: Map<Newable, RepositoryConstructor> = new Map()
+const repositories = new Map<Newable, RepositoryConstructor>()
 
 export function registerRepository(
   entity: Newable,
@@ -254,13 +258,13 @@ export function getRepository(entity: Newable): RepositoryConstructor | undefine
 }
 
 /**
- * Resolution point for repositories: the custom repository registered for
- * the entity (constructed with the given neode and entity), or the default
- * Repository
- */
+Resolution point for repositories: the custom repository registered for
+the entity (constructed with the given neode and entity), or the default
+Repository
+*/
 export function resolveRepository<Entity>(
   neode: INeode,
-  entity: new (...args: never[]) => Entity,
+  entity: new (...arguments_: never[]) => Entity,
   database?: string,
 ): Repository<Entity> {
   const Custom = repositories.get(entity)

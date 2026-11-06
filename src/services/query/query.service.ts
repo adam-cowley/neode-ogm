@@ -1,14 +1,17 @@
-import { Newable } from '../../meta/newable'
-import Builder from '../../query'
-import { Runner } from '../../driver/types'
-import { GraphNode } from '../../driver/types'
-import { hydrateNode } from '../../utils'
-import { THIS_NODE } from '../../constants'
-import { eagerNode } from '../../query/eager-utils'
-import EntitySchema from '../../meta/entity/entity-schema'
+import type { Newable } from '../../meta/newable.js'
+import type Builder from '../../query/index.js'
+import type { Runner, GraphNode } from '../../driver/types.js'
+import { hydrateNode } from '../../utils.js'
+import { THIS_NODE } from '../../constants.js'
+import { eagerNode } from '../../query/eager-utils.js'
+import type EntitySchema from '../../meta/entity/entity-schema.js'
 
 export default class QueryService {
-  constructor(protected readonly runner: Runner) {}
+  protected readonly runner: Runner
+
+  constructor(runner: Runner) {
+    this.runner = runner
+  }
 
   async returnFirst<T>(
     constructor: Newable,
@@ -37,8 +40,8 @@ export default class QueryService {
     }
 
     // Skip and limit
-    if (skip) builder.skip(skip)
-    if (limit) builder.limit(limit)
+    if (skip) {builder.skip(skip)}
+    if (limit) {builder.limit(limit)}
 
     // Build Cypher
     const { query, params } = builder.build()
@@ -53,7 +56,7 @@ export default class QueryService {
     return this.getAndHydrate(res, constructor, schema)
   }
 
-  private getAndHydrate<T>(
+  private async getAndHydrate<T>(
     res: { records: { get(key: string): unknown; keys: string[] }[] },
     constructor: Newable,
     schema: EntitySchema,

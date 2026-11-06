@@ -1,35 +1,38 @@
-import Builder from '../../query'
-import { GraphRelationship } from '../../driver/types'
-import { getModel } from '../../meta'
-import EntitySchema, { EntityType } from '../../meta/entity/entity-schema'
-import { PropertyType } from '../../meta/property-schema'
-import RelationshipPropertySchema from '../../meta/relationship-property-schema'
-import { convertPropertyValue, matchCriteriaForEntity } from '../../utils'
-import QueryService from './query.service'
+import Builder from '../../query/index.js'
+import type { GraphRelationship } from '../../driver/types.js'
+import { getModel } from '../../meta/index.js'
+import type EntitySchema from '../../meta/entity/entity-schema.js';
+import { EntityType } from '../../meta/entity/entity-schema.js'
+import { PropertyType } from '../../meta/property-schema.js'
+import type RelationshipPropertySchema from '../../meta/relationship-property-schema.js'
+import { convertPropertyValue, matchCriteriaForEntity } from '../../utils.js'
+import QueryService from './query.service.js'
 
-/** Property types describing relationship internals, never set on the edge */
-const INTERNAL_PROPERTY_TYPES = [
+/**
+Property types describing relationship internals, never set on the edge
+*/
+const INTERNAL_PROPERTY_TYPES = new Set<PropertyType>([
   PropertyType.INTERNAL_ID,
   PropertyType.START_NODE,
   PropertyType.END_NODE,
   PropertyType.OTHER_NODE,
-]
+])
 
 export default class RelateService extends QueryService {
   /**
-   * Relate two saved nodes, matching both by primary key and then MERGEing
-   * the relationship (CREATE with `forceCreate`, neode RelateTo.js parity).
-   *
-   * With an INCOMING direction the relationship is stored from the target
-   * to the source node (neode's DIRECTION_IN swap).
-   *
-   * When the relationship's target is a relationship entity, the given
-   * properties are converted through the relationship entity's property
-   * schemas.
-   *
-   * @returns the created/matched relationship, or undefined when either
-   *          node could not be matched
-   */
+  Relate two saved nodes, matching both by primary key and then MERGEing
+  the relationship (CREATE with `forceCreate`, neode RelateTo.js parity).
+  
+  With an INCOMING direction the relationship is stored from the target
+  to the source node (neode's DIRECTION_IN swap).
+  
+  When the relationship's target is a relationship entity, the given
+  properties are converted through the relationship entity's property
+  schemas.
+  
+  @returns the created/matched relationship, or undefined when either
+           node could not be matched
+  */
   async relate<From extends object, To extends object>(
     schema: EntitySchema,
     fromEntity: From,
@@ -82,10 +85,10 @@ export default class RelateService extends QueryService {
   }
 
   /**
-   * Set relationship properties. When the relationship's target is a
-   * relationship entity, values are converted through that entity's
-   * property schemas and internal node/relationship references are skipped.
-   */
+  Set relationship properties. When the relationship's target is a
+  relationship entity, values are converted through that entity's
+  property schemas and internal node/relationship references are skipped.
+  */
   private setProperties(
     builder: Builder,
     rel: RelationshipPropertySchema,
@@ -94,33 +97,33 @@ export default class RelateService extends QueryService {
   ): void {
     const relTargetSchema = rel.getTarget() ? getModel(rel.getTarget()) : undefined
 
-    const relationshipEntity = relTargetSchema?.getType() === EntityType.RelationshipEntity
+    const isRelationshipEntity = relTargetSchema?.getType() === EntityType.RelationshipEntity
 
-    Object.entries(properties).forEach(([key, value]) => {
+    for (const [key, value] of Object.entries(properties)) {
       if (value === undefined) {
-        return
+        continue
       }
 
-      if (!relationshipEntity) {
+      if (!isRelationshipEntity) {
         builder.set(`${relAlias}.${key}`, value)
 
-        return
+        continue
       }
 
-      const property = relTargetSchema!
+      const property = relTargetSchema
         .getProperties()
         .find((candidate) => candidate.getKey() === key)
 
-      if (property && INTERNAL_PROPERTY_TYPES.includes(property.getType())) {
-        return
+      if (property && INTERNAL_PROPERTY_TYPES.has(property.getType())) {
+        continue
       }
 
       builder.set(`${relAlias}.${key}`, property ? convertPropertyValue(value, property) : value)
-    })
+    }
   }
 }
 
 /**
- * Primary key name and value of a saved entity. Relating matches nodes by
- * primary key, so an unsaved entity is a caller error.
- */
+Primary key name and value of a saved entity. Relating matches nodes by
+primary key, so an unsaved entity is a caller error.
+*/

@@ -1,25 +1,30 @@
-import { EAGER_ID, EAGER_LABELS, eagerPattern } from '../query/eager-utils'
-import { Direction } from '../query'
-import EntitySchema from '../meta/entity/entity-schema'
-import PropertySchema, { PropertyType, isProjectedProperty } from '../meta/property-schema'
-import RelationshipPropertySchema from '../meta/relationship-property-schema'
-import { getModel } from '../meta'
+import { EAGER_ID, EAGER_LABELS, eagerPattern } from '../query/eager-utils.js'
+import { Direction } from '../query/index.js'
+import type EntitySchema from '../meta/entity/entity-schema.js'
+import type PropertySchema from '../meta/property-schema.js';
+import { PropertyType, isProjectedProperty } from '../meta/property-schema.js'
+import RelationshipPropertySchema from '../meta/relationship-property-schema.js'
+import { getModel } from '../meta/index.js'
 
 /**
- * Read-model projection composition (NTS-135/136/137/138).
- *
- * Every projected property kind composes into the RETURN map projection of
- * the one read query — pattern comprehensions for related subsets, inline
- * `COUNT { }` / `EXISTS { }` subqueries, label predicates and raw
- * expressions — instead of chasing each relationship with its own query.
- */
+Read-model projection composition (NTS-135/136/137/138).
 
-/** Backtick-quote a Cypher identifier (label / relationship type) */
+Every projected property kind composes into the RETURN map projection of
+the one read query — pattern comprehensions for related subsets, inline
+`COUNT { }` / `EXISTS { }` subqueries, label predicates and raw
+expressions — instead of chasing each relationship with its own query.
+*/
+
+/**
+Backtick-quote a Cypher identifier (label / relationship type)
+*/
 function quote(identifier: string): string {
-  return '`' + identifier.replace(/`/g, '``') + '`'
+  return '`' + identifier.replaceAll('`', '``') + '`'
 }
 
-/** Target node labels as a Cypher label pattern (':A:B'), or '' */
+/**
+Target node labels as a Cypher label pattern (':A:B'), or ''
+*/
 function targetLabels(property: PropertySchema): string {
   const entity = property.getEntity()
 
@@ -32,7 +37,9 @@ function targetLabels(property: PropertySchema): string {
   return labels?.length ? ':' + labels.map(quote).join(':') : ''
 }
 
-/** Variable-length hop pattern ('', '*2', '*1..2', '*..3', '*1..') */
+/**
+Variable-length hop pattern ('', '*2', '*1..2', '*..3', '*1..')
+*/
 function hopPattern(property: PropertySchema): string {
   const minHops = property.getMinHops()
   const maxHops = property.getMaxHops()
@@ -57,9 +64,9 @@ function hopPattern(property: PropertySchema): string {
 }
 
 /**
- * Relationship pattern with the target node bound to `node` — the variable
- * convention for `where` fragments (and what the subqueries count / test).
- */
+Relationship pattern with the target node bound to `node` — the variable
+convention for `where` fragments (and what the subqueries count / test).
+*/
 function relationshipPattern(alias: string, property: PropertySchema): string {
   const direction = property.getDirection() ?? Direction.OUTGOING
 
@@ -77,12 +84,16 @@ function relationshipPattern(alias: string, property: PropertySchema): string {
   return `(${alias})${dirIn}-[${types}${hopPattern(property)}]-${dirOut}(node${targetLabels(property)})`
 }
 
-/** WHERE fragment inside COUNT { } / EXISTS { } subqueries */
+/**
+WHERE fragment inside COUNT { } / EXISTS { } subqueries
+*/
 function subqueryWhere(property: PropertySchema): string {
   return property.getWhere() ? ` WHERE ${property.getWhere()}` : ''
 }
 
-/** Pattern comprehension for a @RelatedOne / @RelatedMany property */
+/**
+Pattern comprehension for a @RelatedOne / @RelatedMany property
+*/
 function relatedProjection(alias: string, property: PropertySchema): string {
   const key = property.getKey()
   const fields = property.getFields()
@@ -99,7 +110,7 @@ function relatedProjection(alias: string, property: PropertySchema): string {
     return eagerPattern(1, alias, rel)
   }
 
-  const many = property.getType() === PropertyType.RELATED_MANY
+  const isMany = property.getType() === PropertyType.RELATED_MANY
 
   const pattern =
     fields.length === 1
@@ -109,44 +120,54 @@ function relatedProjection(alias: string, property: PropertySchema): string {
   const comprehension = `[ ${relationshipPattern(alias, property)} | ${pattern} ]`
 
   // First related node only for the singular form
-  return many ? `${key}: ${comprehension}` : `${key}: ${comprehension}[0]`
+  return isMany ? `${key}: ${comprehension}` : `${key}: ${comprehension}[0]`
 }
 
-/** One `key: expression` pair of the RETURN map projection */
+/**
+One `key: expression` pair of the RETURN map projection
+*/
 function projectedProperty(alias: string, property: PropertySchema): string {
   switch (property.getType()) {
     case PropertyType.RELATED_ONE:
-    case PropertyType.RELATED_MANY:
+    case PropertyType.RELATED_MANY: {
       return relatedProjection(alias, property)
+    }
 
-    case PropertyType.RELATIONSHIP_COUNT:
+    case PropertyType.RELATIONSHIP_COUNT: {
       return `${property.getKey()}: COUNT { ${relationshipPattern(alias, property)}${subqueryWhere(property)} }`
+    }
 
-    case PropertyType.RELATIONSHIP_EXISTS:
+    case PropertyType.RELATIONSHIP_EXISTS: {
       return `${property.getKey()}: EXISTS { ${relationshipPattern(alias, property)}${subqueryWhere(property)} }`
+    }
 
-    case PropertyType.LABEL_PRESENT:
+    case PropertyType.LABEL_PRESENT: {
       return `${property.getKey()}: ${alias}:${quote(property.getLabel()!)}`
+    }
 
-    case PropertyType.EXPRESSION:
+    case PropertyType.EXPRESSION: {
       return `${property.getKey()}: ${property.getExpression()}`
+    }
 
-    default:
+    default: {
       // COMPUTED runs in TypeScript after hydration
       return ''
+    }
   }
 }
 
-/** True when any property of the model projects a read-model value */
+/**
+True when any property of the model projects a read-model value
+*/
 export function hasProjectedProperties(schema: EntitySchema): boolean {
   return schema.getProperties().some(isProjectedProperty)
 }
 
 /**
- * The RETURN map projection for a model's read query: all properties, the
- * hydration identity markers, full-entity eager relationships and every
- * projected property — one query per read.
- */
+The RETURN map projection for a model's read query: all properties, the
+hydration identity markers, full-entity eager relationships and every
+projected property — one query per read.
+*/
 export function projectionNode(alias: string, schema: EntitySchema): string {
   const parts: string[] = [
     '.*',
@@ -155,18 +176,16 @@ export function projectionNode(alias: string, schema: EntitySchema): string {
   ]
 
   // Full-entity eager relationships (existing eager machinery)
-  schema
+  for (const rel of schema
     .getRelationships()
-    .filter((rel) => rel.getEager())
-    .forEach((rel) => parts.push(eagerPattern(1, alias, rel)))
+    .filter((rel) => rel.getEager())) {parts.push(eagerPattern(1, alias, rel))}
 
   // Projected read-model properties
-  schema
+  for (const property of schema
     .getProperties()
     .filter(
       (property) => isProjectedProperty(property) && property.getType() !== PropertyType.COMPUTED,
-    )
-    .forEach((property) => parts.push(projectedProperty(alias, property)))
+    )) {parts.push(projectedProperty(alias, property))}
 
   return `${alias} { ${parts.join(', ')} }`
 }

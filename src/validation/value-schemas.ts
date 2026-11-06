@@ -2,15 +2,17 @@ import { z } from 'zod'
 import neo4j from 'neo4j-driver'
 
 /**
- * Zod schemas for the property value types that are not plain JSON.
- *
- * Each schema accepts BOTH plain JavaScript input (what a user writes in
- * code — validation runs on input values before convertPropertyValue) and
- * the already-converted Neo4j driver instances (what comes back from the
- * database or from a second pass after conversion).
- */
+Zod schemas for the property value types that are not plain JSON.
 
-/** Spatial Reference System Identifiers used by Neo4j for point properties */
+Each schema accepts BOTH plain JavaScript input (what a user writes in
+code — validation runs on input values before convertPropertyValue) and
+the already-converted Neo4j driver instances (what comes back from the
+database or from a second pass after conversion).
+*/
+
+/**
+Spatial Reference System Identifiers used by Neo4j for point properties
+*/
 const SRID = {
   CARTESIAN_2D: 7203,
   CARTESIAN_3D: 9157,
@@ -25,28 +27,30 @@ export const stringSchema = z.string()
 export const booleanSchema = z.boolean()
 export const floatSchema = z.number()
 
-/** NUMBER properties accept the same values as FLOAT properties */
+/**
+NUMBER properties accept the same values as FLOAT properties
+*/
 export const numberSchema = z.number()
 
 export const uuidSchema = z.uuid()
 export const anySchema = z.any()
 
 /**
- * INTEGER accepts native numbers and Neo4j Integer instances — the port of
- * neode's `neoInteger` Joi extension (Joi.number().integer() alternatives
- * Joi.object().type(neo4j.types.Integer)).
- */
+INTEGER accepts native numbers and Neo4j Integer instances — the port of
+neode's `neoInteger` Joi extension (Joi.number().integer() alternatives
+Joi.object().type(neo4j.types.Integer)).
+*/
 export const integerSchema: z.ZodType = z.union([
   z.number().int(),
   z.custom((value) => neo4j.isInt(value)),
 ])
 
 /**
- * A temporal value is valid when it is the driver instance itself, a
- * JavaScript Date, epoch milliseconds, or a string the driver can parse
- * exactly (the same contract as convertPropertyValue, so anything that
- * validates here will convert cleanly afterwards).
- */
+A temporal value is valid when it is the driver instance itself, a
+JavaScript Date, epoch milliseconds, or a string the driver can parse
+exactly (the same contract as convertPropertyValue, so anything that
+validates here will convert cleanly afterwards).
+*/
 function temporalSchema(
   isInstance: (value: unknown) => boolean,
   fromString: (value: string) => unknown,
@@ -54,9 +58,7 @@ function temporalSchema(
 ): z.ZodType {
   return z.custom(
     (value) => {
-      if (isInstance(value)) return true
-
-      if (value instanceof Date) return true
+      if (isInstance(value) || (value instanceof Date)) {return true}
 
       if (typeof value === 'number') {
         return Number.isFinite(value) && !Number.isNaN(new Date(value).getTime())
@@ -128,12 +130,12 @@ function isCoordinate(value: unknown): boolean {
 }
 
 /**
- * A point is valid when it is a driver Point instance with a Neo4j SRID, or
- * a plain { x, y[, z] } cartesian object or { latitude, longitude[, height] }
- * geographic object. An explicit `srid` must agree with the coordinate shape
- * (7203/9157 cartesian, 4326/4979 WGS 84) — neode delegated this to the
- * driver's Point type check, we validate the SRID consistency up front.
- */
+A point is valid when it is a driver Point instance with a Neo4j SRID, or
+a plain { x, y[, z] } cartesian object or { latitude, longitude[, height] }
+geographic object. An explicit `srid` must agree with the coordinate shape
+(7203/9157 cartesian, 4326/4979 WGS 84) — neode delegated this to the
+driver's Point type check, we validate the SRID consistency up front.
+*/
 export const pointSchema: z.ZodType = z.custom(
   (value) => {
     if (neo4j.isPoint(value)) {
@@ -190,10 +192,10 @@ export const pointSchema: z.ZodType = z.custom(
 )
 
 /**
- * A duration is valid when it is a driver Duration instance or a plain
- * object of non-negative integer components (neode never validated
- * durations — they were stored as strings).
- */
+A duration is valid when it is a driver Duration instance or a plain
+object of non-negative integer components (neode never validated
+durations — they were stored as strings).
+*/
 export const durationSchema: z.ZodType = z.custom(
   (value) => {
     if (neo4j.isDuration(value)) {

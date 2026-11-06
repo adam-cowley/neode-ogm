@@ -1,14 +1,19 @@
-export enum NodePosition {
-  START = 'start',
-  END = 'end',
-  OTHER = 'other',
-}
+export const NodePosition = {
+  START: 'start',
+  END: 'end',
+  OTHER: 'other',
+} as const
+
+export type NodePosition = (typeof NodePosition)[keyof typeof NodePosition]
 
 export default class RelationshipNodeSchema {
-  constructor(
-    private readonly target: object,
-    private readonly position: NodePosition,
-  ) {}
+  private readonly target: object
+  private readonly position: NodePosition
+
+  constructor(target: object, position: NodePosition) {
+    this.target = target
+    this.position = position
+  }
 
   getTarget() {
     return this.target

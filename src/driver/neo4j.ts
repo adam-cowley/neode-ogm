@@ -1,11 +1,11 @@
 import {
-  Driver,
-  Node as DriverNode,
-  Record as DriverRecord,
-  Relationship as DriverRelationship,
-  Session as DriverSession,
+  type Driver,
+  type Node as DriverNode,
+  type Record as DriverRecord,
+  type Relationship as DriverRelationship,
+  type Session as DriverSession,
   session as DriverSessionMode,
-  Transaction as DriverTransaction,
+  type Transaction as DriverTransaction,
   Integer as DriverInteger,
   DateTime as DriverDateTime,
   Date as DriverDate,
@@ -16,20 +16,20 @@ import {
   Duration as DriverDuration,
 } from 'neo4j-driver'
 
-import {
+import type {
   AccessMode,
   ConnectionProvider,
   QueryOutput,
-  QueryParams,
+  QueryParams as QueryParameters,
   QueryRecord,
   TransactionHandle,
-} from './types'
-import { classifyError } from '../errors'
+} from './types.js'
+import { classifyError } from '../errors/index.js'
 
 /**
- * Walk a driver result value and normalize driver-specific types
- * (Node, Relationship, Integer, temporal, point) into plain JS shapes.
- */
+Walk a driver result value and normalize driver-specific types
+(Node, Relationship, Integer, temporal, point) into plain JS shapes.
+*/
 export function normalizeDriverValue(value: unknown): unknown {
   if (value === null || value === undefined) {
     return value
@@ -38,7 +38,7 @@ export function normalizeDriverValue(value: unknown): unknown {
   // Integers are natively represented in driver 5+, but the type can still
   // appear when lossless integers are enabled — convert defensively.
   if (DriverInteger.isInteger(value)) {
-    return (value as DriverInteger).toNumber()
+    return (value).toNumber()
   }
 
   if (isDriverNode(value)) {
@@ -112,7 +112,11 @@ function isDriverRelationship(value: unknown): value is DriverRelationship {
 }
 
 class DriverQueryRecord implements QueryRecord {
-  constructor(private readonly record: DriverRecord) {}
+  private readonly record: DriverRecord
+
+  constructor(record: DriverRecord) {
+    this.record = record
+  }
 
   get(key: string): unknown {
     return normalizeDriverValue(this.record.get(key))
@@ -128,12 +132,15 @@ class DriverQueryRecord implements QueryRecord {
 }
 
 export class Neo4jTransactionHandle implements TransactionHandle {
-  constructor(
-    private readonly session: DriverSession,
-    private readonly tx: DriverTransaction,
-  ) {}
+  private readonly session: DriverSession
+  private readonly tx: DriverTransaction
 
-  async run(statement: string, parameters?: QueryParams): Promise<QueryOutput> {
+  constructor(session: DriverSession, tx: DriverTransaction) {
+    this.session = session
+    this.tx = tx
+  }
+
+  async run(statement: string, parameters?: QueryParameters): Promise<QueryOutput> {
     try {
       const result = await this.tx.run(statement, parameters)
 
@@ -155,21 +162,26 @@ export class Neo4jTransactionHandle implements TransactionHandle {
 }
 
 export class Neo4jConnectionProvider implements ConnectionProvider {
-  constructor(
-    private readonly driver: Driver,
-    private readonly database?: string,
-  ) {}
+  private readonly driver: Driver
+  private readonly database: string | undefined
+
+  constructor(driver: Driver, database?: string) {
+    this.driver = driver
+    this.database = database
+  }
 
   private async session(mode: AccessMode, database?: string): Promise<DriverSession> {
+    const sessionDatabase = database ?? this.database
+
     return this.driver.session({
-      database: database ?? this.database,
+      ...(sessionDatabase === undefined ? {} : { database: sessionDatabase }),
       defaultAccessMode: mode === 'READ' ? DriverSessionMode.READ : DriverSessionMode.WRITE,
     })
   }
 
   async run(
     statement: string,
-    parameters?: QueryParams,
+    parameters?: QueryParameters,
     mode: AccessMode = 'WRITE',
     database?: string,
   ): Promise<QueryOutput> {
@@ -219,7 +231,7 @@ export class Neo4jConnectionProvider implements ConnectionProvider {
 
       const value = output.records[0]?.get('edition')
 
-      return value === 'enterprise' ? 'enterprise' : value === 'community' ? 'community' : 'unknown'
+      return value === 'enterprise' ? 'enterprise' : (value === 'community' ? 'community' : 'unknown')
     } catch {
       return 'unknown'
     }

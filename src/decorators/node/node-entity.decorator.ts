@@ -1,6 +1,6 @@
-import { Newable } from '../../meta/newable'
-import { mergeModel } from '../../meta'
-import NodeConfig from '../node-config.interface'
+import type { Newable } from '../../meta/newable.js'
+import { mergeModel } from '../../meta/index.js'
+import type NodeConfig from '../node-config.interface.js'
 
 export default function NodeEntity(config: NodeConfig = {}) {
   return function (constructor: Newable) {

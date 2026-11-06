@@ -1,36 +1,39 @@
-import { EventEmitter } from 'events'
-import {
+import type { EventEmitter } from 'node:events'
+import type {
   GraphRelationship,
   QueryOutput,
-  QueryParams,
+  QueryParams as QueryParameters,
   Runner,
   TransactionHandle,
-} from '../driver/types'
-import { EventType } from '../common/events'
-import { getModel, getModels } from '../meta'
-import EntitySchema from '../meta/entity/entity-schema'
-import { elementIdOfEntity } from '../utils'
-import RelationshipPropertySchema from '../meta/relationship-property-schema'
-import INeode from '../neode.interface'
-import DeleteService, { DeleteOptions } from '../services/query/delete.service'
-import DetachService, { DetachResult } from '../services/query/detach.service'
-import FindByIdService from '../services/query/find-by-id.service'
-import FindService from '../services/query/find.service'
-import GetService, { OrderSpec } from '../services/query/get.service'
-import MergeService from '../services/query/merge.service'
-import RelateService from '../services/query/relate.service'
-import UpdateService from '../services/query/update.service'
-import WithinDistanceService from '../services/query/within-distance.service'
+} from '../driver/types.js'
+import { EventType } from '../common/events.js'
+import { getModel, getModels } from '../meta/index.js'
+import type EntitySchema from '../meta/entity/entity-schema.js'
+import { elementIdOfEntity } from '../utils.js'
+import type RelationshipPropertySchema from '../meta/relationship-property-schema.js'
+import type INeode from '../neode.interface.js'
+import DeleteService, { type DeleteOptions } from '../services/query/delete.service.js'
+import DetachService, { type DetachResult } from '../services/query/detach.service.js'
+import FindByIdService from '../services/query/find-by-id.service.js'
+import FindService from '../services/query/find.service.js'
+import GetService, { type OrderSpec } from '../services/query/get.service.js'
+import MergeService from '../services/query/merge.service.js'
+import RelateService from '../services/query/relate.service.js'
+import UpdateService from '../services/query/update.service.js'
+import WithinDistanceService from '../services/query/within-distance.service.js'
 
 export default class TransactionalService implements INeode {
-  constructor(
-    private readonly handle: TransactionHandle,
-    private readonly eventEmitter: EventEmitter,
-  ) {}
+  private readonly handle: TransactionHandle
+  private readonly eventEmitter: EventEmitter
+
+  constructor(handle: TransactionHandle, eventEmitter: EventEmitter) {
+    this.handle = handle
+    this.eventEmitter = eventEmitter
+  }
 
   /**
-   * The underlying transaction handle — a Runner scoped to this transaction
-   */
+  The underlying transaction handle — a Runner scoped to this transaction
+  */
   getRunner(): Runner {
     return this.handle
   }
@@ -66,9 +69,9 @@ export default class TransactionalService implements INeode {
   }
 
   /**
-   * The relationship declared on the schema under the given key
-   * (mirror of the facade's relate-by-key resolution)
-   */
+  The relationship declared on the schema under the given key
+  (mirror of the facade's relate-by-key resolution)
+  */
   private requireRelationship(schema: EntitySchema, key: string): RelationshipPropertySchema {
     if (!schema.hasRelationship(key)) {
       throw new Error(
@@ -80,7 +83,7 @@ export default class TransactionalService implements INeode {
   }
 
   async find<T>(
-    constructor: new (...args: never[]) => T,
+    constructor: new (...arguments_: never[]) => T,
     value: string,
     _database?: string,
   ): Promise<T | undefined> {
@@ -92,7 +95,7 @@ export default class TransactionalService implements INeode {
   }
 
   async findById<T>(
-    constructor: new (...args: never[]) => T,
+    constructor: new (...arguments_: never[]) => T,
     id: string,
     _database?: string,
   ): Promise<T | undefined> {
@@ -104,8 +107,8 @@ export default class TransactionalService implements INeode {
   }
 
   async get<T>(
-    constructor: new (...args: never[]) => T,
-    params: Record<string, unknown>,
+    constructor: new (...arguments_: never[]) => T,
+    parameters: Record<string, unknown>,
     limit?: number,
     skip?: number,
     _database?: string,
@@ -114,15 +117,15 @@ export default class TransactionalService implements INeode {
 
     const service = new GetService(this.handle)
 
-    return service.get<T>(constructor, schema, params, limit, skip)
+    return service.get<T>(constructor, schema, parameters, limit, skip)
   }
 
   async getFirst<T>(
-    constructor: new (...args: never[]) => T,
-    params: Record<string, unknown>,
+    constructor: new (...arguments_: never[]) => T,
+    parameters: Record<string, unknown>,
     database?: string,
   ): Promise<T | undefined> {
-    const records = await this.get<T>(constructor, params, 1, 0, database)
+    const records = await this.get<T>(constructor, parameters, 1, 0, database)
 
     return records[0]
   }
@@ -137,7 +140,7 @@ export default class TransactionalService implements INeode {
 
     const saved = await this.findById<T>(
       entityRecord.constructor as new (
-        ...args: never[]
+        ...arguments_: never[]
       ) => T,
       elementId,
     )
@@ -153,10 +156,10 @@ export default class TransactionalService implements INeode {
   }
 
   /**
-   * Delete a node in this transaction's scope. `options` threads the
-   * cascade modes through; the legacy string second argument (database)
-   * stays accepted, as on the facade.
-   */
+  Delete a node in this transaction's scope. `options` threads the
+  cascade modes through; the legacy string second argument (database)
+  stays accepted, as on the facade.
+  */
   async delete<T>(entity: T, options?: DeleteOptions | string, _database?: string): Promise<void> {
     const schema = this.getSchema((entity as unknown as Record<string, unknown>).constructor)
 
@@ -173,9 +176,9 @@ export default class TransactionalService implements INeode {
   }
 
   /**
-   * UPDATE the given properties on a node (`+=` semantics), then
-   * re-hydrate it — mirror of the facade's update
-   */
+  UPDATE the given properties on a node (`+=` semantics), then
+  re-hydrate it — mirror of the facade's update
+  */
   async update<T>(
     entity: T,
     properties: Record<string, unknown> = {},
@@ -188,25 +191,21 @@ export default class TransactionalService implements INeode {
 
     const elementId = elementIdOfEntity(schema, entity as object)
 
-    if (!elementId) {
-      return undefined
-    }
-
-    return new FindByIdService(this.handle).find(
+    return elementId ? (new FindByIdService(this.handle).find(
       entityRecord.constructor as new (
-        ...args: never[]
+        ...arguments_: never[]
       ) => T,
       schema,
       elementId,
-    ) as Promise<T | undefined>
+    ) as Promise<T | undefined>) : undefined;
   }
 
   /**
-   * Relate two saved nodes by the relationship's KEY on the from-entity's
-   * schema — mirror of the facade's relate
-   */
+  Relate two saved nodes by the relationship's KEY on the from-entity's
+  schema — mirror of the facade's relate
+  */
   async relate<From extends object, To extends object>(
-    constructor: new (...args: never[]) => From,
+    constructor: new (...arguments_: never[]) => From,
     from: From,
     to: To,
     relationshipKey: string,
@@ -236,11 +235,11 @@ export default class TransactionalService implements INeode {
   }
 
   /**
-   * Remove the relationship of the given key between two nodes and return
-   * both re-hydrated — mirror of the facade's detach
-   */
+  Remove the relationship of the given key between two nodes and return
+  both re-hydrated — mirror of the facade's detach
+  */
   async detach<From extends object, To extends object>(
-    constructor: new (...args: never[]) => From,
+    constructor: new (...arguments_: never[]) => From,
     from: From,
     to: To,
     relationshipKey: string,
@@ -252,12 +251,12 @@ export default class TransactionalService implements INeode {
   }
 
   /**
-   * ALL nodes of the given constructor, optionally filtered, ordered,
-   * limited and skipped — mirror of the facade's all
-   */
+  ALL nodes of the given constructor, optionally filtered, ordered,
+  limited and skipped — mirror of the facade's all
+  */
   async all<T>(
-    constructor: new (...args: never[]) => T,
-    params: Record<string, unknown> = {},
+    constructor: new (...arguments_: never[]) => T,
+    parameters: Record<string, unknown> = {},
     order?: OrderSpec,
     limit?: number,
     skip?: number,
@@ -265,19 +264,19 @@ export default class TransactionalService implements INeode {
   ): Promise<T[]> {
     const schema = this.getSchema(constructor)
 
-    return new GetService(this.handle).get<T>(constructor, schema, params, limit, skip, order)
+    return new GetService(this.handle).get<T>(constructor, schema, parameters, limit, skip, order)
   }
 
   /**
-   * Nodes of the given constructor within `distance` of the given point —
-   * mirror of the facade's withinDistance
-   */
+  Nodes of the given constructor within `distance` of the given point —
+  mirror of the facade's withinDistance
+  */
   async withinDistance<T>(
-    constructor: new (...args: never[]) => T,
+    constructor: new (...arguments_: never[]) => T,
     locationProperty: string,
     point: unknown,
     distance: number,
-    params: Record<string, unknown> = {},
+    parameters: Record<string, unknown> = {},
     order?: OrderSpec,
     limit?: number,
     skip?: number,
@@ -291,7 +290,7 @@ export default class TransactionalService implements INeode {
       locationProperty,
       point,
       distance,
-      params,
+      parameters,
       order,
       limit,
       skip,
@@ -299,13 +298,13 @@ export default class TransactionalService implements INeode {
   }
 
   /**
-   * Run a query in this transaction's scope
-   */
-  async readCypher(query: string, params: QueryParams = {}): Promise<QueryOutput> {
-    return this.handle.run(query, params)
+  Run a query in this transaction's scope
+  */
+  async readCypher(query: string, parameters: QueryParameters = {}): Promise<QueryOutput> {
+    return this.handle.run(query, parameters)
   }
 
-  async writeCypher(query: string, params: QueryParams = {}): Promise<QueryOutput> {
-    return this.handle.run(query, params)
+  async writeCypher(query: string, parameters: QueryParameters = {}): Promise<QueryOutput> {
+    return this.handle.run(query, parameters)
   }
 }

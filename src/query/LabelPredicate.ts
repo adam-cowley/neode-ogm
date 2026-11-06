@@ -1,16 +1,16 @@
 /**
- * A label predicate: `alias:Label` (several labels require all of them),
- * shared by `whereLabel` (`WHERE n:Completed`) and `orderByLabel`
- * (`ORDER BY n:Completed DESC`).
- */
+A label predicate: `alias:Label` (several labels require all of them),
+shared by `whereLabel` (`WHERE n:Completed`) and `orderByLabel`
+(`ORDER BY n:Completed DESC`).
+*/
 export default class LabelPredicate {
   private negative = false
+  private readonly alias: string
+  private readonly labels: string | string[]
 
-  constructor(
-    private readonly alias: string,
-    private readonly labels: string | string[],
-    negative = false,
-  ) {
+  constructor(alias: string, labels: string | string[], negative = false) {
+    this.alias = alias
+    this.labels = labels
     this.negative = negative
   }
 

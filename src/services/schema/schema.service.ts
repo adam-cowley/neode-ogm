@@ -1,39 +1,50 @@
-import { ConnectionProvider } from '../../driver/types'
-import { getModels } from '../../meta'
-import EntitySchema from '../../meta/entity/entity-schema'
-import PropertySchema, { PropertyType } from '../../meta/property-schema'
+import type { ConnectionProvider } from '../../driver/types.js'
+import { getModels } from '../../meta/index.js'
+import type EntitySchema from '../../meta/entity/entity-schema.js'
+import type PropertySchema from '../../meta/property-schema.js';
+import { PropertyType } from '../../meta/property-schema.js'
 
-export enum ConstraintAction {
-  CREATE = 'CREATE',
-  DROP = 'DROP',
-}
+export const ConstraintAction = {
+  CREATE: 'CREATE',
+  DROP: 'DROP',
+} as const
 
-export enum ConstraintType {
-  UNIQUE = 'UNIQUE',
-  EXISTS = 'EXISTS',
-  INDEX = 'INDEX',
-  FULLTEXT = 'FULLTEXT',
-  VECTOR = 'VECTOR',
-  PROPERTY_TYPE = 'PROPERTY_TYPE',
-}
+export type ConstraintAction = (typeof ConstraintAction)[keyof typeof ConstraintAction]
+
+export const ConstraintType = {
+  UNIQUE: 'UNIQUE',
+  EXISTS: 'EXISTS',
+  INDEX: 'INDEX',
+  FULLTEXT: 'FULLTEXT',
+  VECTOR: 'VECTOR',
+  PROPERTY_TYPE: 'PROPERTY_TYPE',
+} as const
+
+export type ConstraintType = (typeof ConstraintType)[keyof typeof ConstraintType]
 
 export interface SchemaResult {
   action: ConstraintAction
   type: ConstraintType
   label: string
   property: string
-  /** All indexed properties (composite and full-text cover more than one) */
+  /**
+  All indexed properties (composite and full-text cover more than one)
+  */
   properties?: string[]
   statement: string
   success: boolean
   error?: Error
 }
 
-/** Deterministic schema object name: `<label>_<property>_<type>` (PLAN §G) */
+/**
+Deterministic schema object name: `<label>_<property>_<type>` (PLAN §G)
+*/
 export const schemaObjectName = (label: string, property: string, type: string): string =>
   `${label.toLowerCase()}_${property}_${type.toLowerCase()}`
 
-/** Deterministic name for a composite object: `<label>_<props joined by _>_<type>` */
+/**
+Deterministic name for a composite object: `<label>_<props joined by _>_<type>`
+*/
 export const compositeSchemaObjectName = (
   label: string,
   properties: string[],
@@ -41,57 +52,71 @@ export const compositeSchemaObjectName = (
 ): string =>
   schemaObjectName(label, properties.map((property) => property.toLowerCase()).join('_'), type)
 
-/** Backtick-escape a Cypher identifier */
+/**
+Backtick-escape a Cypher identifier
+*/
 const quote = (identifier: string): string => `\`${identifier.replaceAll('`', '``')}\``
 
 /**
- * Cypher property-type name for a declared property type, or undefined when
- * the type has no single Cypher equivalent (NUMBER spans INTEGER + FLOAT, ANY
- * is untyped): property-type constraints cannot be generated for those.
- */
+Cypher property-type name for a declared property type, or undefined when
+the type has no single Cypher equivalent (NUMBER spans INTEGER + FLOAT, ANY
+is untyped): property-type constraints cannot be generated for those.
+*/
 export function cypherPropertyType(type: PropertyType): string | undefined {
   switch (type) {
     case PropertyType.STRING:
-    case PropertyType.UUID:
+    case PropertyType.UUID: {
       return 'STRING'
-    case PropertyType.INTEGER:
+    }
+    case PropertyType.INTEGER: {
       return 'INTEGER'
-    case PropertyType.FLOAT:
+    }
+    case PropertyType.FLOAT: {
       return 'FLOAT'
-    case PropertyType.BOOLEAN:
+    }
+    case PropertyType.BOOLEAN: {
       return 'BOOLEAN'
-    case PropertyType.DATE:
+    }
+    case PropertyType.DATE: {
       return 'DATE'
-    case PropertyType.TIME:
+    }
+    case PropertyType.TIME: {
       return 'TIME'
-    case PropertyType.DATETIME:
+    }
+    case PropertyType.DATETIME: {
       return 'DATETIME'
-    case PropertyType.LOCALTIME:
+    }
+    case PropertyType.LOCALTIME: {
       return 'LOCALTIME'
-    case PropertyType.LOCALDATETIME:
+    }
+    case PropertyType.LOCALDATETIME: {
       return 'LOCALDATETIME'
-    case PropertyType.POINT:
+    }
+    case PropertyType.POINT: {
       return 'POINT'
-    case PropertyType.DURATION:
+    }
+    case PropertyType.DURATION: {
       return 'DURATION'
-    default:
+    }
+    default: {
       return undefined
+    }
   }
 }
 
 /**
- * CREATE/DROP statement for a single- or composite-property UNIQUE, EXISTS or
- * INDEX schema object. Composite uniques use the parenthesised property list —
- * the only spelling the Relate engine parses.
- */
+CREATE/DROP statement for a single- or composite-property UNIQUE, EXISTS or
+INDEX schema object. Composite uniques use the parenthesised property list —
+the only spelling the Relate engine parses.
+*/
 export function schemaStatement(
   action: ConstraintAction,
   type: ConstraintType,
   label: string,
   properties: string[],
-  name: string = schemaObjectName(label, properties[0], type),
+  name: string = schemaObjectName(label, properties[0] ?? '', type),
 ): string {
-  if (!properties.length) {
+  if (properties.length === 0) {
     throw new TypeError(`Cannot create a ${type} schema object on ${label}: no properties given`)
   }
 
@@ -114,7 +139,9 @@ export function schemaStatement(
   return `CREATE ${kind} ${name} IF NOT EXISTS FOR (n:${label}) ${target}`
 }
 
-/** CREATE/DROP statement for a property-type constraint (NTS-141): `REQUIRE n.prop IS :: STRING` */
+/**
+CREATE/DROP statement for a property-type constraint (NTS-141): `REQUIRE n.prop IS :: STRING`
+*/
 export function propertyTypeStatement(
   action: ConstraintAction,
   label: string,
@@ -122,35 +149,34 @@ export function propertyTypeStatement(
   cypherType: string,
   name: string = schemaObjectName(label, property, ConstraintType.PROPERTY_TYPE),
 ): string {
-  if (action === ConstraintAction.DROP) {
-    return `DROP CONSTRAINT ${name} IF EXISTS`
-  }
-
-  return `CREATE CONSTRAINT ${name} IF NOT EXISTS FOR (n:${label}) REQUIRE n.${quote(property)} IS :: ${cypherType}`
+  return action === ConstraintAction.DROP ? `DROP CONSTRAINT ${name} IF EXISTS` : `CREATE CONSTRAINT ${name} IF NOT EXISTS FOR (n:${label}) REQUIRE n.${quote(property)} IS :: ${cypherType}`;
 }
 
 export default class SchemaService {
-  constructor(
-    private readonly connection: ConnectionProvider,
-    private readonly enterprise: boolean = false,
-  ) {}
+  private readonly connection: ConnectionProvider
+  private readonly enterprise: boolean = false
 
-  create(): Promise<SchemaResult[]> {
+  constructor(connection: ConnectionProvider, enterprise = false) {
+    this.connection = connection
+    this.enterprise = enterprise
+  }
+
+  async create(): Promise<SchemaResult[]> {
     return this.runSchemaStatements(ConstraintAction.CREATE)
   }
 
-  drop(): Promise<SchemaResult[]> {
+  async drop(): Promise<SchemaResult[]> {
     return this.runSchemaStatements(ConstraintAction.DROP)
   }
 
   private async runSchemaStatements(action: ConstraintAction): Promise<SchemaResult[]> {
     const output = await Promise.all(
-      Array.from(getModels().values()).map((model) =>
+      Array.from(getModels().values()).map(async (model) =>
         this.runSchemaStatementsForModel(action, model),
       ),
     )
 
-    return output.reduce((acc: SchemaResult[], current: SchemaResult[]) => acc.concat(current), [])
+    return output.flat()
   }
 
   private async runSchemaStatementsForModel(
@@ -158,10 +184,10 @@ export default class SchemaService {
     model: EntitySchema,
   ): Promise<SchemaResult[]> {
     const output = await Promise.all(
-      model.getLabels().map((label) => this.runSchemaStatementsForLabel(action, model, label)),
+      model.getLabels().map(async (label) => this.runSchemaStatementsForLabel(action, model, label)),
     )
 
-    return output.reduce((acc: SchemaResult[], current: SchemaResult[]) => acc.concat(current), [])
+    return output.flat()
   }
 
   private async runSchemaStatementsForLabel(
@@ -212,7 +238,7 @@ export default class SchemaService {
     return uniques.concat(...indexes, ...compositeUniques, ...compositeIndexes, ...propertyTypes)
   }
 
-  private runUniqueConstraintStatementsForLabel(
+  private async runUniqueConstraintStatementsForLabel(
     action: ConstraintAction,
     properties: PropertySchema[],
     label: string,
@@ -220,13 +246,13 @@ export default class SchemaService {
     return Promise.all(
       properties
         .filter((property) => property.isUnique())
-        .map((property) =>
+        .map(async (property) =>
           this.runStatement(action, ConstraintType.UNIQUE, label, [property.getKey()]),
         ),
     )
   }
 
-  private runExistsConstraintStatementsForLabel(
+  private async runExistsConstraintStatementsForLabel(
     action: ConstraintAction,
     properties: PropertySchema[],
     label: string,
@@ -234,13 +260,13 @@ export default class SchemaService {
     return Promise.all(
       properties
         .filter((property) => property.isExists())
-        .map((property) =>
+        .map(async (property) =>
           this.runStatement(action, ConstraintType.EXISTS, label, [property.getKey()]),
         ),
     )
   }
 
-  private runIndexStatementsForLabel(
+  private async runIndexStatementsForLabel(
     action: ConstraintAction,
     properties: PropertySchema[],
     label: string,
@@ -248,17 +274,17 @@ export default class SchemaService {
     return Promise.all(
       properties
         .filter((property) => property.isIndex())
-        .map((property) =>
+        .map(async (property) =>
           this.runStatement(action, ConstraintType.INDEX, label, [property.getKey()]),
         ),
     )
   }
 
-  private runCompositeStatementsForLabel(
+  private async runCompositeStatementsForLabel(
     action: ConstraintAction,
     properties: PropertySchema[],
     label: string,
-    type: ConstraintType.UNIQUE | ConstraintType.INDEX,
+    type: (typeof ConstraintType)['UNIQUE'] | (typeof ConstraintType)['INDEX'],
     select: (property: PropertySchema) => string[] | undefined,
   ): Promise<SchemaResult[]> {
     const composites = new Map<string, string[]>()
@@ -274,13 +300,13 @@ export default class SchemaService {
     }
 
     return Promise.all(
-      Array.from(composites.entries()).map(([name, list]) =>
+      Array.from(composites).map(async ([name, list]) =>
         this.runStatement(action, type, label, list, name),
       ),
     )
   }
 
-  private runPropertyTypeStatementsForLabel(
+  private async runPropertyTypeStatementsForLabel(
     action: ConstraintAction,
     properties: PropertySchema[],
     label: string,
@@ -288,7 +314,7 @@ export default class SchemaService {
     return Promise.all(
       properties
         .filter((property) => property.isTyped())
-        .map((property) => {
+        .map(async (property) => {
           const type = cypherPropertyType(property.getType())
 
           if (!type) {
@@ -303,7 +329,7 @@ export default class SchemaService {
                 `No property-type constraint can be generated for "${property.getKey()}": ` +
                   'its declared type has no single Cypher property type',
               ),
-            } as SchemaResult
+            }
           }
 
           return this.runStatement(
@@ -326,17 +352,30 @@ export default class SchemaService {
     name?: string,
     cypherType?: string,
   ): Promise<SchemaResult> {
-    const statement =
-      type === ConstraintType.PROPERTY_TYPE
-        ? propertyTypeStatement(action, label, properties[0], cypherType!, name)
-        : schemaStatement(action, type, label, properties, name)
+    const property = properties[0]
+
+    if (property === undefined) {
+      throw new Error('A schema constraint requires at least one property')
+    }
+
+    let statement: string
+
+    if (type === ConstraintType.PROPERTY_TYPE) {
+      if (cypherType === undefined) {
+        throw new Error('A property-type constraint requires a Cypher type')
+      }
+
+      statement = propertyTypeStatement(action, label, property, cypherType, name)
+    } else {
+      statement = schemaStatement(action, type, label, properties, name)
+    }
 
     const output: SchemaResult = {
       action,
       type,
       label,
-      property: properties[0],
-      ...(properties.length > 1 ? { properties } : {}),
+      property,
+      ...((properties.length > 1) && { properties }),
       statement,
       success: false,
     }
@@ -345,8 +384,8 @@ export default class SchemaService {
       await this.connection.run(statement, {}, 'WRITE')
 
       output.success = true
-    } catch (e) {
-      output.error = e as Error
+    } catch (error) {
+      output.error = error as Error
     }
 
     return output

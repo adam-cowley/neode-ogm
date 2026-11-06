@@ -1,20 +1,25 @@
-import { Newable } from '../newable'
-import PropertySchema from '../property-schema'
-import RelationshipPropertySchema from '../relationship-property-schema'
+import type { Newable } from '../newable.js'
+import PropertySchema from '../property-schema.js'
+import RelationshipPropertySchema from '../relationship-property-schema.js'
 
-export enum EntityType {
-  NodeEntity,
-  RelationshipEntity,
-}
+export const EntityType = {
+  NodeEntity: 0,
+  RelationshipEntity: 1,
+} as const
+
+export type EntityType = (typeof EntityType)[keyof typeof EntityType]
 
 export default class EntitySchema {
-  protected properties: Map<string, PropertySchema> = new Map()
-  protected relationships: Map<string, RelationshipPropertySchema> = new Map()
+  protected properties = new Map<string, PropertySchema>()
+  protected relationships = new Map<string, RelationshipPropertySchema>()
 
   private labels: string[] = []
-  private objectConstructor: Newable
+  private objectConstructor!: Newable
+  protected entityType: EntityType = EntityType.NodeEntity
 
-  constructor(protected entityType: EntityType = EntityType.NodeEntity) {}
+  constructor(entityType: EntityType = EntityType.NodeEntity) {
+    this.entityType = entityType
+  }
 
   setLabels(labels: string[]) {
     this.labels = [...new Set(labels)].sort()

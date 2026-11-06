@@ -1,12 +1,12 @@
 import neo4j from 'neo4j-driver'
-import { QueryRecord } from './types'
+import type { QueryRecord } from './types.js'
 
 /**
- * JSON-safe serialisation for raw query values: converts the driver class
- * instances that survive value normalisation (Integer, temporal types, Point,
- * Path) and bigints into structures that survive JSON.stringify, recursing
- * through arrays and plain objects. Everything else passes through unchanged.
- */
+JSON-safe serialisation for raw query values: converts the driver class
+instances that survive value normalisation (Integer, temporal types, Point,
+Path) and bigints into structures that survive JSON.stringify, recursing
+through arrays and plain objects. Everything else passes through unchanged.
+*/
 export function jsonSafe(value: unknown): unknown {
   if (value === null || value === undefined) {
     return value
@@ -86,7 +86,9 @@ export function jsonSafe(value: unknown): unknown {
   return value
 }
 
-/** A QueryRecord whose values are JSON-safe (the rows of `Neode#cypher`). */
+/**
+A QueryRecord whose values are JSON-safe (the rows of `Neode#cypher`).
+*/
 export function jsonSafeRecord(record: QueryRecord): QueryRecord {
   return {
     get: (key: string) => jsonSafe(record.get(key)),

@@ -1,5 +1,5 @@
-import { mergeRelationshipProperty } from '../../meta'
-import RelationshipConfig from '../relationship-config.interface'
+import { mergeRelationshipProperty } from '../../meta/index.js'
+import type RelationshipConfig from '../relationship-config.interface.js'
 
 export default function OneToOne(config: RelationshipConfig) {
   return function (target: any, propertyKey: string, _descriptor?: any): void {

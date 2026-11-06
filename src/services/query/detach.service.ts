@@ -1,11 +1,11 @@
-import Builder from '../../query'
-import { getModel } from '../../meta'
-import EntitySchema from '../../meta/entity/entity-schema'
-import { Newable } from '../../meta/newable'
-import RelationshipPropertySchema from '../../meta/relationship-property-schema'
-import { elementIdOfEntity, matchCriteriaForEntity } from '../../utils'
-import FindByIdService from './find-by-id.service'
-import QueryService from './query.service'
+import Builder from '../../query/index.js'
+import { getModel } from '../../meta/index.js'
+import type EntitySchema from '../../meta/entity/entity-schema.js'
+import type { Newable } from '../../meta/newable.js'
+import type RelationshipPropertySchema from '../../meta/relationship-property-schema.js'
+import { elementIdOfEntity, matchCriteriaForEntity } from '../../utils.js'
+import FindByIdService from './find-by-id.service.js'
+import QueryService from './query.service.js'
 
 export interface DetachResult<From, To> {
   from: From | undefined
@@ -14,10 +14,10 @@ export interface DetachResult<From, To> {
 
 export default class DetachService extends QueryService {
   /**
-   * Remove the relationship(s) of the given type between two nodes
-   * (neode DetachFrom.js, narrowed to the relationship type and
-   * direction declared on the schema) and return both re-hydrated nodes.
-   */
+  Remove the relationship(s) of the given type between two nodes
+  (neode DetachFrom.js, narrowed to the relationship type and
+  direction declared on the schema) and return both re-hydrated nodes.
+  */
   async detach<From extends object, To extends object>(
     schema: EntitySchema,
     fromEntity: From,
@@ -58,19 +58,15 @@ export default class DetachService extends QueryService {
   }
 
   /**
-   * Re-hydrate an entity by its elementId
-   */
+  Re-hydrate an entity by its elementId
+  */
   private async refresh<T extends object>(schema: EntitySchema, entity: T): Promise<T | undefined> {
     const elementId = elementIdOfEntity(schema, entity)
 
     const constructor = (entity as Record<string, unknown>).constructor as Newable | undefined
 
-    if (!elementId || !constructor) {
-      return undefined
-    }
-
-    return new FindByIdService(this.runner).find(constructor, schema, elementId) as Promise<
+    return elementId && constructor ? (new FindByIdService(this.runner).find(constructor, schema, elementId) as Promise<
       T | undefined
-    >
+    >) : undefined;
   }
 }

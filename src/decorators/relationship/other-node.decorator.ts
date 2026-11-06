@@ -1,6 +1,6 @@
-import { Newable } from '../../meta/newable'
-import { mergeProperty, mergeRelationshipModel } from '../../meta'
-import { PropertyType } from '../../meta/property-schema'
+import type { Newable } from '../../meta/newable.js'
+import { mergeProperty, mergeRelationshipModel } from '../../meta/index.js'
+import { PropertyType } from '../../meta/property-schema.js'
 import 'reflect-metadata'
 
 export default function OtherNode(entity: () => Newable) {

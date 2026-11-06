@@ -1,63 +1,65 @@
-import { Newable } from '../meta/newable'
-import EntitySchema from './entity/entity-schema'
+import type { Newable } from '../meta/newable.js'
+import type EntitySchema from './entity/entity-schema.js'
 
-export enum PropertyType {
-  ANY,
-  INTERNAL_ID,
-  ALL_PROPERTIES,
-  UUID,
-  STRING,
-  INTEGER,
+export const PropertyType = {
+  ANY: 0,
+  INTERNAL_ID: 1,
+  ALL_PROPERTIES: 2,
+  UUID: 3,
+  STRING: 4,
+  INTEGER: 5,
 
   // Numbers
-  FLOAT,
-  NUMBER,
+  FLOAT: 6,
+  NUMBER: 7,
 
-  BOOLEAN,
+  BOOLEAN: 8,
 
   // Temporal
-  DATE,
-  TIME,
-  DATETIME,
-  LOCALTIME,
-  LOCALDATETIME,
+  DATE: 9,
+  TIME: 10,
+  DATETIME: 11,
+  LOCALTIME: 12,
+  LOCALDATETIME: 13,
 
   // Spatial
-  POINT,
+  POINT: 14,
 
   // Durations
-  DURATION,
+  DURATION: 15,
 
   // Relationships
-  ONE_TO_ONE,
-  ONE_TO_MANY,
+  ONE_TO_ONE: 16,
+  ONE_TO_MANY: 17,
 
   // Read-model projections (NTS-135/136/137/138): composed into the RETURN
   // map projection of the read query — one Cypher query per read
-  RELATED_ONE,
-  RELATED_MANY,
-  RELATIONSHIP_COUNT,
-  RELATIONSHIP_EXISTS,
-  LABEL_PRESENT,
-  COMPUTED,
-  EXPRESSION,
+  RELATED_ONE: 18,
+  RELATED_MANY: 19,
+  RELATIONSHIP_COUNT: 20,
+  RELATIONSHIP_EXISTS: 21,
+  LABEL_PRESENT: 22,
+  COMPUTED: 23,
+  EXPRESSION: 24,
 
-  START_NODE,
-  END_NODE,
-  OTHER_NODE,
+  START_NODE: 25,
+  END_NODE: 26,
+  OTHER_NODE: 27,
 
-  NODE,
-  RELATIONSHIP,
-}
+  NODE: 28,
+  RELATIONSHIP: 29,
+} as const
+
+export type PropertyType = (typeof PropertyType)[keyof typeof PropertyType]
 
 /**
- * Property types that project read-model values: RELATED_ONE / RELATED_MANY
- * eager subsets, RELATIONSHIP_COUNT, RELATIONSHIP_EXISTS, LABEL_PRESENT and
- * EXPRESSION compose extra reads into the RETURN projection;
- * COMPUTED derives a value in TypeScript after hydration.
- * Any of these on a model means reads must go through the projection path.
- */
-export const ProjectedPropertyTypes = [
+Property types that project read-model values: RELATED_ONE / RELATED_MANY
+eager subsets, RELATIONSHIP_COUNT, RELATIONSHIP_EXISTS, LABEL_PRESENT and
+EXPRESSION compose extra reads into the RETURN projection;
+COMPUTED derives a value in TypeScript after hydration.
+Any of these on a model means reads must go through the projection path.
+*/
+export const ProjectedPropertyTypes: PropertyType[] = [
   PropertyType.RELATED_ONE,
   PropertyType.RELATED_MANY,
   PropertyType.RELATIONSHIP_COUNT,
@@ -67,8 +69,10 @@ export const ProjectedPropertyTypes = [
   PropertyType.COMPUTED,
 ]
 
-/** Property types that map onto Neo4j temporal values */
-export const TemporalTypes = [
+/**
+Property types that map onto Neo4j temporal values
+*/
+export const TemporalTypes: PropertyType[] = [
   PropertyType.DATE,
   PropertyType.TIME,
   PropertyType.DATETIME,
@@ -76,33 +80,39 @@ export const TemporalTypes = [
   PropertyType.LOCALDATETIME,
 ]
 
-export const RelationshipTypes = [PropertyType.ONE_TO_ONE, PropertyType.ONE_TO_ONE]
+export const RelationshipTypes: PropertyType[] = [PropertyType.ONE_TO_ONE, PropertyType.ONE_TO_ONE]
 
-export type DefaultValue = (model: object, schema: EntitySchema) => any | any | undefined
+export type DefaultValue = (model: object, schema: EntitySchema) => any   | undefined
 
 export default class PropertySchema {
   private type: PropertyType = PropertyType.ANY
-  private defaultValue: DefaultValue
+  private defaultValue!: DefaultValue
 
-  private primaryKey: boolean = false
-  private unique: boolean = false
-  private array: boolean = false
-  private required: boolean = false
-  private hidden: boolean = false
-  private protectedOption: boolean = false
-  private readOnly: boolean = false
-  private index: boolean = false
-  private exists: boolean = false
-  private onCreateSet: boolean = false
-  private onMatchSet: boolean = false
-  private alwaysSet: boolean = false
+  private primaryKey = false
+  private unique = false
+  private array = false
+  private required = false
+  private hidden = false
+  private protectedOption = false
+  private readOnly = false
+  private index = false
+  private exists = false
+  private onCreateSet = false
+  private onMatchSet = false
+  private alwaysSet = false
 
-  private entity: Newable
+  private entity!: Newable
 
-  /** neode validation rules (min, max, email, regex, …) beyond the metamodel flags */
+  /**
+  neode validation rules (min, max, email, regex, …) beyond the metamodel flags
+  */
   private rules: Record<string, unknown> = {}
 
-  constructor(private readonly key: string) {}
+  private readonly key: string
+
+  constructor(key: string) {
+    this.key = key
+  }
 
   getKey(): string {
     return this.key
@@ -116,7 +126,7 @@ export default class PropertySchema {
     return this.type
   }
 
-  setArray(value: boolean = true) {
+  setArray(value = true) {
     this.array = value
   }
 
@@ -132,7 +142,7 @@ export default class PropertySchema {
     return this.defaultValue
   }
 
-  setPrimaryKey(value: boolean = true) {
+  setPrimaryKey(value = true) {
     this.primaryKey = value
     this.unique = value
   }
@@ -141,7 +151,7 @@ export default class PropertySchema {
     return this.primaryKey
   }
 
-  setUnique(value: boolean = true) {
+  setUnique(value = true) {
     this.unique = value
   }
 
@@ -199,16 +209,24 @@ export default class PropertySchema {
 
   // ---- Hydration + schema-sync config (NTS-139/140/141) ----
 
-  /** Read-side fallbacks at hydration (NTS-139): a literal, or sibling property names (first non-null wins) */
+  /**
+  Read-side fallbacks at hydration (NTS-139): a literal, or sibling property names (first non-null wins)
+  */
   private coalesce: string | string[] | undefined
 
-  /** Opt in to a property-type constraint generated from the declared type (NTS-141) */
-  private typed: boolean = false
+  /**
+  Opt in to a property-type constraint generated from the declared type (NTS-141)
+  */
+  private typed = false
 
-  /** Composite unique constraint properties (NTS-140): the full composite, declared on one property */
+  /**
+  Composite unique constraint properties (NTS-140): the full composite, declared on one property
+  */
   private compositeUnique: string[] | undefined
 
-  /** Composite index properties (NTS-140): the full composite, declared on one property */
+  /**
+  Composite index properties (NTS-140): the full composite, declared on one property
+  */
   private compositeIndex: string[] | undefined
 
   setCoalesce(coalesce: string | string[]) {
@@ -219,7 +237,7 @@ export default class PropertySchema {
     return this.coalesce
   }
 
-  setTyped(value: boolean = true) {
+  setTyped(value = true) {
     this.typed = value
   }
 
@@ -275,7 +293,9 @@ export default class PropertySchema {
     return this.entity
   }
 
-  /** Merge the given rules over any previously stored ones */
+  /**
+  Merge the given rules over any previously stored ones
+  */
   setRules(rules: Record<string, unknown>) {
     this.rules = { ...this.rules, ...rules }
   }
@@ -286,29 +306,45 @@ export default class PropertySchema {
 
   // ---- Read-model projection configuration (NTS-135/136/137/138) ----
 
-  /** @RelatedOne / @RelatedMany: relationship type, e.g. 'IN_COURSE' ('A|B' allowed) */
+  /**
+  @RelatedOne / @RelatedMany: relationship type, e.g. 'IN_COURSE' ('A|B' allowed)
+  */
   private relationshipType: string | undefined
 
-  /** @RelatedOne / @RelatedMany: field subset; undefined = full-entity eager loading */
+  /**
+  @RelatedOne / @RelatedMany: field subset; undefined = full-entity eager loading
+  */
   private fields: string[] | undefined
 
-  /** @RelatedOne / @RelatedMany / @RelationshipCount / @RelationshipExists direction */
-  private projectionDirection: import('../query').Direction | undefined
+  /**
+  @RelatedOne / @RelatedMany / @RelationshipCount / @RelationshipExists direction
+  */
+  private projectionDirection: import('../query/index.js').Direction | undefined
 
-  /** WHERE fragment inside COUNT { } / EXISTS { }; `node` is the target node */
+  /**
+  WHERE fragment inside COUNT { } / EXISTS { }; `node` is the target node
+  */
   private where: string | undefined
 
-  /** @RelationshipCount variable-length hop bounds */
+  /**
+  @RelationshipCount variable-length hop bounds
+  */
   private minHops: number | undefined
   private maxHops: number | undefined
 
-  /** @LabelPresent: the label tested for */
+  /**
+  @LabelPresent: the label tested for
+  */
   private label: string | undefined
 
-  /** @Expression: raw Cypher projected into the read query */
+  /**
+  @Expression: raw Cypher projected into the read query
+  */
   private expression: string | undefined
 
-  /** @Computed: derives the value in TypeScript after hydration */
+  /**
+  @Computed: derives the value in TypeScript after hydration
+  */
   private compute: ((entity: any) => unknown) | undefined
 
   setRelationshipType(relationshipType: string) {
@@ -327,11 +363,11 @@ export default class PropertySchema {
     return this.fields
   }
 
-  setDirection(direction: import('../query').Direction) {
+  setDirection(direction: import('../query/index.js').Direction) {
     this.projectionDirection = direction
   }
 
-  getDirection(): import('../query').Direction | undefined {
+  getDirection(): import('../query/index.js').Direction | undefined {
     return this.projectionDirection
   }
 
@@ -384,7 +420,9 @@ export default class PropertySchema {
   }
 }
 
-/** True when the property projects a read-model value (see ProjectedPropertyTypes) */
+/**
+True when the property projects a read-model value (see ProjectedPropertyTypes)
+*/
 export function isProjectedProperty(property: PropertySchema): boolean {
   return ProjectedPropertyTypes.includes(property.getType())
 }

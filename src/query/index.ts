@@ -1,23 +1,19 @@
-import Builder from './Builder'
-
-export default Builder
-export { Builder }
-export type { EntityMatchCriteria } from './Builder'
-export { default as Statement } from './Statement'
-export { default as Match } from './Match'
-export { default as Order } from './Order'
-export { default as Property } from './Property'
-export { default as Relationship } from './Relationship'
-export { default as Where } from './Where'
-export { default as WhereBetween } from './WhereBetween'
-export { default as WhereId } from './WhereId'
-export { default as WhereNull } from './WhereNull'
-export { default as WhereRaw } from './WhereRaw'
-export { default as WhereStatement } from './WhereStatement'
-export { default as LabelPredicate } from './LabelPredicate'
-export { default as WithStatement } from './WithStatement'
-export { default as WithDistinctStatement } from './WithDistinctStatement'
-export { Direction, toDirection } from './Direction'
+export type { EntityMatchCriteria } from './Builder.js'
+export { default as Statement } from './Statement.js'
+export { default as Match } from './Match.js'
+export { default as Order } from './Order.js'
+export { default as Property } from './Property.js'
+export { default as Relationship } from './Relationship.js'
+export { default as Where } from './Where.js'
+export { default as WhereBetween } from './WhereBetween.js'
+export { default as WhereId } from './WhereId.js'
+export { default as WhereNull } from './WhereNull.js'
+export { default as WhereRaw } from './WhereRaw.js'
+export { default as WhereStatement } from './WhereStatement.js'
+export { default as LabelPredicate } from './LabelPredicate.js'
+export { default as WithStatement } from './WithStatement.js'
+export { default as WithDistinctStatement } from './WithDistinctStatement.js'
+export { Direction, toDirection } from './Direction.js'
 export {
   EAGER_ID,
   EAGER_LABELS,
@@ -26,4 +22,6 @@ export {
   eagerNode,
   eagerPattern,
   eagerRelationship,
-} from './eager-utils'
+} from './eager-utils.js'
+
+export {default, default as Builder} from './Builder.js'

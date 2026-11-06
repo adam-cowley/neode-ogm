@@ -1,15 +1,15 @@
 /**
- * The general workflow from the original neode-example, ported to neode-ogm.
- *
- * Original: https://github.com/adam-cowley/neode-example/blob/master/index.js
- *
- * Differences from the original (see example/README.md for the full mapping):
- *  - neode.model('Movie').mergeOn(match, set)  →  neode.mergeOn(neode.model('Movie'), match, set)
- *  - neode.merge('Director', {directed: [movie]}) works the same — nested
- *    entity instances create the relationships through the save path
- *  - adulthood.id() → adulthood._id (the elementId, hydrated via @InternalId
- *    or the map model's implicit _id)
- */
+The general workflow from the original neode-example, ported to neode-ogm.
+
+Original: https://github.com/adam-cowley/neode-example/blob/master/index.js
+
+Differences from the original (see example/README.md for the full mapping):
+ - neode.model('Movie').mergeOn(match, set)  →  neode.mergeOn(neode.model('Movie'), match, set)
+ - neode.merge('Director', {directed: [movie]}) works the same — nested
+   entity instances create the relationships through the save path
+ - adulthood.id() → adulthood._id (the elementId, hydrated via @InternalId
+   or the map model's implicit _id)
+*/
 
 // Load neode-ogm with the variables stored in .env
 const neode = require('../../dist')
@@ -74,8 +74,8 @@ neode
     console.log('Created #', adulthood._id) // eslint-disable-line no-console
     console.log(JSON.stringify(adulthood.toJson(), null, 2)) // eslint-disable-line no-console
   })
-  .catch((e) => {
-    console.log('Error :(', e.message, e.details) // eslint-disable-line no-console
+  .catch((error) => {
+    console.log('Error :(', error.message, error.details) // eslint-disable-line no-console
   })
   .then(() => {
     // Close all connections to the graph

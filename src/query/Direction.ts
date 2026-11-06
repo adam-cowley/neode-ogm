@@ -1,35 +1,40 @@
 /**
- * Direction of a relationship pattern.
- *
- * Accepts the legacy case-insensitive 'IN' / 'OUT' / 'BOTH' spellings
- * anywhere a direction is taken.
- */
-export enum Direction {
-  INCOMING = 'INCOMING',
-  OUTGOING = 'OUTGOING',
-  BOTH = 'BOTH',
-}
+Direction of a relationship pattern.
+
+Accepts the legacy case-insensitive 'IN' / 'OUT' / 'BOTH' spellings
+anywhere a direction is taken.
+*/
+export const Direction = {
+  INCOMING: 'INCOMING',
+  OUTGOING: 'OUTGOING',
+  BOTH: 'BOTH',
+} as const
+
+export type Direction = (typeof Direction)[keyof typeof Direction]
 
 /**
- * Normalise a direction given in any supported spelling to a Direction.
- * Unknown values fall back to BOTH (the most permissive direction),
- * matching neode's behaviour of never throwing on a bad direction.
- */
+Normalise a direction given in any supported spelling to a Direction.
+Unknown values fall back to BOTH (the most permissive direction),
+matching neode's behaviour of never throwing on a bad direction.
+*/
 export function toDirection(value: string | Direction | undefined | null): Direction {
   if (!value) {
     return Direction.BOTH
   }
 
-  switch (String(value).toUpperCase()) {
+  switch (value.toUpperCase()) {
     case Direction.INCOMING:
-    case 'IN':
+    case 'IN': {
       return Direction.INCOMING
+    }
 
     case Direction.OUTGOING:
-    case 'OUT':
+    case 'OUT': {
       return Direction.OUTGOING
+    }
 
-    default:
+    default: {
       return Direction.BOTH
+    }
   }
 }

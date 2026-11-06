@@ -1,19 +1,21 @@
-import { Newable } from './meta/newable'
-import neo4j, { Config } from 'neo4j-driver'
+import type { Newable } from './meta/newable.js'
+import neo4j, { type Config } from 'neo4j-driver'
 import dotenv from 'dotenv'
-import { Neo4jConnectionProvider } from './driver/neo4j'
-import { GraphNode, GraphRelationship } from './driver/types'
-import { getModel } from './meta'
-import EntitySchema, { EntityType } from './meta/entity/entity-schema'
-import RelationshipPropertySchema from './meta/relationship-property-schema'
-import PropertySchema, { PropertyType, isProjectedProperty } from './meta/property-schema'
-import Neode from './neode.service'
-import { EAGER_ID, EAGER_LABELS, EAGER_TYPE } from './query/eager-utils'
-import { ELEMENT_ID } from './constants'
-import { Direction } from './query'
-import { applyEntityMethods } from './entity-methods'
+import { Neo4jConnectionProvider as Neo4indexConnectionProvider } from './driver/neo4j.js'
+import type { GraphNode, GraphRelationship } from './driver/types.js'
+import { getModel } from './meta/index.js'
+import type EntitySchema from './meta/entity/entity-schema.js';
+import { EntityType } from './meta/entity/entity-schema.js'
+import type RelationshipPropertySchema from './meta/relationship-property-schema.js'
+import type PropertySchema from './meta/property-schema.js';
+import { PropertyType, isProjectedProperty } from './meta/property-schema.js'
+import Neode from './neode.service.js'
+import { EAGER_ID, EAGER_LABELS, EAGER_TYPE } from './query/eager-utils.js'
+import { ELEMENT_ID } from './constants.js'
+import { Direction } from './query/index.js'
+import { applyEntityMethods } from './entity-methods.js'
 
-const LOG_LEVELS = ['error', 'warn', 'info', 'debug']
+const LOG_LEVELS = new Set(['error', 'warn', 'info', 'debug'])
 
 // The full TrustStrategy union in neo4j-driver 6 (legacy driver 4/5 values
 // such as TRUST_SIGNED_CERTIFICATES are no longer part of it)
@@ -31,34 +33,34 @@ export interface EnvConnectionConfig {
   enterprise: boolean
 }
 
-function warnIgnoring(envVar: string, reason: string): void {
-  console.warn(`fromEnv: ignoring ${envVar} — ${reason}`)
+function warnIgnoring(environmentVariable: string, reason: string): void {
+  console.warn(`fromEnv: ignoring ${environmentVariable} — ${reason}`)
 }
 
 /**
- * Pure process-env → connection mapping used by fromEnv().
- *
- * `driverConfig` is merged verbatim over the env-derived config — any option
- * neo4j.driver accepts can be passed even when no NEO4J_* variable maps to
- * it. Explicit values win over env-derived ones; `undefined` entries are
- * skipped so a programmatically-built config does not clobber env values.
- *
- * Audited against the neo4j-driver 6 config surface:
- * - `encrypted` / `trust` / `trustedCertificates` still exist, but the legacy
- *   `TRUST_SIGNED_CERTIFICATES` value was dropped from `TrustStrategy`
- *   (passed through with a warning).
- * - `knownHosts` and `loadBalancingStrategy` were removed entirely —
- *   warn + ignore.
- * - `logging` must be a `{ level, logger }` object; a raw string throws
- *   "Illegal logger function" at driver construction.
- */
+Pure process-env → connection mapping used by fromEnv().
+
+`driverConfig` is merged verbatim over the env-derived config — any option
+neo4j.driver accepts can be passed even when no NEO4J_* variable maps to
+it. Explicit values win over env-derived ones; `undefined` entries are
+skipped so a programmatically-built config does not clobber env values.
+
+Audited against the neo4j-driver 6 config surface:
+- `encrypted` / `trust` / `trustedCertificates` still exist, but the legacy
+  `TRUST_SIGNED_CERTIFICATES` value was dropped from `TrustStrategy`
+  (passed through with a warning).
+- `knownHosts` and `loadBalancingStrategy` were removed entirely —
+  warn + ignore.
+- `logging` must be a `{ level, logger }` object; a raw string throws
+  "Illegal logger function" at driver construction.
+*/
 export function configFromEnv(
-  env: NodeJS.ProcessEnv,
+  environment: NodeJS.ProcessEnv,
   driverConfig: Config = {},
 ): EnvConnectionConfig {
-  const protocol = env.NEO4J_PROTOCOL || 'bolt'
-  const host = env.NEO4J_HOST || 'localhost'
-  const port = env.NEO4J_PORT || '7687'
+  const protocol = environment['NEO4J_PROTOCOL'] || 'bolt'
+  const host = environment['NEO4J_HOST'] || 'localhost'
+  const port = environment['NEO4J_PORT'] || '7687'
 
   const config: Record<string, unknown> = {}
 
@@ -70,30 +72,30 @@ export function configFromEnv(
     NEO4J_CONNECTION_ACQUISITION_TIMEOUT: 'connectionAcquisitionTimeout',
   }
 
-  Object.entries(ints).forEach(([setting, key]) => {
-    if (Object.hasOwn(env, setting)) {
-      config[key] = parseInt(env[setting] as string, 10)
+  for (const [setting, key] of Object.entries(ints)) {
+    if (Object.hasOwn(environment, setting)) {
+      config[key] = parseInt(environment[setting]!, 10)
     }
-  })
-
-  if (Object.hasOwn(env, 'NEO4J_DISABLE_LOSSLESS_INTEGERS')) {
-    config.disableLosslessIntegers = env.NEO4J_DISABLE_LOSSLESS_INTEGERS === 'true'
   }
 
-  if (Object.hasOwn(env, 'NEO4J_ENCRYPTION')) {
-    const value = env.NEO4J_ENCRYPTION as string
+  if (Object.hasOwn(environment, 'NEO4J_DISABLE_LOSSLESS_INTEGERS')) {
+    config['disableLosslessIntegers'] = environment['NEO4J_DISABLE_LOSSLESS_INTEGERS'] === 'true'
+  }
+
+  if (Object.hasOwn(environment, 'NEO4J_ENCRYPTION')) {
+    const value = environment['NEO4J_ENCRYPTION']!
 
     if (value === 'true' || value === 'ENCRYPTION_ON') {
-      config.encrypted = true
+      config['encrypted'] = true
     } else if (value === 'false' || value === 'ENCRYPTION_OFF') {
-      config.encrypted = false
+      config['encrypted'] = false
     } else {
       warnIgnoring('NEO4J_ENCRYPTION', `unknown value "${value}"`)
     }
   }
 
-  if (Object.hasOwn(env, 'NEO4J_TRUST')) {
-    const value = env.NEO4J_TRUST as string
+  if (Object.hasOwn(environment, 'NEO4J_TRUST')) {
+    const value = environment['NEO4J_TRUST']!
 
     if (!TRUST_STRATEGIES.includes(value)) {
       console.warn(
@@ -101,34 +103,34 @@ export function configFromEnv(
       )
     }
 
-    config.trust = value
+    config['trust'] = value
   }
 
-  if (Object.hasOwn(env, 'NEO4J_TRUSTED_CERTIFICATES')) {
-    config.trustedCertificates = (env.NEO4J_TRUSTED_CERTIFICATES as string).split(',')
+  if (Object.hasOwn(environment, 'NEO4J_TRUSTED_CERTIFICATES')) {
+    config['trustedCertificates'] = (environment['NEO4J_TRUSTED_CERTIFICATES']!).split(',')
   }
 
-  if (Object.hasOwn(env, 'NEO4J_LOGGING_LEVEL')) {
-    const level = env.NEO4J_LOGGING_LEVEL as string
+  if (Object.hasOwn(environment, 'NEO4J_LOGGING_LEVEL')) {
+    const level = environment['NEO4J_LOGGING_LEVEL']!
 
-    if (LOG_LEVELS.includes(level)) {
-      config.logging = neo4j.logging.console(level as 'error' | 'warn' | 'info' | 'debug')
+    if (LOG_LEVELS.has(level)) {
+      config['logging'] = neo4j.logging.console(level as 'error' | 'warn' | 'info' | 'debug')
     } else {
       warnIgnoring('NEO4J_LOGGING_LEVEL', `unknown level "${level}"`)
     }
   }
   // shortcut: removed in neo4j-driver 6 — warn + ignore, upgrade if the driver reintroduces them
-  ;['NEO4J_KNOWN_HOSTS', 'NEO4J_LOAD_BALANCING_STRATEGY'].forEach((setting) => {
-    if (Object.hasOwn(env, setting)) {
+  ;for (const setting of ['NEO4J_KNOWN_HOSTS', 'NEO4J_LOAD_BALANCING_STRATEGY']) {
+    if (Object.hasOwn(environment, setting)) {
       warnIgnoring(setting, 'removed in neo4j-driver 6')
     }
-  })
+  }
 
   return {
-    uri: env.NEO4J_URI || `${protocol}://${host}:${port}`,
+    uri: environment['NEO4J_URI'] || `${protocol}://${host}:${port}`,
     auth:
-      env.NEO4J_USERNAME && env.NEO4J_PASSWORD
-        ? neo4j.auth.basic(env.NEO4J_USERNAME, env.NEO4J_PASSWORD)
+      environment['NEO4J_USERNAME'] && environment['NEO4J_PASSWORD']
+        ? neo4j.auth.basic(environment['NEO4J_USERNAME'], environment['NEO4J_PASSWORD'])
         : undefined,
     config: {
       ...config,
@@ -136,18 +138,18 @@ export function configFromEnv(
         Object.entries(driverConfig).filter(([, value]) => value !== undefined),
       ),
     },
-    database: env.NEO4J_DATABASE || 'neo4j',
-    enterprise: env.NEO4J_ENTERPRISE === 'true',
+    database: environment['NEO4J_DATABASE'] || 'neo4j',
+    enterprise: environment['NEO4J_ENTERPRISE'] === 'true',
   }
 }
 
 /**
- * Load a .env file (dotenv does not clobber variables already set in
- * process.env), map the NEO4J_* variables to a connection config and
- * construct the neo4j driver. `driverConfig` — anything neo4j.driver
- * accepts, e.g. `disableLosslessIntegers: true` — is forwarded verbatim,
- * merged over the env-derived values.
- */
+Load a .env file (dotenv does not clobber variables already set in
+process.env), map the NEO4J_* variables to a connection config and
+construct the neo4j driver. `driverConfig` — anything neo4j.driver
+accepts, e.g. `disableLosslessIntegers: true` — is forwarded verbatim,
+merged over the env-derived values.
+*/
 export function fromEnv(driverConfig: Config = {}): Neode {
   // Load vars from .env — dotenv does not clobber variables that are
   // already set in process.env
@@ -157,7 +159,7 @@ export function fromEnv(driverConfig: Config = {}): Neode {
 
   const driver = neo4j.driver(uri, auth, config)
 
-  return new Neode(new Neo4jConnectionProvider(driver, database), enterprise)
+  return new Neode(new Neo4indexConnectionProvider(driver, database), enterprise)
 }
 
 export interface EagerNode {
@@ -173,28 +175,28 @@ export interface EagerRelationship {
 }
 
 /**
- * An eager projection map, as produced by the eagerNode/eagerPattern Cypher
- * builders: node or relationship properties inline, plus the __EAGER_ID__
- * (and __EAGER_LABELS__ / __EAGER_TYPE__) markers, plus one key per eager
- * relationship holding the nested projection value(s).
- */
+An eager projection map, as produced by the eagerNode/eagerPattern Cypher
+builders: node or relationship properties inline, plus the __EAGER_ID__
+(and __EAGER_LABELS__ / __EAGER_TYPE__) markers, plus one key per eager
+relationship holding the nested projection value(s).
+*/
 export type EagerProjectionMap = Record<string, unknown>
 
 /**
- * Eager projections are plain maps carrying the __EAGER_ID__ marker;
- * driver node values never do.
- */
+Eager projections are plain maps carrying the __EAGER_ID__ marker;
+driver node values never do.
+*/
 function isEagerProjectionMap(value: unknown): value is EagerProjectionMap {
   return typeof value === 'object' && value !== null && !Array.isArray(value) && EAGER_ID in value
 }
 
 /**
- * Read-side property hydration (NTS-139): a stored/projected `null` hydrates
- * as `undefined` — a Neo4j property is either present or absent, null never
- * persists, so `undefined` is the honest shape for "not set" (graphacademy's
- * `?? undefined` convention). A `coalesce` config then supplies fallbacks:
- * a literal, or sibling property names whose first non-null value wins.
- */
+Read-side property hydration (NTS-139): a stored/projected `null` hydrates
+as `undefined` — a Neo4j property is either present or absent, null never
+persists, so `undefined` is the honest shape for "not set" (graphacademy's
+`?? undefined` convention). A `coalesce` config then supplies fallbacks:
+a literal, or sibling property names whose first non-null value wins.
+*/
 function hydrateScalarProperty(property: PropertySchema, values: Record<string, unknown>): unknown {
   const value = values[property.getKey()]
 
@@ -244,19 +246,19 @@ export function hydrateNode<T>(
   let eagerValues: Record<string, unknown>
 
   if (isProjection) {
-    elementId = (node as EagerProjectionMap)[EAGER_ID] as string | undefined
+    elementId = (node)[EAGER_ID] as string | undefined
 
     // Everything except the reserved markers and the eager relationship
     // keys is a node property
     const reserved = new Set<string>([EAGER_ID, EAGER_LABELS, EAGER_TYPE])
-    targetSchema.getRelationships().forEach((rel) => reserved.add(rel.getKey()))
+    for (const rel of targetSchema.getRelationships()) {reserved.add(rel.getKey())}
 
     properties = Object.fromEntries(Object.entries(node).filter(([key]) => !reserved.has(key)))
 
     eagerValues = node
   } else {
-    elementId = (node as GraphNode).elementId
-    properties = (node as GraphNode).properties
+    elementId = (node).elementId
+    properties = (node).properties
     eagerValues = eager
   }
 
@@ -267,21 +269,24 @@ export function hydrateNode<T>(
     Object.defineProperty(entity, ELEMENT_ID, { value: elementId })
   }
 
-  targetSchema.getProperties().forEach((property) => {
+  for (const property of targetSchema.getProperties()) {
     switch (property.getType()) {
-      case PropertyType.INTERNAL_ID:
+      case PropertyType.INTERNAL_ID: {
         entity[property.getKey()] = elementId
         break
+      }
 
-      case PropertyType.ALL_PROPERTIES:
+      case PropertyType.ALL_PROPERTIES: {
         entity[property.getKey()] = properties
         break
+      }
 
-      case PropertyType.NODE:
+      case PropertyType.NODE: {
         entity[property.getKey()] = node
         break
+      }
 
-      default:
+      default: {
         // Projected read-model values keep their raw shape — the
         // projection layer post-processes them and a related-one
         // miss stays null; stored scalars get hydration defaults
@@ -289,14 +294,15 @@ export function hydrateNode<T>(
           ? properties[property.getKey()]
           : hydrateScalarProperty(property, properties)
         break
+      }
     }
-  })
+  }
 
   // Hydrate Eager Relationships
-  targetSchema.getRelationships().forEach((rel) => {
+  for (const rel of targetSchema.getRelationships()) {
     const key = rel.getKey()
 
-    if (!Object.hasOwn(eagerValues, key) || !eagerValues[key]) return
+    if (!Object.hasOwn(eagerValues, key) || !eagerValues[key]) {continue}
 
     const value = eagerValues[key]
 
@@ -319,19 +325,19 @@ export function hydrateNode<T>(
 
     if (rel.getMany()) {
       entity[key] = hydrated
-    } else if (hydrated.length) {
+    } else if (hydrated.length > 0) {
       entity[key] = hydrated[0]
     }
-  })
+  }
 
   return entity as unknown as T
 }
 
 /**
- * Hydrate one eager value for a node-entity target. Projection maps hydrate
- * recursively; the legacy hand-built shape ({rel, start, end, other}) hydrates
- * from its `other` node.
- */
+Hydrate one eager value for a node-entity target. Projection maps hydrate
+recursively; the legacy hand-built shape ({rel, start, end, other}) hydrates
+from its `other` node.
+*/
 function hydrateEagerTargetNode(
   targetSchema: EntitySchema,
   targetEntity: Newable,
@@ -374,19 +380,21 @@ export function hydrateRelationship<T>(
       ),
     )
 
-    targetSchema.getProperties().forEach((property) => {
+    for (const property of targetSchema.getProperties()) {
       const key = property.getKey()
 
       switch (property.getType()) {
-        case PropertyType.INTERNAL_ID:
+        case PropertyType.INTERNAL_ID: {
           entity[key] = record[EAGER_ID]
           break
+        }
 
-        case PropertyType.RELATIONSHIP:
+        case PropertyType.RELATIONSHIP: {
           // A projection carries no driver relationship object;
           // the raw map is the closest equivalent
           entity[key] = record
           break
+        }
 
         case PropertyType.START_NODE:
         case PropertyType.END_NODE:
@@ -394,10 +402,10 @@ export function hydrateRelationship<T>(
           // The node at the far end of the pattern is the one
           // projected in the map; the near node is the entity
           // this relationship hangs off
-          const incoming = direction === Direction.INCOMING
+          const isIncoming = direction === Direction.INCOMING
           const isFar =
             property.getType() === PropertyType.OTHER_NODE ||
-            (property.getType() === PropertyType.START_NODE ? incoming : !incoming)
+            (property.getType() === PropertyType.START_NODE ? isIncoming : !isIncoming)
 
           if (!isFar) {
             entity[key] = parent
@@ -414,29 +422,32 @@ export function hydrateRelationship<T>(
           break
         }
 
-        default:
+        default: {
           entity[key] = hydrateScalarProperty(property, properties)
           break
+        }
       }
-    })
+    }
 
     return entity as unknown as T
   }
 
   // Legacy hand-built shape: { rel, start, end, other }
-  const { rel: graphRel, start, end, other } = relObject as EagerRelationship
+  const { rel: graphRel, start, end, other } = relObject
 
-  targetSchema.getProperties().forEach((property) => {
+  for (const property of targetSchema.getProperties()) {
     let value: unknown
 
     switch (property.getType()) {
-      case PropertyType.INTERNAL_ID:
+      case PropertyType.INTERNAL_ID: {
         value = graphRel.elementId
         break
+      }
 
-      case PropertyType.RELATIONSHIP:
+      case PropertyType.RELATIONSHIP: {
         value = graphRel
         break
+      }
 
       case PropertyType.START_NODE:
       case PropertyType.END_NODE:
@@ -469,23 +480,24 @@ export function hydrateRelationship<T>(
         break
       }
 
-      default:
+      default: {
         value = hydrateScalarProperty(property, graphRel.properties)
         break
+      }
     }
 
     entity[property.getKey()] = value
-  })
+  }
 
   return entity as unknown as T
 }
 
 export function setPropertyInBuilder(
-  builder: import('./query').default,
+  builder: import('./query/index.js').default,
   alias: string,
   property: PropertySchema,
   value: unknown,
-): import('./query').default {
+): import('./query/index.js').default {
   if (value === undefined || value === null) {
     return builder.delete(`${alias}.${property.getKey()}`)
   }
@@ -521,9 +533,9 @@ export function setPropertyInBuilder(
 
   // Always set
   if (
-    (property.getOnCreateSet() === false && property.getOnMatchSet() === false) ||
-    property.getAlwaysSet() === true ||
-    property.isUnique() === true
+    (!property.getOnCreateSet() && !property.getOnMatchSet()) ||
+    property.getAlwaysSet() ||
+    property.isUnique()
   ) {
     builder.set(set, value)
   }
@@ -532,15 +544,15 @@ export function setPropertyInBuilder(
 }
 
 /**
- * The elementId carried by a hydrated entity: the runtime stash written by
- * hydration (every persisted entity has one), or the deprecated @InternalId
- * property for entities hydrated before it existed. Undefined for entities
- * that have never been persisted.
- */
+The elementId carried by a hydrated entity: the runtime stash written by
+hydration (every persisted entity has one), or the deprecated @InternalId
+property for entities hydrated before it existed. Undefined for entities
+that have never been persisted.
+*/
 export function elementIdOfEntity(schema: EntitySchema, entity: object): string | undefined {
   const stashed = (entity as Record<symbol, unknown>)[ELEMENT_ID]
 
-  if (typeof stashed === 'string' && stashed.length) {
+  if (typeof stashed === 'string' && stashed.length > 0) {
     return stashed
   }
 
@@ -552,15 +564,15 @@ export function elementIdOfEntity(schema: EntitySchema, entity: object): string 
     ? (entity as Record<string, unknown>)[internalId.getKey()]
     : undefined
 
-  return typeof viaProperty === 'string' && viaProperty.length ? viaProperty : undefined
+  return typeof viaProperty === 'string' && viaProperty.length > 0 ? viaProperty : undefined
 }
 
 /**
- * Match criteria for an entity in a write query: prefer the hydrated
- * elementId (stable, always present on persisted entities), falling back to
- * the primary key property value (neode matched instances by internal id;
- * elementId is its modern, portable equivalent).
- */
+Match criteria for an entity in a write query: prefer the hydrated
+elementId (stable, always present on persisted entities), falling back to
+the primary key property value (neode matched instances by internal id;
+elementId is its modern, portable equivalent).
+*/
 export function matchCriteriaForEntity(
   schema: EntitySchema,
   entity: object,
@@ -614,7 +626,7 @@ export function getValuesAsRecord(
           }
         }
 
-        return undefined
+        return
       })
       .filter((entry) => entry !== undefined),
   )
@@ -633,18 +645,14 @@ export function getValueOrDefault(
 
   const defaultValue = property.getDefaultValue()
 
-  if (typeof defaultValue === 'function') {
-    return defaultValue(model, schema)
-  }
-
-  return defaultValue
+  return typeof defaultValue === 'function' ? defaultValue(model, schema) : defaultValue;
 }
 
 /**
- * Spatial Reference System Identifiers used by Neo4j for point properties
- *
- * @see https://neo4j.com/docs/cypher/current/syntax/spatial/
- */
+Spatial Reference System Identifiers used by Neo4j for point properties
+
+@see https://neo4j.com/docs/cypher/current/syntax/spatial/
+*/
 const SRID = {
   CARTESIAN_2D: 7203,
   CARTESIAN_3D: 9157,
@@ -674,11 +682,11 @@ function isDriverValue(value: unknown): boolean {
 }
 
 /**
- * Convert a value into a Neo4j temporal value. Strings are parsed by the
- * driver (exact, timezone-safe), numbers are treated as epoch milliseconds
- * and JavaScript Dates are converted with the driver's fromStandardDate().
- * Any other value is returned unchanged.
- */
+Convert a value into a Neo4j temporal value. Strings are parsed by the
+driver (exact, timezone-safe), numbers are treated as epoch milliseconds
+and JavaScript Dates are converted with the driver's fromStandardDate().
+Any other value is returned unchanged.
+*/
 function convertTemporal(
   value: unknown,
   fromString: (value: string) => unknown,
@@ -716,11 +724,7 @@ function convertPoint(value: unknown): unknown {
       )
     }
 
-    if (isNumber(z)) {
-      return new neo4j.Point(SRID.CARTESIAN_3D, x, y, z)
-    }
-
-    return new neo4j.Point(SRID.CARTESIAN_2D, x, y)
+    return isNumber(z) ? new neo4j.Point(SRID.CARTESIAN_3D, x, y, z) : new neo4j.Point(SRID.CARTESIAN_2D, x, y);
   }
 
   // WGS 84 (geographic) coordinates: Neo4j stores longitude as x, latitude as y
@@ -731,11 +735,7 @@ function convertPoint(value: unknown): unknown {
       )
     }
 
-    if (isNumber(height)) {
-      return new neo4j.Point(SRID.WGS_84_3D, longitude, latitude, height)
-    }
-
-    return new neo4j.Point(SRID.WGS_84_2D, longitude, latitude)
+    return isNumber(height) ? new neo4j.Point(SRID.WGS_84_3D, longitude, latitude, height) : new neo4j.Point(SRID.WGS_84_2D, longitude, latitude);
   }
 
   throw new TypeError(
@@ -805,73 +805,79 @@ function convertSingleValue(value: unknown, type: PropertyType): unknown {
   }
 
   switch (type) {
-    case PropertyType.DATE:
+    case PropertyType.DATE: {
       return convertTemporal(
         value,
-        (str) => neo4j.Date.fromString(str),
+        (string_) => neo4j.Date.fromString(string_),
         (date) => neo4j.Date.fromStandardDate(date),
       )
+    }
 
-    case PropertyType.TIME:
+    case PropertyType.TIME: {
       return convertTemporal(
         value,
-        (str) => neo4j.Time.fromString(str),
+        (string_) => neo4j.Time.fromString(string_),
         (date) => neo4j.Time.fromStandardDate(date),
       )
+    }
 
-    case PropertyType.DATETIME:
+    case PropertyType.DATETIME: {
       return convertTemporal(
         value,
-        (str) => neo4j.DateTime.fromString(str),
+        (string_) => neo4j.DateTime.fromString(string_),
         (date) => neo4j.DateTime.fromStandardDate(date),
       )
+    }
 
-    case PropertyType.LOCALTIME:
+    case PropertyType.LOCALTIME: {
       return convertTemporal(
         value,
-        (str) => neo4j.LocalTime.fromString(str),
+        (string_) => neo4j.LocalTime.fromString(string_),
         (date) => neo4j.LocalTime.fromStandardDate(date),
       )
+    }
 
-    case PropertyType.LOCALDATETIME:
+    case PropertyType.LOCALDATETIME: {
       return convertTemporal(
         value,
-        (str) => neo4j.LocalDateTime.fromString(str),
+        (string_) => neo4j.LocalDateTime.fromString(string_),
         (date) => neo4j.LocalDateTime.fromStandardDate(date),
       )
+    }
 
-    case PropertyType.POINT:
+    case PropertyType.POINT: {
       return convertPoint(value)
+    }
 
-    case PropertyType.DURATION:
+    case PropertyType.DURATION: {
       return convertDuration(value)
+    }
 
-    case PropertyType.INTEGER:
+    case PropertyType.INTEGER: {
       return convertInteger(value)
+    }
 
     case PropertyType.FLOAT:
-    case PropertyType.NUMBER:
+    case PropertyType.NUMBER: {
       return convertFloat(value)
+    }
 
-    default:
+    default: {
       return value
+    }
   }
 }
 
 /**
- * Convert a JavaScript value into the matching Neo4j driver value for the
- * given property. Temporal strings and dates become driver temporal values,
- * points and durations are built from plain objects and numbers are validated
- * and passed through as plain numbers (the driver's Integer type is not used).
- *
- * Arrays are converted element-by-element when the property is an array, and
- * values that need no conversion (strings, booleans, driver values, etc) are
- * returned unchanged.
- */
-export function convertPropertyValue(value: unknown, property: PropertySchema): unknown {
-  if (property.isArray() && Array.isArray(value)) {
-    return value.map((element) => convertSingleValue(element, property.getType()))
-  }
+Convert a JavaScript value into the matching Neo4j driver value for the
+given property. Temporal strings and dates become driver temporal values,
+points and durations are built from plain objects and numbers are validated
+and passed through as plain numbers (the driver's Integer type is not used).
 
-  return convertSingleValue(value, property.getType())
+Arrays are converted element-by-element when the property is an array, and
+values that need no conversion (strings, booleans, driver values, etc) are
+returned unchanged.
+*/
+export function convertPropertyValue(value: unknown, property: PropertySchema): unknown {
+  return property.isArray() && Array.isArray(value) ? value.map((element) => convertSingleValue(element, property.getType())) : convertSingleValue(value, property.getType());
 }

@@ -1,28 +1,28 @@
-import { ConnectionProvider } from '../../driver/types'
-import { ConstraintAction, ConstraintType, SchemaResult, schemaObjectName } from './schema.service'
+import type { ConnectionProvider } from '../../driver/types.js'
+import { ConstraintAction, ConstraintType, type SchemaResult, schemaObjectName } from './schema.service.js'
 
-/** A full-text index to keep installed on the database */
+/**
+A full-text index to keep installed on the database
+*/
 export interface FulltextIndexDefinition {
   label: string
   properties: string[]
-  /** Defaults to `<label>_<props joined by _>_fulltext` */
+  /**
+  Defaults to `<label>_<props joined by _>_fulltext`
+  */
   name?: string
 }
 
 export function fulltextIndexName(definition: FulltextIndexDefinition): string {
-  if (definition.name) {
-    return definition.name
-  }
-
-  return schemaObjectName(
+  return definition.name ? definition.name : schemaObjectName(
     definition.label,
     definition.properties.map((property) => property.toLowerCase()).join('_'),
     ConstraintType.FULLTEXT,
-  )
+  );
 }
 
 export function createFulltextStatement(definition: FulltextIndexDefinition): string {
-  if (!definition.properties.length) {
+  if (definition.properties.length === 0) {
     throw new TypeError(
       `Cannot create a full-text index on ${definition.label}: no properties given`,
     )
@@ -40,25 +40,28 @@ export function dropFulltextStatement(name: string): string {
 }
 
 /**
- * Installs/drops the given full-text index definitions, following the same
- * result-reporting pattern as SchemaService
- */
+Installs/drops the given full-text index definitions, following the same
+result-reporting pattern as SchemaService
+*/
 export default class FulltextIndexService {
-  constructor(
-    private readonly connection: ConnectionProvider,
-    private readonly definitions: FulltextIndexDefinition[],
-  ) {}
+  private readonly connection: ConnectionProvider
+  private readonly definitions: FulltextIndexDefinition[]
 
-  create(): Promise<SchemaResult[]> {
+  constructor(connection: ConnectionProvider, definitions: FulltextIndexDefinition[]) {
+    this.connection = connection
+    this.definitions = definitions
+  }
+
+  async create(): Promise<SchemaResult[]> {
     return this.run(ConstraintAction.CREATE)
   }
 
-  drop(): Promise<SchemaResult[]> {
+  async drop(): Promise<SchemaResult[]> {
     return this.run(ConstraintAction.DROP)
   }
 
-  private run(action: ConstraintAction): Promise<SchemaResult[]> {
-    return Promise.all(this.definitions.map((definition) => this.runOne(action, definition)))
+  private async run(action: ConstraintAction): Promise<SchemaResult[]> {
+    return Promise.all(this.definitions.map(async (definition) => this.runOne(action, definition)))
   }
 
   private async runOne(
@@ -70,11 +73,17 @@ export default class FulltextIndexService {
         ? createFulltextStatement(definition)
         : dropFulltextStatement(fulltextIndexName(definition))
 
+    const property = definition.properties[0]
+
+    if (property === undefined) {
+      throw new Error(`Fulltext definition for ${definition.label} has no properties`)
+    }
+
     const output: SchemaResult = {
       action,
       type: ConstraintType.FULLTEXT,
       label: definition.label,
-      property: definition.properties[0],
+      property,
       properties: definition.properties,
       statement,
       success: false,
@@ -84,8 +93,8 @@ export default class FulltextIndexService {
       await this.connection.run(statement, {}, 'WRITE')
 
       output.success = true
-    } catch (e) {
-      output.error = e as Error
+    } catch (error) {
+      output.error = error as Error
     }
 
     return output

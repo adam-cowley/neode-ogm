@@ -1,5 +1,9 @@
 export default class WhereRaw {
-  constructor(private readonly statement: string) {}
+  private readonly statement: string
+
+  constructor(statement: string) {
+    this.statement = statement
+  }
 
   toString(): string {
     return this.statement

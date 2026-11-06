@@ -1,16 +1,16 @@
 /**
- * A property in a SET clause: `property operator $param`
- * or, inline in a pattern, `property: $param`.
- */
+A property in a SET clause: `property operator $param`
+or, inline in a pattern, `property: $param`.
+*/
 export default class Property {
+  private readonly key: string
   private readonly param: string
+  private readonly operator: string = '='
 
-  constructor(
-    private readonly key: string,
-    param: string,
-    private readonly operator: string = '=',
-  ) {
-    this.param = `$${param}`
+  constructor(key: string, parameter: string, operator = '=') {
+    this.key = key
+    this.param = `$${parameter}`
+    this.operator = operator
   }
 
   toString(): string {

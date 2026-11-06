@@ -1,79 +1,83 @@
-import { EventEmitter } from 'events'
-import { createRequire } from 'module'
-import { readdirSync } from 'fs'
-import { basename, extname, resolve } from 'path'
-import {
+import { EventEmitter } from 'node:events'
+import { createRequire } from 'node:module'
+import { readdirSync } from 'node:fs'
+import { basename, extname, resolve } from 'node:path'
+import type {
   AccessMode,
   ConnectionOptions,
   ConnectionProvider,
   CypherOptions,
   GraphRelationship,
   QueryOutput,
-  QueryParams,
+  QueryParams as QueryParameters,
   Runner,
   TransactionHandle,
-} from './driver/types'
-import { Neo4jConnectionProvider } from './driver/neo4j'
-import { RelateConnectionProvider } from './driver/relate'
-import { instrumentConnectionProvider } from './driver/instrumented'
-import { jsonSafeRecord } from './driver/json-safe'
-import { hydrate } from './hydrate'
-import { setDefaultNeode } from './entity-methods'
-import { getModel, getModels, resolveRepository } from './meta'
-import { Newable } from './meta/newable'
-import EntitySchema from './meta/entity/entity-schema'
-import RelationshipPropertySchema from './meta/relationship-property-schema'
-import { defineModel, extendModel, getModelByName, unknownDefinitionError } from './meta/map-schema'
-import { SchemaDefinition } from './meta/schema-definition.interface'
-import { EventType, NeodeEventHandler } from './common/events'
-import FindService from './services/query/find.service'
-import MergeService, { getMergeFields } from './services/query/merge.service'
-import CreateService from './services/query/create.service'
-import DeleteService, { DeleteOptions } from './services/query/delete.service'
-import DetachService, { DetachResult } from './services/query/detach.service'
-import INeode from './neode.interface'
-import GetService, { OrderSpec } from './services/query/get.service'
-import RelateService from './services/query/relate.service'
-import UpdateService from './services/query/update.service'
-import WithinDistanceService from './services/query/within-distance.service'
-import SchemaService, { SchemaResult } from './services/schema/schema.service'
-import { Repository } from '.'
-import TransactionalService from './transaction/transactional.service'
-import TransactionError, { BatchStatementError } from './transaction/errors'
-import FindByIdService from './services/query/find-by-id.service'
-import { INTERNAL_ID } from './constants'
-import { elementIdOfEntity } from './utils'
-import Builder from './query'
-import { search, ScoredEntity } from './services/query/search.service'
-import { knn, KnnMode } from './services/query/knn.service'
-import { inspectSchema, InspectOptions, SchemaInspection } from './services/schema/inspect.service'
-import FulltextIndexService, { FulltextIndexDefinition } from './services/schema/fulltext.service'
-import VectorIndexService, { VectorIndexDefinition } from './services/schema/vector.service'
-import BulkService, { BulkChunk, BulkOptions } from './services/query/bulk.service'
+} from './driver/types.js'
+import { Neo4jConnectionProvider as Neo4indexConnectionProvider } from './driver/neo4j.js'
+import { RelateConnectionProvider } from './driver/relate.js'
+import { instrumentConnectionProvider } from './driver/instrumented.js'
+import { jsonSafeRecord } from './driver/json-safe.js'
+import { hydrate } from './hydrate.js'
+import { setDefaultNeode } from './entity-methods.js'
+import { getModel, getModels, resolveRepository } from './meta/index.js'
+import type { Newable } from './meta/newable.js'
+import type EntitySchema from './meta/entity/entity-schema.js'
+import type RelationshipPropertySchema from './meta/relationship-property-schema.js'
+import { defineModel, extendModel, getModelByName, unknownDefinitionError } from './meta/map-schema.js'
+import type { SchemaDefinition } from './meta/schema-definition.interface.js'
+import { EventType, type NeodeEventHandler } from './common/events.js'
+import FindService from './services/query/find.service.js'
+import MergeService, { getMergeFields } from './services/query/merge.service.js'
+import CreateService from './services/query/create.service.js'
+import DeleteService, { type DeleteOptions } from './services/query/delete.service.js'
+import DetachService, { type DetachResult } from './services/query/detach.service.js'
+import type INeode from './neode.interface.js'
+import GetService, { type OrderSpec } from './services/query/get.service.js'
+import RelateService from './services/query/relate.service.js'
+import UpdateService from './services/query/update.service.js'
+import WithinDistanceService from './services/query/within-distance.service.js'
+import SchemaService, { type SchemaResult } from './services/schema/schema.service.js'
+import type Repository from './repository/index.js'
+import TransactionalService from './transaction/transactional.service.js'
+import TransactionError, { type BatchStatementError } from './transaction/errors.js'
+import FindByIdService from './services/query/find-by-id.service.js'
+import { INTERNAL_ID } from './constants.js'
+import { elementIdOfEntity } from './utils.js'
+import Builder from './query/index.js'
+import { search, type ScoredEntity } from './services/query/search.service.js'
+import { knn, type KnnMode } from './services/query/knn.service.js'
+import { inspectSchema, type InspectOptions, type SchemaInspection } from './services/schema/inspect.service.js'
+import FulltextIndexService, { type FulltextIndexDefinition } from './services/schema/fulltext.service.js'
+import VectorIndexService, { type VectorIndexDefinition } from './services/schema/vector.service.js'
+import BulkService, { type BulkChunk, type BulkOptions } from './services/query/bulk.service.js'
 import PaginateService, {
-  Page,
-  CursorPage,
-  OffsetPaginateOptions,
-  CursorPaginateOptions,
-} from './services/query/paginate.service'
-import ProjectionService from './projection/projection.service'
-import { hasProjectedProperties } from './projection'
-import { runCypherScript, RunCypherScriptOptions } from './ops'
+  type Page,
+  type CursorPage,
+  type OffsetPaginateOptions,
+  type CursorPaginateOptions,
+} from './services/query/paginate.service.js'
+import ProjectionService from './projection/projection.service.js'
+import { hasProjectedProperties } from './projection/index.js'
+import { runCypherScript, type RunCypherScriptOptions } from './ops/index.js'
 
 export default class Neode implements INeode {
-  private eventEmitter: EventEmitter = new EventEmitter()
+  private readonly eventEmitter: EventEmitter = new EventEmitter()
 
-  private connection: ConnectionProvider
+  private readonly connection: ConnectionProvider
 
-  private database?: string
+  private database: string | undefined
 
-  private defaultRouting?: AccessMode
+  private defaultRouting: AccessMode | undefined
+
+  private enterprise = false
 
   constructor(
     connection: ConnectionProvider,
-    private enterprise: boolean = false,
+    enterprise = false,
     options: ConnectionOptions = {},
   ) {
+    this.enterprise = enterprise
+
     // Every statement — raw and service queries, inside and outside
     // transactions — funnels through this wrapper, the shared chokepoint
     // the query:executed lifecycle event emits from
@@ -89,22 +93,22 @@ export default class Neode implements INeode {
   }
 
   /**
-   * Create a Neode instance over a neo4j-driver Driver
-   * (Neo4j Community / Enterprise, Memgraph, or any Bolt server)
-   */
+  Create a Neode instance over a neo4j-driver Driver
+  (Neo4j Community / Enterprise, Memgraph, or any Bolt server)
+  */
   static forDriver(
     driver: import('neo4j-driver').Driver,
     database?: string,
     enterprise = false,
     options: ConnectionOptions = {},
   ): Neode {
-    return new Neode(new Neo4jConnectionProvider(driver, database), enterprise, options)
+    return new Neode(new Neo4indexConnectionProvider(driver, database), enterprise, options)
   }
 
   /**
-   * Create a Neode instance over an embedded Relate database
-   * (in-memory or file-backed)
-   */
+  Create a Neode instance over an embedded Relate database
+  (in-memory or file-backed)
+  */
   static forRelate(
     database: unknown,
     namespace = 'neo4j',
@@ -135,25 +139,27 @@ export default class Neode implements INeode {
   }
 
   /**
-   * Set the default database for all future statements (neode parity).
-   * A per-call `database` argument wins over this default, which in turn
-   * wins over the provider's own constructor database.
-   */
+  Set the default database for all future statements (neode parity).
+  A per-call `database` argument wins over this default, which in turn
+  wins over the provider's own constructor database.
+  */
   setDatabase(database?: string): void {
     this.database = database
   }
 
   /**
-   * Subscribe to a lifecycle event — see EventType (common/events.ts).
-   * Returns this for chaining.
-   */
+  Subscribe to a lifecycle event — see EventType (common/events.ts).
+  Returns this for chaining.
+  */
   on(event: EventType, handler: NeodeEventHandler): this {
     this.eventEmitter.on(event, handler)
 
     return this
   }
 
-  /** Unsubscribe a previously registered event handler. */
+  /**
+  Unsubscribe a previously registered event handler.
+  */
   off(event: EventType, handler: NeodeEventHandler): this {
     this.eventEmitter.off(event, handler)
 
@@ -179,9 +185,9 @@ export default class Neode implements INeode {
   }
 
   /**
-   * The relationship declared on the schema under the given key
-   * (neode's relateTo resolves the relationship by definition key)
-   */
+  The relationship declared on the schema under the given key
+  (neode's relateTo resolves the relationship by definition key)
+  */
   private requireRelationship(schema: EntitySchema, key: string): RelationshipPropertySchema {
     if (!schema.hasRelationship(key)) {
       throw new Error(
@@ -193,9 +199,9 @@ export default class Neode implements INeode {
   }
 
   /**
-   * Resolve a relationship by its definition KEY, falling back to the
-   * relationship TYPE (neode's relate(from, to, type) accepts either)
-   */
+  Resolve a relationship by its definition KEY, falling back to the
+  relationship TYPE (neode's relate(from, to, type) accepts either)
+  */
   private resolveRelationship(schema: EntitySchema, keyOrType: string): RelationshipPropertySchema {
     if (schema.hasRelationship(keyOrType)) {
       return schema.getRelationship(keyOrType)
@@ -213,49 +219,49 @@ export default class Neode implements INeode {
   }
 
   /**
-   * Run a single statement in an implicit transaction
-   */
-  readCypher(query: string, params: QueryParams = {}, database?: string): Promise<QueryOutput> {
-    return this.connection.run(query, params, 'READ', database ?? this.database)
+  Run a single statement in an implicit transaction
+  */
+  async readCypher(query: string, parameters: QueryParameters = {}, database?: string): Promise<QueryOutput> {
+    return this.connection.run(query, parameters, 'READ', database ?? this.database)
   }
 
-  writeCypher(query: string, params: QueryParams = {}, database?: string): Promise<QueryOutput> {
-    return this.connection.run(query, params, 'WRITE', database ?? this.database)
+  async writeCypher(query: string, parameters: QueryParameters = {}, database?: string): Promise<QueryOutput> {
+    return this.connection.run(query, parameters, 'WRITE', database ?? this.database)
   }
 
   /**
-   * Set the routing used when a query path leaves it open — `cypher()`
-   * without a per-call `routing` option (default READ)
-   */
+  Set the routing used when a query path leaves it open — `cypher()`
+  without a per-call `routing` option (default READ)
+  */
   setDefaultRouting(routing: AccessMode): void {
     this.defaultRouting = routing
   }
 
   /**
-   * The unified raw query escape hatch: run any Cypher statement through
-   * the instance's connection, choosing READ or WRITE per call (`routing`,
-   * falling back to the connection's `defaultRouting`, then READ).
-   *
-   * Rows come back JSON-safe (graph values — Node, Relationship, Path,
-   * Point — serialised to plain structures). With the `hydrate` option the
-   * rows are instead hydrated into entities of the given class, read from
-   * the `alias` column ('this' by default, matching the query builder's
-   * return alias).
-   */
-  cypher(query: string, params?: QueryParams, options?: CypherOptions): Promise<QueryOutput>
+  The unified raw query escape hatch: run any Cypher statement through
+  the instance's connection, choosing READ or WRITE per call (`routing`,
+  falling back to the connection's `defaultRouting`, then READ).
+  
+  Rows come back JSON-safe (graph values — Node, Relationship, Path,
+  Point — serialised to plain structures). With the `hydrate` option the
+  rows are instead hydrated into entities of the given class, read from
+  the `alias` column ('this' by default, matching the query builder's
+  return alias).
+  */
+  cypher(query: string, parameters?: QueryParameters, options?: CypherOptions): Promise<QueryOutput>
   cypher<T>(
     query: string,
-    params: QueryParams | undefined,
-    options: CypherOptions & { hydrate: new (...args: never[]) => T },
+    parameters: QueryParameters | undefined,
+    options: CypherOptions & { hydrate: new (...arguments_: never[]) => T },
   ): Promise<T[]>
   async cypher(
     query: string,
-    params: QueryParams = {},
+    parameters: QueryParameters = {},
     options: CypherOptions = {},
   ): Promise<QueryOutput | unknown[]> {
     const output = await this.connection.run(
       query,
-      params,
+      parameters,
       options.routing ?? this.defaultRouting ?? 'READ',
       options.database ?? this.database,
     )
@@ -265,27 +271,23 @@ export default class Neode implements INeode {
       summary: output.summary,
     }
 
-    if (!options.hydrate) {
-      return rows
-    }
-
-    return hydrate(options.hydrate, rows, options.alias)
+    return options.hydrate ? hydrate(options.hydrate, rows, options.alias) : rows;
   }
 
   /**
-   * The server's execution plan for the given statement (`EXPLAIN`): the
-   * driver's plan tree on backends that produce plans, `undefined` on
-   * those that don't (the embedded Relate engine accepts the keyword but
-   * reports no plan). EXPLAIN never executes the statement.
-   */
+  The server's execution plan for the given statement (`EXPLAIN`): the
+  driver's plan tree on backends that produce plans, `undefined` on
+  those that don't (the embedded Relate engine accepts the keyword but
+  reports no plan). EXPLAIN never executes the statement.
+  */
   async explain(
     query: string,
-    params: QueryParams = {},
+    parameters: QueryParameters = {},
     options: { database?: string } = {},
   ): Promise<unknown> {
     const output = await this.connection.run(
       `EXPLAIN ${query}`,
-      params,
+      parameters,
       'READ',
       options.database ?? this.database,
     )
@@ -294,18 +296,18 @@ export default class Neode implements INeode {
   }
 
   /**
-   * The server's profiled plan for the given statement (`PROFILE`): unlike
-   * EXPLAIN the statement IS executed, so it routes WRITE. `undefined` on
-   * backends that produce no profiles (see explain()).
-   */
+  The server's profiled plan for the given statement (`PROFILE`): unlike
+  EXPLAIN the statement IS executed, so it routes WRITE. `undefined` on
+  backends that produce no profiles (see explain()).
+  */
   async profile(
     query: string,
-    params: QueryParams = {},
+    parameters: QueryParameters = {},
     options: { database?: string } = {},
   ): Promise<unknown> {
     const output = await this.connection.run(
       `PROFILE ${query}`,
-      params,
+      parameters,
       'WRITE',
       options.database ?? this.database,
     )
@@ -314,23 +316,23 @@ export default class Neode implements INeode {
   }
 
   /**
-   * Open an explicit READ transaction
-   */
+  Open an explicit READ transaction
+  */
   async readTransaction(database?: string): Promise<TransactionHandle> {
     return this.connection.beginTransaction('READ', database ?? this.database)
   }
 
   /**
-   * Open an explicit WRITE transaction
-   */
+  Open an explicit WRITE transaction
+  */
   async writeTransaction(database?: string): Promise<TransactionHandle> {
     return this.connection.beginTransaction('WRITE', database ?? this.database)
   }
 
   /**
-   * Open a transaction and return a TransactionalService
-   * (remember to call .commit() or .rollback())
-   */
+  Open a transaction and return a TransactionalService
+  (remember to call .commit() or .rollback())
+  */
   async openReadTransaction(database?: string): Promise<TransactionalService> {
     const handle = await this.readTransaction(database)
 
@@ -338,9 +340,9 @@ export default class Neode implements INeode {
   }
 
   /**
-   * Open a transaction and return a TransactionalService
-   * (remember to call .commit() or .rollback())
-   */
+  Open a transaction and return a TransactionalService
+  (remember to call .commit() or .rollback())
+  */
   async openWriteTransaction(database?: string): Promise<TransactionalService> {
     const handle = await this.writeTransaction(database)
 
@@ -348,8 +350,8 @@ export default class Neode implements INeode {
   }
 
   /**
-   * Run a unit of work within a READ transaction
-   */
+  Run a unit of work within a READ transaction
+  */
   async inReadTransaction<T>(
     work: (tx: TransactionalService) => Promise<T>,
     database?: string,
@@ -358,15 +360,15 @@ export default class Neode implements INeode {
 
     try {
       return await work(tx)
-    } catch (e) {
+    } catch (error) {
       await tx.rollback().catch(() => {})
-      throw e
+      throw error
     }
   }
 
   /**
-   * Run a unit of work within a WRITE transaction
-   */
+  Run a unit of work within a WRITE transaction
+  */
   async inWriteTransaction<T>(
     work: (tx: TransactionalService) => Promise<T>,
     database?: string,
@@ -375,21 +377,21 @@ export default class Neode implements INeode {
 
     try {
       return await work(tx)
-    } catch (e) {
+    } catch (error) {
       await tx.rollback().catch(() => {})
-      throw e
+      throw error
     }
   }
 
   /**
-   * Run a batch of statements within ONE transaction (neode's batch()):
-   * begin, run every statement, then commit. On any failure the transaction
-   * is rolled back and a TransactionError is thrown, carrying the
-   * per-statement errors (aligned with the batch, null where a statement
-   * succeeded), the partial results and the failed statements' details.
-   */
+  Run a batch of statements within ONE transaction (neode's batch()):
+  begin, run every statement, then commit. On any failure the transaction
+  is rolled back and a TransactionError is thrown, carrying the
+  per-statement errors (aligned with the batch, null where a statement
+  succeeded), the partial results and the failed statements' details.
+  */
   async batch(
-    queries: Array<string | { query: string; params?: QueryParams }>,
+    queries: (string | { query: string; params?: QueryParameters })[],
     database?: string,
   ): Promise<QueryOutput[]> {
     const tx = await this.connection.beginTransaction('WRITE', database ?? this.database)
@@ -401,19 +403,19 @@ export default class Neode implements INeode {
     // Every statement is attempted, so the error report covers the batch
     for (const [index, entry] of queries.entries()) {
       const query = typeof entry === 'string' ? entry : entry.query
-      const params = (typeof entry === 'string' ? {} : entry.params) ?? {}
+      const parameters = (typeof entry === 'string' ? {} : entry.params) ?? {}
 
       try {
-        results.push(await tx.run(query, params))
+        results.push(await tx.run(query, parameters))
         errors.push(null)
       } catch (error) {
-        const failed: BatchStatementError = { index, query, params, error }
+        const failed: BatchStatementError = { index, query, params: parameters, error }
         errors.push(failed)
         details.push(failed)
       }
     }
 
-    if (details.length) {
+    if (details.length > 0) {
       await tx.rollback().catch(() => {})
 
       throw new TransactionError(errors, results, details)
@@ -425,35 +427,35 @@ export default class Neode implements INeode {
   }
 
   /**
-   * Run statements to create the schema
-   */
-  installSchema(): Promise<SchemaResult[]> {
+  Run statements to create the schema
+  */
+  async installSchema(): Promise<SchemaResult[]> {
     const service = new SchemaService(this.connection, this.enterprise)
 
     return service.create()
   }
 
   /**
-   * Run statements to drop the schema
-   */
-  dropSchema(): Promise<SchemaResult[]> {
+  Run statements to drop the schema
+  */
+  async dropSchema(): Promise<SchemaResult[]> {
     const service = new SchemaService(this.connection, this.enterprise)
 
     return service.drop()
   }
 
   /**
-   * Create a Repository
-   */
+  Create a Repository
+  */
   getRepository<Entity>(
-    entity: new (...args: never[]) => Entity,
+    entity: new (...arguments_: never[]) => Entity,
     database?: string,
   ): Repository<Entity> {
     return resolveRepository(this, entity, database)
   }
 
   async find<T>(
-    constructor: new (...args: never[]) => T,
+    constructor: new (...arguments_: never[]) => T,
     value: string,
     database?: string,
   ): Promise<T | undefined> {
@@ -462,7 +464,7 @@ export default class Neode implements INeode {
     const tx = await this.readTransaction(database)
 
     const output = hasProjectedProperties(schema)
-      ? await new ProjectionService(tx).find<T>(constructor as Newable, schema, value)
+      ? await new ProjectionService(tx).find<T>(constructor, schema, value)
       : await new FindService(tx).find(constructor, schema, value)
 
     await tx.commit()
@@ -471,7 +473,7 @@ export default class Neode implements INeode {
   }
 
   async findById<T>(
-    constructor: new (...args: never[]) => T,
+    constructor: new (...arguments_: never[]) => T,
     elementId: string,
     database?: string,
   ): Promise<T | undefined> {
@@ -480,7 +482,7 @@ export default class Neode implements INeode {
     const tx = await this.readTransaction(database)
 
     const output = hasProjectedProperties(schema)
-      ? await new ProjectionService(tx).findById<T>(constructor as Newable, schema, elementId)
+      ? await new ProjectionService(tx).findById<T>(constructor, schema, elementId)
       : await new FindByIdService(tx).find(constructor, schema, elementId)
 
     await tx.commit()
@@ -489,8 +491,8 @@ export default class Neode implements INeode {
   }
 
   async get<T>(
-    constructor: new (...args: never[]) => T,
-    params: Record<string, unknown>,
+    constructor: new (...arguments_: never[]) => T,
+    parameters: Record<string, unknown>,
     limit?: number,
     skip?: number,
     database?: string,
@@ -500,8 +502,8 @@ export default class Neode implements INeode {
     const tx = await this.readTransaction(database)
 
     const results = hasProjectedProperties(schema)
-      ? await new ProjectionService(tx).get<T>(constructor as Newable, schema, params, limit, skip)
-      : await new GetService(tx).get<T>(constructor, schema, params, limit, skip)
+      ? await new ProjectionService(tx).get<T>(constructor, schema, parameters, limit, skip)
+      : await new GetService(tx).get<T>(constructor, schema, parameters, limit, skip)
 
     await tx.commit()
 
@@ -509,28 +511,28 @@ export default class Neode implements INeode {
   }
 
   async getFirst<T>(
-    constructor: new (...args: never[]) => T,
-    params: Record<string, unknown>,
+    constructor: new (...arguments_: never[]) => T,
+    parameters: Record<string, unknown>,
     database?: string,
   ): Promise<T | undefined> {
-    const records = await this.get<T>(constructor, params, 1, 0, database)
+    const records = await this.get<T>(constructor, parameters, 1, 0, database)
 
     return records[0]
   }
 
   /**
-   * Find the first node matching a key / value pair (or a property map),
-   * neode's Model.first(): sugar over getFirst()
-   */
+  Find the first node matching a key / value pair (or a property map),
+  neode's Model.first(): sugar over getFirst()
+  */
   async first<T>(
-    constructor: new (...args: never[]) => T,
+    constructor: new (...arguments_: never[]) => T,
     key: string | Record<string, unknown>,
     value?: unknown,
     database?: string,
   ): Promise<T | undefined> {
-    const params = typeof key === 'object' ? key : { [key]: value }
+    const parameters = typeof key === 'object' ? key : { [key]: value }
 
-    return this.getFirst<T>(constructor, params, database)
+    return this.getFirst<T>(constructor, parameters, database)
   }
 
   async save<T>(entity: T, database?: string): Promise<T> {
@@ -546,7 +548,7 @@ export default class Neode implements INeode {
 
       const hydrated = await findService.find(
         entityRecord.constructor as new (
-          ...args: never[]
+          ...arguments_: never[]
         ) => T,
         getModel(entityRecord.constructor),
         elementId,
@@ -564,11 +566,11 @@ export default class Neode implements INeode {
   }
 
   /**
-   * CREATE a new entity of the given constructor with the given properties
-   * (nested relationship targets included), then hydrate the created node
-   */
+  CREATE a new entity of the given constructor with the given properties
+  (nested relationship targets included), then hydrate the created node
+  */
   async create<T>(
-    constructor: new (...args: never[]) => T,
+    constructor: new (...arguments_: never[]) => T,
     properties: Record<string, unknown> = {},
     database?: string,
   ): Promise<T> {
@@ -607,11 +609,11 @@ export default class Neode implements INeode {
   }
 
   /**
-   * MERGE a node on the given match properties, then set the given
-   * properties, hydrating the merged node
-   */
+  MERGE a node on the given match properties, then set the given
+  properties, hydrating the merged node
+  */
   async mergeOn<T>(
-    constructor: new (...args: never[]) => T,
+    constructor: new (...arguments_: never[]) => T,
     match: Record<string, unknown>,
     set: Record<string, unknown> = {},
     database?: string,
@@ -625,7 +627,17 @@ export default class Neode implements INeode {
 
       const output = await mergeService.mergeOn(schema, match, set)
 
-      const elementId = output.records[0].get(INTERNAL_ID) as string
+      const firstRecord = output.records[0]
+
+      if (firstRecord === undefined) {
+        throw new Error('mergeOn returned no records')
+      }
+
+      const elementId = firstRecord.get(INTERNAL_ID)
+
+      if (typeof elementId !== 'string') {
+        throw new Error('mergeOn did not return an elementId')
+      }
 
       const findService = new FindByIdService(tx)
 
@@ -642,13 +654,13 @@ export default class Neode implements INeode {
   }
 
   /**
-   * MERGE a node of the given constructor on its merge fields (the unique
-   * and indexed properties, neode's Model.merge): those present in
-   * `properties` form the match, everything else is set, with schema
-   * defaults resolving for properties not given
-   */
+  MERGE a node of the given constructor on its merge fields (the unique
+  and indexed properties, neode's Model.merge): those present in
+  `properties` form the match, everything else is set, with schema
+  defaults resolving for properties not given
+  */
   async merge<T>(
-    constructor: new (...args: never[]) => T,
+    constructor: new (...arguments_: never[]) => T,
     properties: Record<string, unknown> = {},
     database?: string,
   ): Promise<T | undefined> {
@@ -661,9 +673,9 @@ export default class Neode implements INeode {
     // instance, ID property or Object containing match parameters
     // is passed")
     const hasRelationshipValues = schema.getRelationships().some((rel) => {
-      const value = (properties as Record<string, unknown>)[rel.getKey()]
+      const value = (properties)[rel.getKey()]
 
-      if (value === undefined || value === null) return false
+      if (value === undefined || value === null) {return false}
 
       return Array.isArray(value) ? value.length > 0 : typeof value === 'object'
     })
@@ -687,9 +699,9 @@ export default class Neode implements INeode {
   }
 
   /**
-   * UPDATE the given properties on a node (`+=` semantics: provided keys
-   * only, matched by the entity's primary key), then re-hydrate it
-   */
+  UPDATE the given properties on a node (`+=` semantics: provided keys
+  only, matched by the entity's primary key), then re-hydrate it
+  */
   async update<T>(
     entity: T,
     properties: Record<string, unknown> = {},
@@ -708,7 +720,7 @@ export default class Neode implements INeode {
       const hydrated = elementId
         ? await new FindByIdService(tx).find(
             entityRecord.constructor as new (
-              ...args: never[]
+              ...arguments_: never[]
             ) => T,
             schema,
             elementId,
@@ -726,12 +738,12 @@ export default class Neode implements INeode {
   }
 
   /**
-   * Relate two saved nodes, resolving the relationship by its KEY on the
-   * from-entity's schema (neode's node.relateTo(node, relationshipName)):
-   * MERGE the relationship, or CREATE with `forceCreate`
-   */
+  Relate two saved nodes, resolving the relationship by its KEY on the
+  from-entity's schema (neode's node.relateTo(node, relationshipName)):
+  MERGE the relationship, or CREATE with `forceCreate`
+  */
   async relate<From extends object, To extends object>(
-    constructor: new (...args: never[]) => From,
+    constructor: new (...arguments_: never[]) => From,
     from: From,
     to: To,
     relationshipKey: string,
@@ -772,11 +784,11 @@ export default class Neode implements INeode {
   }
 
   /**
-   * Remove the relationship of the given key between two nodes and return
-   * both re-hydrated
-   */
+  Remove the relationship of the given key between two nodes and return
+  both re-hydrated
+  */
   async detach<From extends object, To extends object>(
-    constructor: new (...args: never[]) => From,
+    constructor: new (...arguments_: never[]) => From,
     from: From,
     to: To,
     relationshipKey: string,
@@ -801,17 +813,17 @@ export default class Neode implements INeode {
   }
 
   /**
-   * ALL nodes of the given constructor, optionally filtered by properties,
-   * ordered, limited and skipped (neode's all())
-   */
+  ALL nodes of the given constructor, optionally filtered by properties,
+  ordered, limited and skipped (neode's all())
+  */
   /**
-   * Full-text search over a full-text index (NTS-123): hydrated entities
-   * with their relevance score, best match first. Pass user text through
-   * `toFulltextQuery()` — the query is bound as a parameter, but Lucene
-   * syntax characters in it are still parsed as such.
-   */
+  Full-text search over a full-text index (NTS-123): hydrated entities
+  with their relevance score, best match first. Pass user text through
+  `toFulltextQuery()` — the query is bound as a parameter, but Lucene
+  syntax characters in it are still parsed as such.
+  */
   async search<T>(
-    constructor: new (...args: never[]) => T,
+    constructor: new (...arguments_: never[]) => T,
     indexName: string,
     query: string,
     limit?: number,
@@ -820,11 +832,11 @@ export default class Neode implements INeode {
   }
 
   /**
-   * k-nearest-neighbour search over a vector index (NTS-127): hydrated
-   * entities with their similarity score, best match first
-   */
+  k-nearest-neighbour search over a vector index (NTS-127): hydrated
+  entities with their similarity score, best match first
+  */
   async knn<T>(
-    constructor: new (...args: never[]) => T,
+    constructor: new (...arguments_: never[]) => T,
     indexName: string,
     vector: number[],
     k: number,
@@ -834,41 +846,49 @@ export default class Neode implements INeode {
   }
 
   /**
-   * Read the installed database schema (SHOW CONSTRAINTS / SHOW INDEXES)
-   * and diff it against the declared schema of the registered models
-   * (NTS-142)
-   */
+  Read the installed database schema (SHOW CONSTRAINTS / SHOW INDEXES)
+  and diff it against the declared schema of the registered models
+  (NTS-142)
+  */
   async inspectSchema(options: InspectOptions = {}): Promise<SchemaInspection> {
     return inspectSchema(this.connection, { enterprise: this.enterprise, ...options })
   }
 
-  /** Install the given full-text index definitions (NTS-123) */
+  /**
+  Install the given full-text index definitions (NTS-123)
+  */
   async installFulltextIndexes(definitions: FulltextIndexDefinition[]): Promise<SchemaResult[]> {
     return new FulltextIndexService(this.connection, definitions).create()
   }
 
-  /** Drop the given full-text index definitions (NTS-123) */
+  /**
+  Drop the given full-text index definitions (NTS-123)
+  */
   async dropFulltextIndexes(definitions: FulltextIndexDefinition[]): Promise<SchemaResult[]> {
     return new FulltextIndexService(this.connection, definitions).drop()
   }
 
-  /** Install the given vector index definitions (NTS-127) */
+  /**
+  Install the given vector index definitions (NTS-127)
+  */
   async installVectorIndexes(definitions: VectorIndexDefinition[]): Promise<SchemaResult[]> {
     return new VectorIndexService(this.connection, definitions).create()
   }
 
-  /** Drop the given vector index definitions (NTS-127) */
+  /**
+  Drop the given vector index definitions (NTS-127)
+  */
   async dropVectorIndexes(definitions: VectorIndexDefinition[]): Promise<SchemaResult[]> {
     return new VectorIndexService(this.connection, definitions).drop()
   }
 
   /**
-   * CREATE every row in chunks of `UNWIND $rows ...` (NTS-126): one managed
-   * write transaction per chunk, rows validated like create() before the
-   * first write
-   */
+  CREATE every row in chunks of `UNWIND $rows ...` (NTS-126): one managed
+  write transaction per chunk, rows validated like create() before the
+  first write
+  */
   async createMany<T>(
-    constructor: new (...args: never[]) => T,
+    constructor: new (...arguments_: never[]) => T,
     rows: Record<string, unknown>[] = [],
     options: BulkOptions = {},
     database?: string,
@@ -882,12 +902,12 @@ export default class Neode implements INeode {
   }
 
   /**
-   * MERGE every row in chunks on the model's merge fields (NTS-126): one
-   * managed write transaction per chunk; every row must merge on the same
-   * merge fields
-   */
+  MERGE every row in chunks on the model's merge fields (NTS-126): one
+  managed write transaction per chunk; every row must merge on the same
+  merge fields
+  */
   async mergeMany<T>(
-    constructor: new (...args: never[]) => T,
+    constructor: new (...arguments_: never[]) => T,
     rows: Record<string, unknown>[] = [],
     options: BulkOptions = {},
     database?: string,
@@ -901,28 +921,28 @@ export default class Neode implements INeode {
   }
 
   /**
-   * Pagination helper (NTS-125). Offset mode — `{ page, limit, order? }` —
-   * returns `{ items, total, page, limit, totalPages }`; keyset mode —
-   * `{ limit, orderBy?, after?/before? }` — walks a temporal property and
-   * returns `{ items, nextCursor, hasMore }`
-   */
+  Pagination helper (NTS-125). Offset mode — `{ page, limit, order? }` —
+  returns `{ items, total, page, limit, totalPages }`; keyset mode —
+  `{ limit, orderBy?, after?/before? }` — walks a temporal property and
+  returns `{ items, nextCursor, hasMore }`
+  */
   async paginate<T>(
-    constructor: new (...args: never[]) => T,
+    constructor: new (...arguments_: never[]) => T,
     filter: Record<string, unknown>,
     options: OffsetPaginateOptions,
   ): Promise<Page<T>>
   async paginate<T>(
-    constructor: new (...args: never[]) => T,
+    constructor: new (...arguments_: never[]) => T,
     filter: Record<string, unknown>,
     options: CursorPaginateOptions,
   ): Promise<CursorPage<T>>
   async paginate<T>(
-    constructor: new (...args: never[]) => T,
+    constructor: new (...arguments_: never[]) => T,
     filter: Record<string, unknown> = {},
     options: OffsetPaginateOptions | CursorPaginateOptions = { limit: 25 },
   ): Promise<Page<T> | CursorPage<T>> {
     return new PaginateService(this.connection).paginate<T>(
-      constructor as Newable,
+      constructor,
       this.getSchema(constructor),
       filter,
       options,
@@ -930,9 +950,9 @@ export default class Neode implements INeode {
   }
 
   /**
-   * Run a semicolon-split Cypher script sequentially (NTS-134), one
-   * autocommit statement at a time, fail-fast
-   */
+  Run a semicolon-split Cypher script sequentially (NTS-134), one
+  autocommit statement at a time, fail-fast
+  */
   async runCypherScript(
     content: string,
     options: RunCypherScriptOptions = {},
@@ -941,8 +961,8 @@ export default class Neode implements INeode {
   }
 
   async all<T>(
-    constructor: new (...args: never[]) => T,
-    params: Record<string, unknown> = {},
+    constructor: new (...arguments_: never[]) => T,
+    parameters: Record<string, unknown> = {},
     order?: OrderSpec,
     limit?: number,
     skip?: number,
@@ -955,14 +975,14 @@ export default class Neode implements INeode {
     try {
       const results = hasProjectedProperties(schema)
         ? await new ProjectionService(tx).get<T>(
-            constructor as Newable,
+            constructor,
             schema,
-            params,
+            parameters,
             limit,
             skip,
             order,
           )
-        : await new GetService(tx).get<T>(constructor, schema, params, limit, skip, order)
+        : await new GetService(tx).get<T>(constructor, schema, parameters, limit, skip, order)
 
       await tx.commit()
 
@@ -975,16 +995,16 @@ export default class Neode implements INeode {
   }
 
   /**
-   * Nodes of the given constructor within `distance` of the given point,
-   * ordered by distance when `order` is 'distance'
-   * (neode's FindWithinDistance)
-   */
+  Nodes of the given constructor within `distance` of the given point,
+  ordered by distance when `order` is 'distance'
+  (neode's FindWithinDistance)
+  */
   async withinDistance<T>(
-    constructor: new (...args: never[]) => T,
+    constructor: new (...arguments_: never[]) => T,
     locationProperty: string,
     point: unknown,
     distance: number,
-    params: Record<string, unknown> = {},
+    parameters: Record<string, unknown> = {},
     order?: OrderSpec,
     limit?: number,
     skip?: number,
@@ -1001,7 +1021,7 @@ export default class Neode implements INeode {
         locationProperty,
         point,
         distance,
-        params,
+        parameters,
         order,
         limit,
         skip,
@@ -1018,9 +1038,9 @@ export default class Neode implements INeode {
   }
 
   /**
-   * Define a model from a map-based schema definition (neode parity), or,
-   * when no schema is given, look up a previously defined model by name.
-   */
+  Define a model from a map-based schema definition (neode parity), or,
+  when no schema is given, look up a previously defined model by name.
+  */
   model(name: string, schema?: SchemaDefinition): Newable {
     if (schema) {
       return defineModel(name, schema)
@@ -1036,48 +1056,47 @@ export default class Neode implements INeode {
   }
 
   /**
-   * Define multiple models at once: { Name: schemaDefinition }
-   */
+  Define multiple models at once: { Name: schemaDefinition }
+  */
   with(models: Record<string, SchemaDefinition>): this {
-    Object.entries(models).forEach(([name, schema]) => this.model(name, schema))
+    for (const [name, schema] of Object.entries(models)) {this.model(name, schema)}
 
     return this
   }
 
   /**
-   * Scan a directory and register each module's default export as a model
-   * named after the file (neode parity, extended to .ts files)
-   */
+  Scan a directory and register each module's default export as a model
+  named after the file (neode parity, extended to .ts files)
+  */
   withDirectory(directory: string): this {
     const requireModule = createRequire(__filename)
 
-    readdirSync(directory)
-      .filter((file) => ['.js', '.ts'].includes(extname(file).toLowerCase()))
-      .forEach((file) => {
+    for (const file of readdirSync(directory)
+      .filter((file) => ['.js', '.ts'].includes(extname(file).toLowerCase()))) {
         const name = basename(file, extname(file))
         const loaded = requireModule(resolve(directory, file)) as {
           default?: SchemaDefinition
         }
 
         this.model(name, loaded.default ?? (loaded as SchemaDefinition))
-      })
+      }
 
     return this
   }
 
   /**
-   * neode's extend(): clone a model under a new name, adding the new name
-   * as an extra label, with the given schema merged on top
-   */
+  neode's extend(): clone a model under a new name, adding the new name
+  as an extra label, with the given schema merged on top
+  */
   extend(name: string, as: string, schema?: SchemaDefinition): Newable {
     return extendModel(name, as, schema)
   }
 
   /**
-   * Delete a node. `options` threads the cascade modes through to the
-   * delete service; the legacy form `delete(entity, database)` — a string
-   * second argument, as accepted by INeode — is kept working.
-   */
+  Delete a node. `options` threads the cascade modes through to the
+  delete service; the legacy form `delete(entity, database)` — a string
+  second argument, as accepted by INeode — is kept working.
+  */
   async delete<T>(entity: T, options?: DeleteOptions | string, database?: string): Promise<void> {
     const schema = this.getSchema((entity as unknown as Record<string, unknown>).constructor)
 
@@ -1098,20 +1117,20 @@ export default class Neode implements INeode {
   }
 
   /**
-   * DETACH DELETE every node of the given constructor matching the given
-   * properties, returning the deleted count (neode's Model.deleteAll,
-   * extended with a count return)
-   */
+  DETACH DELETE every node of the given constructor matching the given
+  properties, returning the deleted count (neode's Model.deleteAll,
+  extended with a count return)
+  */
   async deleteAll<T>(
-    constructor: new (...args: never[]) => T,
-    params: Record<string, unknown> = {},
+    constructor: new (...arguments_: never[]) => T,
+    parameters_: Record<string, unknown> = {},
     database?: string,
   ): Promise<number> {
     const schema = this.getSchema(constructor)
 
     const builder = new Builder().match('n', schema.getLabels())
 
-    Object.keys(params).forEach((key) => builder.where(`n.${key}`, params[key]))
+    for (const [key, value] of Object.entries(parameters_)) {builder.where(`n.${key}`, value)}
 
     const { query, params: parameters } = builder
       .detachDelete('n')
@@ -1120,21 +1139,27 @@ export default class Neode implements INeode {
 
     const output = await this.writeCypher(query, parameters, database)
 
-    return Number(output.records[0].get('count'))
+    const firstRecord = output.records[0]
+
+    if (firstRecord === undefined) {
+      throw new Error('count query returned no records')
+    }
+
+    return Number(firstRecord.get('count'))
   }
 
   /**
-   * Return a new query Builder (neode parity): chain
-   * `.execute(neode.getConnection())` to run the built statement
-   */
+  Return a new query Builder (neode parity): chain
+  `.execute(neode.getConnection())` to run the built statement
+  */
   query(): Builder {
     return new Builder()
   }
 
   /**
-   * Close the underlying connection (neode parity)
-   */
-  close(): Promise<void> {
+  Close the underlying connection (neode parity)
+  */
+  async close(): Promise<void> {
     return this.connection.close()
   }
 }

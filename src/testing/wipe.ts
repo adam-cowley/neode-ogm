@@ -1,20 +1,20 @@
-import { Runner } from '../driver/types'
+import type { Runner } from '../driver/types.js'
 
 /** A Runner, or any facade exposing one (e.g. Neode — matched structurally
- * to avoid importing the service here). */
+to avoid importing the service here). */
 export type WipeTarget = Runner | { getRunner(): Runner }
 
 /**
- * Wipe the database clean for a test run: DETACH DELETE every node, then
- * drop every constraint and index the database currently has.
- *
- * Standalone on purpose — SchemaService derives DROP statements from the
- * registered models, while wipe() discovers them from the database itself
- * (small duplication of its statement shapes, accepted).
- *
- * Index drops are best-effort: built-in indexes (e.g. the token lookup
- * store on real servers) cannot be dropped and are ignored.
- */
+Wipe the database clean for a test run: DETACH DELETE every node, then
+drop every constraint and index the database currently has.
+
+Standalone on purpose — SchemaService derives DROP statements from the
+registered models, while wipe() discovers them from the database itself
+(small duplication of its statement shapes, accepted).
+
+Index drops are best-effort: built-in indexes (e.g. the token lookup
+store on real servers) cannot be dropped and are ignored.
+*/
 export async function wipe(target: WipeTarget): Promise<void> {
   const runner = resolveRunner(target)
 
@@ -38,9 +38,5 @@ export async function wipe(target: WipeTarget): Promise<void> {
 }
 
 function resolveRunner(target: WipeTarget): Runner {
-  if (typeof (target as { getRunner?: unknown }).getRunner === 'function') {
-    return (target as { getRunner(): Runner }).getRunner()
-  }
-
-  return target as Runner
+  return typeof (target as { getRunner?: unknown }).getRunner === 'function' ? (target as { getRunner(): Runner }).getRunner() : (target as Runner);
 }

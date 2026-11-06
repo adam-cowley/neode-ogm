@@ -1,20 +1,20 @@
-import { mergeProperty } from '../../meta'
-import { Newable } from '../../meta/newable'
-import { PropertyType } from '../../meta/property-schema'
-import { toDirection } from '../../query'
-import { RelatedConfig } from './projection-config.interface'
+import { mergeProperty } from '../../meta/index.js'
+import type { Newable } from '../../meta/newable.js'
+import { PropertyType } from '../../meta/property-schema.js'
+import { toDirection } from '../../query/index.js'
+import type { RelatedConfig } from './projection-config.interface.js'
 
 /**
- * NTS-135 — eagerly load a related entity as a nested read-only DTO holding
- * only the named fields. Without `fields`, the full entity is eagerly loaded
- * (same behaviour as an eager @OneToOne).
- *
- * Example:
- * ```ts
- * @RelatedOne({ type: 'IN_COURSE', direction: 'out', fields: ['title', 'status'] })
- * course: { title: string; status: string };
- * ```
- */
+NTS-135 — eagerly load a related entity as a nested read-only DTO holding
+only the named fields. Without `fields`, the full entity is eagerly loaded
+(same behaviour as an eager @OneToOne).
+
+Example:
+```ts
+@RelatedOne({ type: 'IN_COURSE', direction: 'out', fields: ['title', 'status'] })
+course: { title: string; status: string };
+```
+*/
 export default function RelatedOne(config: RelatedConfig) {
   return function (target: any, propertyKey: string, _descriptor?: any): void {
     const constructor = target.constructor

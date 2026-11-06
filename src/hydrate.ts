@@ -1,15 +1,15 @@
-import { GraphNode, QueryOutput, QueryRecord } from './driver/types'
-import { getModel } from './meta'
-import EntitySchema from './meta/entity/entity-schema'
-import { EagerRelationship, hydrateNode } from './utils'
-import { WithMethods } from './entity-methods'
-import Collection from './collection'
+import type { GraphNode, QueryOutput, QueryRecord } from './driver/types.js'
+import { getModel } from './meta/index.js'
+import type EntitySchema from './meta/entity/entity-schema.js'
+import { type EagerRelationship, hydrateNode } from './utils.js'
+import type { WithMethods } from './entity-methods.js'
+import Collection from './collection.js'
 
-export { hydrateProjection } from './projection'
+export { hydrateProjection } from './projection/index.js'
 
 const DEFAULT_ALIAS = 'this'
 
-function requireSchema(constructor: new (...args: never[]) => unknown): EntitySchema {
+function requireSchema(constructor: new (...arguments_: never[]) => unknown): EntitySchema {
   const schema = getModel(constructor)
 
   if (!schema) {
@@ -22,10 +22,10 @@ function requireSchema(constructor: new (...args: never[]) => unknown): EntitySc
 }
 
 /**
- * Extra record columns (every key except the node alias) as the eager values
- * hydrateNode understands: one legacy eager entry per column, whose node is
- * the column value
- */
+Extra record columns (every key except the node alias) as the eager values
+hydrateNode understands: one legacy eager entry per column, whose node is
+the column value
+*/
 function eagerColumns(row: QueryRecord, alias: string): Record<string, EagerRelationship[]> {
   return Object.fromEntries(
     row.keys
@@ -35,13 +35,13 @@ function eagerColumns(row: QueryRecord, alias: string): Record<string, EagerRela
 }
 
 /**
- * Hydrate a raw query result (as returned by readCypher/writeCypher or
- * Builder#execute) into typed entities: each record's `alias` column is the
- * node, any other column feeds eager relationship hydration
- * (neode's Factory.hydrate)
- */
+Hydrate a raw query result (as returned by readCypher/writeCypher or
+Builder#execute) into typed entities: each record's `alias` column is the
+node, any other column feeds eager relationship hydration
+(neode's Factory.hydrate)
+*/
 export function hydrate<T>(
-  constructor: new (...args: never[]) => T,
+  constructor: new (...arguments_: never[]) => T,
   output: QueryOutput,
   alias = DEFAULT_ALIAS,
 ): WithMethods<T>[] {
@@ -63,11 +63,11 @@ export function hydrate<T>(
 }
 
 /**
- * Hydrate the first record of a raw query result, or undefined when the
- * result set is empty (neode's Factory.hydrateFirst)
- */
+Hydrate the first record of a raw query result, or undefined when the
+result set is empty (neode's Factory.hydrateFirst)
+*/
 export function hydrateFirst<T>(
-  constructor: new (...args: never[]) => T,
+  constructor: new (...arguments_: never[]) => T,
   output: QueryOutput,
   alias = DEFAULT_ALIAS,
 ): WithMethods<T> | undefined {
@@ -75,11 +75,11 @@ export function hydrateFirst<T>(
 }
 
 /**
- * Hydrate a raw query result into a Collection (neode's Factory.hydrate
- * return shape)
- */
+Hydrate a raw query result into a Collection (neode's Factory.hydrate
+return shape)
+*/
 export function toCollection<T>(
-  constructor: new (...args: never[]) => T,
+  constructor: new (...arguments_: never[]) => T,
   output: QueryOutput,
   alias = DEFAULT_ALIAS,
 ): Collection<T> {

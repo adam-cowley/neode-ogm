@@ -15,6 +15,7 @@ export default defineConfig(
       'eslint.config.ts',
       '*.config.ts',
       'bench/**',
+      'examples/**',
       // Re-enabled in Phase 4 when type tests land
       'test/**',
     ],
@@ -107,6 +108,9 @@ export default defineConfig(
       'unicorn/prevent-abbreviations': 'off',
       'unicorn/no-array-reduce': 'off',
       'unicorn/filename-case': ['error', { case: 'kebabCase' }],
+      // unicorn 79 preset ships a bare 'error' value that eslint 9.39's
+      // stricter rule-schema validation rejects; set explicit options here
+      'unicorn/logical-assignment-operators': ['error', 'always'],
     },
   },
 

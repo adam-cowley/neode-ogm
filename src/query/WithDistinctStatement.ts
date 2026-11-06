@@ -1,5 +1,9 @@
 export default class WithDistinctStatement {
-  constructor(private readonly variables: string[]) {}
+  private readonly variables: string[]
+
+  constructor(variables: string[]) {
+    this.variables = variables
+  }
 
   toString(): string {
     return `WITH DISTINCT ${this.variables.join(', ')}`

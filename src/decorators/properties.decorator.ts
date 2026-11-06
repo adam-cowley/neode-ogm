@@ -1,5 +1,5 @@
-import { mergeProperty } from '../meta'
-import { PropertyType } from '../meta/property-schema'
+import { mergeProperty } from '../meta/index.js'
+import { PropertyType } from '../meta/property-schema.js'
 
 export default function Properties() {
   return function (target: any, propertyKey: string, _descriptor?: any): void {

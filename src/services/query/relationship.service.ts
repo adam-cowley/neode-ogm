@@ -1,16 +1,16 @@
-import Builder from '../../query'
-import QueryService from './query.service'
+import Builder from '../../query/index.js'
+import QueryService from './query.service.js'
 
 const REL = 'rel'
 
 export default class RelationshipService extends QueryService {
   /**
-   * Update the properties of a relationship, matched by element ID or by
-   * property equality on the relationship itself
-   * (neode UpdateRelationship.js, elementId instead of id()).
-   *
-   * @returns the updated properties, or undefined when nothing matched
-   */
+  Update the properties of a relationship, matched by element ID or by
+  property equality on the relationship itself
+  (neode UpdateRelationship.js, elementId instead of id()).
+  
+  @returns the updated properties, or undefined when nothing matched
+  */
   async update(
     match: string | Record<string, unknown>,
     properties: Record<string, unknown>,
@@ -19,11 +19,11 @@ export default class RelationshipService extends QueryService {
 
     this.matchRelationship(builder, match)
 
-    Object.entries(properties).forEach(([key, value]) => {
+    for (const [key, value] of Object.entries(properties)) {
       if (value !== undefined) {
         builder.set(`${REL}.${key}`, value)
       }
-    })
+    }
 
     builder.return(`properties(${REL}) AS props`)
 
@@ -35,8 +35,8 @@ export default class RelationshipService extends QueryService {
   }
 
   /**
-   * Delete a relationship by element ID (neode DeleteRelationship.js)
-   */
+  Delete a relationship by element ID (neode DeleteRelationship.js)
+  */
   async delete(relElementId: string): Promise<void> {
     const builder = new Builder()
 
@@ -49,15 +49,15 @@ export default class RelationshipService extends QueryService {
   }
 
   /**
-   * `MATCH ()-[rel]-()` plus an elementId or property-equality where clause
-   */
+  `MATCH ()-[rel]-()` plus an elementId or property-equality where clause
+  */
   private matchRelationship(builder: Builder, match: string | Record<string, unknown>): void {
     builder.match().relationship(undefined, undefined, REL).toAnything()
 
     if (typeof match === 'string') {
       builder.where(`elementId(${REL})`, match)
     } else {
-      Object.entries(match).forEach(([key, value]) => builder.where(`${REL}.${key}`, value))
+      for (const [key, value] of Object.entries(match)) {builder.where(`${REL}.${key}`, value)}
     }
   }
 }

@@ -1,27 +1,29 @@
-import Builder, { Direction } from '../query'
-import { INTERNAL_ID, THIS_NODE } from '../constants'
-import { Runner } from '../driver/types'
-import { getModel } from '../meta'
-import EntitySchema, { EntityType } from '../meta/entity/entity-schema'
-import PropertySchema, { PropertyType, isProjectedProperty } from '../meta/property-schema'
-import RelationshipPropertySchema from '../meta/relationship-property-schema'
-import { getValueOrDefault, setPropertyInBuilder } from '../utils'
+import Builder, { Direction } from '../query/index.js'
+import { INTERNAL_ID, THIS_NODE } from '../constants.js'
+import type { Runner } from '../driver/types.js'
+import { getModel } from '../meta/index.js'
+import type EntitySchema from '../meta/entity/entity-schema.js';
+import { EntityType } from '../meta/entity/entity-schema.js'
+import type PropertySchema from '../meta/property-schema.js';
+import { PropertyType, isProjectedProperty } from '../meta/property-schema.js'
+import type RelationshipPropertySchema from '../meta/relationship-property-schema.js'
+import { getValueOrDefault, setPropertyInBuilder } from '../utils.js'
 
 /**
- * Maximum nesting depth when creating nested relationship targets
- * (neode WriteUtils parity)
- */
+Maximum nesting depth when creating nested relationship targets
+(neode WriteUtils parity)
+*/
 export const MAX_CREATE_DEPTH = 99
 
 /**
- * Create a node for the given schema and model, then recursively create and
- * relate any nested relationship targets present on the model.
- *
- * Port of neode's WriteUtils.addNodeToStatement as one statement per node:
- * each node is a single CREATE, related to recursively created targets by
- * element ID, with a depth cap guarding against runaway (e.g. cyclic) graphs.
- * Returns the created node's element ID.
- */
+Create a node for the given schema and model, then recursively create and
+relate any nested relationship targets present on the model.
+
+Port of neode's WriteUtils.addNodeToStatement as one statement per node:
+each node is a single CREATE, related to recursively created targets by
+element ID, with a depth cap guarding against runaway (e.g. cyclic) graphs.
+Returns the created node's element ID.
+*/
 export async function createNodeAndRelationships(
   runner: Runner,
   schema: EntitySchema,
@@ -36,38 +38,38 @@ export async function createNodeAndRelationships(
 }
 
 /**
- * The model's schema-known property values as the write paths apply them:
- * own values with schema defaults resolved (neode validates after
- * GenerateDefaultValues)
- */
+The model's schema-known property values as the write paths apply them:
+own values with schema defaults resolved (neode validates after
+GenerateDefaultValues)
+*/
 export function modelPropertyValues(model: object, schema: EntitySchema): Record<string, unknown> {
   const values: Record<string, unknown> = {}
 
-  schema.getProperties().forEach((property) => {
+  for (const property of schema.getProperties()) {
     // Projected read-model values (counts, DTOs, computed) are never written
-    if (isProjectedProperty(property)) return
+    if (isProjectedProperty(property)) {continue}
 
     const value = getValueOrDefault(model, property, schema)
 
     if (value !== undefined) {
       values[property.getKey()] = value
     }
-  })
+  }
 
   return values
 }
 
 /**
- * CREATE (this:Label { ... }) RETURN elementId(this) AS __id
- *
- * neode parity (WriteUtils.splitProperties in create mode): every property
- * value - defaults included - is inlined into the CREATE pattern, because
- * ON CREATE SET / ON MATCH SET are merge-only clauses.
- */
+CREATE (this:Label { ... }) RETURN elementId(this) AS __id
+
+neode parity (WriteUtils.splitProperties in create mode): every property
+value - defaults included - is inlined into the CREATE pattern, because
+ON CREATE SET / ON MATCH SET are merge-only clauses.
+*/
 async function createNode(runner: Runner, schema: EntitySchema, model: object): Promise<string> {
   const properties: Record<string, unknown> = {}
 
-  schema.getProperties().forEach((property) => {
+  for (const property of schema.getProperties()) {
     // Mapped / internal / projected properties are not writable
     if (
       property.getType() === PropertyType.INTERNAL_ID ||
@@ -75,7 +77,7 @@ async function createNode(runner: Runner, schema: EntitySchema, model: object): 
       property.getType() === PropertyType.NODE ||
       isProjectedProperty(property)
     ) {
-      return
+      continue
     }
 
     const value = getValueOrDefault(model, property, schema)
@@ -83,7 +85,7 @@ async function createNode(runner: Runner, schema: EntitySchema, model: object): 
     if (value !== undefined && value !== null) {
       properties[property.getKey()] = value
     }
-  })
+  }
 
   const builder = new Builder()
 
@@ -94,7 +96,19 @@ async function createNode(runner: Runner, schema: EntitySchema, model: object): 
 
   const result = await runner.run(query, params)
 
-  return result.records[0].get(INTERNAL_ID) as string
+  const firstRecord = result.records[0]
+
+  if (firstRecord === undefined) {
+    throw new Error('relate statement returned no records')
+  }
+
+  const internalId = firstRecord.get(INTERNAL_ID)
+
+  if (typeof internalId !== 'string') {
+    throw new Error(`relate statement did not return an ${INTERNAL_ID}`)
+  }
+
+  return internalId
 }
 
 async function createRelationships(
@@ -120,9 +134,9 @@ async function createRelationships(
 
       const value = (model as Record<string, unknown>)[key]
 
-      const values = rel.getMany() ? (Array.isArray(value) ? value : [value]) : [value]
+      const values = rel.getMany() && Array.isArray(value) ? value : [value]
 
-      await Promise.all(values.map((target) => createTarget(runner, thisId, rel, target, depth)))
+      await Promise.all(values.map(async (target) => createTarget(runner, thisId, rel, target, depth)))
     }),
   )
 }
@@ -174,9 +188,9 @@ async function createTarget(
 }
 
 /**
- * The relationship entity property holding the node at the far end of the
- * given relationship (mirrors MergeService.save)
- */
+The relationship entity property holding the node at the far end of the
+given relationship (mirrors MergeService.save)
+*/
 function getOtherProperty(
   rel: RelationshipPropertySchema,
   targetSchema: EntitySchema,
@@ -211,9 +225,9 @@ function getOtherProperty(
 }
 
 /**
- * Relate two created nodes by element ID, setting any relationship entity
- * properties on the new relationship (mirrors MergeService#relateNodes)
- */
+Relate two created nodes by element ID, setting any relationship entity
+properties on the new relationship (mirrors MergeService#relateNodes)
+*/
 async function relateNodes(
   runner: Runner,
   fromId: string,
@@ -241,11 +255,11 @@ async function relateNodes(
 
   // Set relationship properties
   if (targetSchema.getType() === EntityType.RelationshipEntity) {
-    targetSchema.getProperties().forEach((property) => {
+    for (const property of targetSchema.getProperties()) {
       const key = property.getKey()
 
       // Ignore if not set
-      if (!Object.hasOwn(entity as Record<string, unknown>, key)) return
+      if (!Object.hasOwn(entity as Record<string, unknown>, key)) {continue}
 
       const value = (entity as Record<string, unknown>)[key]
 
@@ -254,20 +268,22 @@ async function relateNodes(
         case PropertyType.INTERNAL_ID:
         case PropertyType.START_NODE:
         case PropertyType.END_NODE:
-        case PropertyType.OTHER_NODE:
+        case PropertyType.OTHER_NODE: {
           break
+        }
 
-        case PropertyType.ALL_PROPERTIES:
-          Object.entries(value as Record<string, unknown>).forEach(([, entryValue]) =>
-            setPropertyInBuilder(builder, relAlias, property, entryValue),
-          )
+        case PropertyType.ALL_PROPERTIES: {
+          for (const entryValue of Object.values(value as Record<string, unknown>)) {setPropertyInBuilder(builder, relAlias, property, entryValue)}
+          
           break
+        }
 
-        default:
+        default: {
           setPropertyInBuilder(builder, relAlias, property, value)
           break
+        }
       }
-    })
+    }
   }
 
   const { query, params } = builder.build()

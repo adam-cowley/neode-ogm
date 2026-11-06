@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 /**
- * Imports the neode-ogm roadmap (phases + tasks + dependency tree)
- * into the Linear team "Neode" (NTS).
- *
- * Uses the Linear MCP server (https://mcp.linear.app/mcp) for issue
- * creation, and Linear's GraphQL API for anything the MCP toolset
- * doesn't expose (projects, dependency relations, workflow states).
- *
- * Usage:
- *   LINEAR_API_KEY=<key> node scripts/linear-import.mjs
- *
- * Get a key: Linear → Settings → Security & access → Personal API keys
- * (needs Write permission for the Neode team).
- */
+Imports the neode-ogm roadmap (phases + tasks + dependency tree)
+into the Linear team "Neode" (NTS).
+
+Uses the Linear MCP server (https://mcp.linear.app/mcp) for issue
+creation, and Linear's GraphQL API for anything the MCP toolset
+doesn't expose (projects, dependency relations, workflow states).
+
+Usage:
+  LINEAR_API_KEY=<key> node scripts/linear-import.mjs
+
+Get a key: Linear → Settings → Security & access → Personal API keys
+(needs Write permission for the Neode team).
+*/
 
 const LINEAR_API_KEY = process.env.LINEAR_API_KEY
 const MCP_URL = 'https://mcp.linear.app/mcp'
@@ -26,23 +26,25 @@ if (!LINEAR_API_KEY) {
 
 // ---------------------------------------------------------------- utilities
 
-/** Streamable-HTTP MCP request. Returns parsed JSON (SSE-aware). */
-async function mcp(sessionId, method, params) {
+/**
+Streamable-HTTP MCP request. Returns parsed JSON (SSE-aware).
+*/
+async function mcp(sessionId, method, parameters) {
   const headers = {
     'Content-Type': 'application/json',
     Accept: 'application/json, text/event-stream',
     Authorization: `Bearer ${LINEAR_API_KEY}`,
   }
-  if (sessionId) headers['mcp-session-id'] = sessionId
+  if (sessionId) {headers['mcp-session-id'] = sessionId}
 
   const response = await fetch(MCP_URL, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ jsonrpc: '2.0', id: mcp.nextId++, method, params }),
+    body: JSON.stringify({ jsonrpc: '2.0', id: mcp.nextId++, method, params: parameters }),
   })
 
   const newSession = response.headers.get('mcp-session-id')
-  if (newSession) mcp.sessionId = newSession
+  if (newSession) {mcp.sessionId = newSession}
 
   const contentType = response.headers.get('content-type') || ''
   const body = await response.text()
@@ -55,7 +57,7 @@ async function mcp(sessionId, method, params) {
   let payload = body
   if (contentType.includes('text/event-stream')) {
     const lines = body.split('\n').filter((line) => line.startsWith('data:'))
-    payload = lines.length ? lines[lines.length - 1].slice(5).trim() : ''
+    payload = lines.length > 0 ? lines.at(-1).slice(5).trim() : ''
   }
 
   const json = JSON.parse(payload)
@@ -88,8 +90,8 @@ async function mcpInit() {
   })
 }
 
-async function mcpTool(name, args) {
-  const result = await mcp(mcp.sessionId, 'tools/call', { name, arguments: args })
+async function mcpTool(name, arguments_) {
+  const result = await mcp(mcp.sessionId, 'tools/call', { name, arguments: arguments_ })
 
   if (result.isError) {
     const text = result.content?.map((c) => c.text).join(' ') || 'unknown error'
@@ -105,7 +107,7 @@ async function mcpTool(name, args) {
 }
 
 /** Linear GraphQL. API keys authenticate as the raw Authorization header
- * value (no Bearer/Basic prefix). */
+value (no Bearer/Basic prefix). */
 async function gql(query, variables = {}) {
   const response = await fetch(GRAPHQL_URL, {
     method: 'POST',
@@ -311,7 +313,9 @@ const PHASES = [
   },
 ]
 
-/** Task-level dependencies: taskId → blocked by [taskIds] */
+/**
+Task-level dependencies: taskId → blocked by [taskIds]
+*/
 const TASK_DEPENDENCIES = {
   'P2.1': ['P1.1'],
   'P3.1': ['P1.1', 'P1.2'],
@@ -347,7 +351,7 @@ async function main() {
   )
 
   const team = teamData.teams.nodes[0]
-  if (!team) throw new Error(`Team ${TEAM_KEY} not found`)
+  if (!team) {throw new Error(`Team ${TEAM_KEY} not found`)}
 
   const states = teamData.workflowStates.nodes
   const doneState =
@@ -374,8 +378,8 @@ async function main() {
     const phaseMatch = issue.title.match(/^Phase (\d):/)
     const taskMatch = issue.title.match(/^(P\d+\.\d+)\s*[—–-]/)
 
-    if (phaseMatch) issueIds[`P${phaseMatch[1]}`] = issue.id
-    if (taskMatch) issueIds[taskMatch[1]] = issue.id
+    if (phaseMatch) {issueIds[`P${phaseMatch[1]}`] = issue.id}
+    if (taskMatch) {issueIds[taskMatch[1]] = issue.id}
   }
 
   console.log(`▸ Found ${Object.keys(issueIds).length} existing issues on team ${TEAM_KEY}`)
@@ -450,9 +454,9 @@ async function main() {
   // Dependency tree — Linear stores relations as "issueId BLOCKS relatedIssueId".
   // Phase N is blocked by phase N-1.
   console.log('▸ Phase dependencies…')
-  for (let i = 1; i < PHASES.length; i++) {
-    const blocker = PHASES[i - 1].id
-    const blocked = PHASES[i].id
+  for (let index = 1; index < PHASES.length; index++) {
+    const blocker = PHASES[index - 1].id
+    const blocked = PHASES[index].id
 
     await createRelation(issueIds[blocker], issueIds[blocked])
 

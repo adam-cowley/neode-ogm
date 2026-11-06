@@ -1,26 +1,34 @@
-import Property from './Property'
+import type Property from './Property.js'
 
 export default class Match {
+  private readonly alias: string | undefined
+  private readonly labels: string | string[] | false = false
+  private readonly properties: Property[] = []
+
   constructor(
-    private readonly alias?: string,
-    private readonly labels: string | string[] | false = false,
-    private readonly properties: Property[] = [],
-  ) {}
+    alias?: string,
+    labels: string | string[] | false = false,
+    properties: Property[] = [],
+  ) {
+    this.alias = alias
+    this.labels = labels
+    this.properties = properties
+  }
 
   toString(): string {
     const alias = this.alias || ''
 
-    let label: string = ''
+    let label = ''
 
     if (Array.isArray(this.labels)) {
-      label = this.labels.length ? `:${this.labels.join(':')}` : ''
-    } else if (typeof this.labels === 'string' && this.labels.length) {
+      label = this.labels.length > 0 ? `:${this.labels.join(':')}` : ''
+    } else if (typeof this.labels === 'string' && this.labels.length > 0) {
       label = `:${this.labels}`
     }
 
     let properties = ''
 
-    if (this.properties.length) {
+    if (this.properties.length > 0) {
       properties = ` { ${this.properties.map((property) => property.toInlineString()).join(', ')} }`
     }
 

@@ -1,17 +1,23 @@
-import { Newable } from '../meta/newable'
-import { Direction } from '../query'
-import PropertySchema, { PropertyType } from './property-schema'
+import type { Newable } from '../meta/newable.js'
+import { Direction } from '../query/index.js'
+import type {PropertyType} from './property-schema.js';
+import type PropertySchema from './property-schema.js'
 
-export type RelationshipType = PropertyType.ONE_TO_ONE | PropertyType.ONE_TO_MANY
+export type RelationshipType =
+  | (typeof PropertyType)['ONE_TO_ONE']
+  | (typeof PropertyType)['ONE_TO_MANY']
 
 export default class RelationshipPropertySchema {
-  private type: string
-  private direction: Direction
-  private target: Newable
-  private many: boolean
-  private eager: boolean = false
+  private readonly key: string
+  private type!: string
+  private direction!: Direction
+  private target!: Newable
+  private many!: boolean
+  private eager = false
 
-  constructor(private readonly key: string) {}
+  constructor(key: string) {
+    this.key = key
+  }
 
   static fromPropertySchema(original: PropertySchema): RelationshipPropertySchema {
     const cloned = new RelationshipPropertySchema(original.getKey())
@@ -63,7 +69,7 @@ export default class RelationshipPropertySchema {
     return this.eager
   }
 
-  toString(relAlias: string = '') {
+  toString(relAlias = '') {
     return `${this.direction === Direction.INCOMING ? '<' : ''}-[${relAlias}:${this.type}]-${this.direction === Direction.OUTGOING ? '>' : ''}`
   }
 }

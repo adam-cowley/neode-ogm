@@ -1,43 +1,47 @@
-import Builder from '../../query'
-import { THIS_NODE } from '../../constants'
-import { getModel } from '../../meta'
-import EntitySchema from '../../meta/entity/entity-schema'
-import RelationshipPropertySchema from '../../meta/relationship-property-schema'
-import QueryService from './query.service'
+import Builder from '../../query/index.js'
+import { THIS_NODE } from '../../constants.js'
+import { getModel } from '../../meta/index.js'
+import type EntitySchema from '../../meta/entity/entity-schema.js'
+import type RelationshipPropertySchema from '../../meta/relationship-property-schema.js'
+import QueryService from './query.service.js'
 
 /**
- * Maximum cascade deletion depth (neode DeleteNode.js parity)
- */
+Maximum cascade deletion depth (neode DeleteNode.js parity)
+*/
 export const MAX_CASCADE_DEPTH = 10
 
 export interface DeleteOptions {
-  /** Cascade into the related entities declared on the schema */
+  /**
+  Cascade into the related entities declared on the schema
+  */
   cascade?: boolean
 
   /**
-   * 'delete' (default) deletes related nodes recursively;
-   * 'detach' removes only the relationships, keeping the related nodes
-   */
+  'delete' (default) deletes related nodes recursively;
+  'detach' removes only the relationships, keeping the related nodes
+  */
   mode?: 'delete' | 'detach'
 
-  /** Maximum cascade depth, defaults to {@link MAX_CASCADE_DEPTH} */
+  /**
+  Maximum cascade depth, defaults to {@link MAX_CASCADE_DEPTH}
+  */
   depth?: number
 
   /**
-   * Soft delete: SET this label on the node instead of deleting it
-   * (labels-as-state lifecycle). Cascade options are ignored.
-   */
+  Soft delete: SET this label on the node instead of deleting it
+  (labels-as-state lifecycle). Cascade options are ignored.
+  */
   soft?: string
 }
 
 export default class DeleteService extends QueryService {
   /**
-   * Delete a node. Without options this is a plain DETACH DELETE.
-   *
-   * Note: RelationshipPropertySchema has no per-relationship cascade flag,
-   * so when cascading, every relationship declared on the schema cascades
-   * (neode keys this off relationship.cascade()).
-   */
+  Delete a node. Without options this is a plain DETACH DELETE.
+  
+  Note: RelationshipPropertySchema has no per-relationship cascade flag,
+  so when cascading, every relationship declared on the schema cascades
+  (neode keys this off relationship.cascade()).
+  */
   async delete<T extends object>(
     schema: EntitySchema,
     entity: T,
@@ -61,12 +65,12 @@ export default class DeleteService extends QueryService {
       return
     }
 
-    const cascade = options?.cascade === true || options?.mode !== undefined
+    const isCascade = options?.cascade === true || options?.mode !== undefined
 
-    if (cascade && options?.mode === 'detach') {
+    if (isCascade && options?.mode === 'detach') {
       // Delete the relationships to related nodes first, then the node
       // itself: related nodes survive (neode DeleteNode.js addDetachNode)
-      schema.getRelationships().forEach((rel) => {
+      for (const rel of schema.getRelationships()) {
         const relAlias = `${THIS_NODE}_${rel.getKey()}_rel`
 
         builder
@@ -74,17 +78,15 @@ export default class DeleteService extends QueryService {
           .relationship(rel.getType(), rel.getDirection(), relAlias)
           .toAnything()
           .delete(relAlias)
-      })
+      }
 
       builder.detachDelete(THIS_NODE)
-    } else if (cascade) {
+    } else if (isCascade) {
       // Recursively match and delete related nodes, bounded by depth
       // (neode DeleteNode.js addCascadeDeleteNode)
-      schema
-        .getRelationships()
-        .forEach((rel) =>
-          this.addCascadeDelete(builder, THIS_NODE, rel, 1, options?.depth ?? MAX_CASCADE_DEPTH),
-        )
+      for (const rel of schema
+        .getRelationships()) {this.addCascadeDelete(builder, THIS_NODE, rel, 1, options?.depth ?? MAX_CASCADE_DEPTH)}
+        
 
       builder.detachDelete(THIS_NODE)
     } else {
@@ -97,9 +99,9 @@ export default class DeleteService extends QueryService {
   }
 
   /**
-   * Add an optional match of a related node plus its own cascades, then
-   * delete it. `depth` is the number of relationship hops from the root.
-   */
+  Add an optional match of a related node plus its own cascades, then
+  delete it. `depth` is the number of relationship hops from the root.
+  */
   private addCascadeDelete(
     builder: Builder,
     fromAlias: string,
@@ -121,11 +123,9 @@ export default class DeleteService extends QueryService {
       .to(nodeAlias, targetSchema?.getLabels() ?? false)
 
     if (targetSchema) {
-      targetSchema
-        .getRelationships()
-        .forEach((targetRel) =>
-          this.addCascadeDelete(builder, nodeAlias, targetRel, depth + 1, maxDepth),
-        )
+      for (const targetRel of targetSchema
+        .getRelationships()) {this.addCascadeDelete(builder, nodeAlias, targetRel, depth + 1, maxDepth)}
+        
     }
 
     builder.detachDelete(nodeAlias)

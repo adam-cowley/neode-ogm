@@ -1,19 +1,21 @@
-import {
+import path from 'node:path'
+import fs from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
+import type {
   AccessMode,
   ConnectionProvider,
   QueryOutput,
-  QueryParams,
+  QueryParams as QueryParameters,
   QueryRecord,
   TransactionHandle,
-} from './types'
+} from './types.js'
 
 /**
- * Client shapes from the embedded Relate engine (@relate/relate).
- * Kept as structural types so the client stays a soft dependency.
- */
-interface RelateResultRow {
-  [column: string]: unknown
-}
+Client shapes from the embedded Relate engine (@relate/relate).
+Kept as structural types so the client stays a soft dependency.
+*/
+type RelateResultRow = Record<string, unknown>;
 
 interface RelateResult {
   columns: string[]
@@ -22,8 +24,8 @@ interface RelateResult {
 }
 
 interface RelateConnection {
-  queryAsync(cypher: string, params?: Record<string, unknown>): Promise<RelateResult>
-  query(cypher: string, params?: Record<string, unknown>): RelateResult
+  queryAsync(cypher: string, parameters?: Record<string, unknown>): Promise<RelateResult>
+  query(cypher: string, parameters?: Record<string, unknown>): RelateResult
   begin(): void
   commit(): string | null
   rollback(): void
@@ -52,35 +54,39 @@ interface RelateRelationshipValue {
 }
 
 /**
- * Resolve the Relate client module and native library.
- *
- * The client is not yet published to npm, so it is loaded from disk:
- *   1. `RELATE_CLIENT_PATH` env var, or
- *   2. the sibling `relate` repository checkout (`../relate/clients/javascript`)
- *
- * The native library location is passed through via `RELATE_LIB`
- * (see the Relate client's loader) — detected automatically here when
- * a sibling repository checkout exists.
- */
+Resolve the Relate client module and native library.
+
+The client is not yet published to npm, so it is loaded from disk:
+  1. `RELATE_CLIENT_PATH` env var, or
+  2. the sibling `relate` repository checkout (`../relate/clients/javascript`)
+
+The native library location is passed through via `RELATE_LIB`
+(see the Relate client's loader) — detected automatically here when
+a sibling repository checkout exists.
+*/
 export function requireRelateClient(): RelateClientModule {
-  if (!process.env.RELATE_LIB) {
+  if (!process.env['RELATE_LIB']) {
     for (const dir of ['release', 'debug']) {
-      const candidate = resolveSiblingRepoLibrary(dir)
+      const candidate = resolveSiblingRepositoryLibrary(dir)
 
       if (candidate) {
-        process.env.RELATE_LIB = candidate
+        process.env['RELATE_LIB'] = candidate
         break
       }
     }
   }
 
+  // createRequire keeps the client a soft dependency: it is resolved at call
+  // time (not import time) from node_modules or a sibling checkout
+  const nodeRequire = createRequire(import.meta.url)
+
   try {
-    return require('@relate/relate')
+    return nodeRequire('@relate/relate') as RelateClientModule
   } catch {
-    const sibling = resolveSiblingRepoClient()
+    const sibling = resolveSiblingRepositoryClient()
 
     if (sibling) {
-      return require(sibling)
+      return nodeRequire(sibling) as RelateClientModule
     }
 
     throw new Error(
@@ -97,18 +103,19 @@ interface RelateClientModule {
   }
 }
 
-function resolveSiblingRepoClient(): string | null {
-  const path = require('path') as typeof import('path')
-  const fs = require('fs') as typeof import('fs')
+function moduleDir(): string {
+  return path.dirname(fileURLToPath(import.meta.url))
+}
 
+function resolveSiblingRepositoryClient(): string | null {
   const candidates = [
-    process.env.RELATE_CLIENT_PATH,
-    path.resolve(__dirname, '../../../relate/clients/javascript'),
-    path.resolve(__dirname, '../../../../relate/clients/javascript'),
+    process.env['RELATE_CLIENT_PATH'],
+    path.resolve(moduleDir(), '../../../relate/clients/javascript'),
+    path.resolve(moduleDir(), '../../../../relate/clients/javascript'),
   ].filter((candidate): candidate is string => !!candidate)
 
   for (const candidate of candidates) {
-    if (fs.existsSync(require('path').join(candidate, 'index.js'))) {
+    if (fs.existsSync(path.join(candidate, 'index.js'))) {
       return candidate
     }
   }
@@ -116,18 +123,15 @@ function resolveSiblingRepoClient(): string | null {
   return null
 }
 
-function resolveSiblingRepoLibrary(profile: string): string | null {
-  const path = require('path') as typeof import('path')
-  const fs = require('fs') as typeof import('fs')
-
+function resolveSiblingRepositoryLibrary(profile: string): string | null {
   const candidates = [
-    path.resolve(__dirname, '../../../relate'),
-    path.resolve(__dirname, '../../../../relate'),
+    path.resolve(moduleDir(), '../../../relate'),
+    path.resolve(moduleDir(), '../../../../relate'),
   ]
 
-  for (const repo of candidates) {
+  for (const repository of candidates) {
     for (const extension of ['dylib', 'so']) {
-      const candidate = path.join(repo, 'target', profile, `librelate_ffi.${extension}`)
+      const candidate = path.join(repository, 'target', profile, `librelate_ffi.${extension}`)
 
       if (fs.existsSync(candidate)) {
         return candidate
@@ -139,10 +143,13 @@ function resolveSiblingRepoLibrary(profile: string): string | null {
 }
 
 class RelateQueryRecord implements QueryRecord {
-  constructor(
-    private readonly columns: string[],
-    private readonly row: RelateResultRow,
-  ) {}
+  private readonly columns: string[]
+  private readonly row: RelateResultRow
+
+  constructor(columns: string[], row: RelateResultRow) {
+    this.columns = columns
+    this.row = row
+  }
 
   get(key: string): unknown {
     return normalizeRelateValue(this.row[key])
@@ -158,9 +165,9 @@ class RelateQueryRecord implements QueryRecord {
 }
 
 /**
- * Convert Relate values into the normalized graph shapes. Nodes and
- * relationships arrive as plain objects with a `kind` discriminator.
- */
+Convert Relate values into the normalized graph shapes. Nodes and
+relationships arrive as plain objects with a `kind` discriminator.
+*/
 export function normalizeRelateValue(value: unknown): unknown {
   if (value === null || value === undefined) {
     return value
@@ -169,7 +176,7 @@ export function normalizeRelateValue(value: unknown): unknown {
   if (typeof value === 'object' && !Array.isArray(value)) {
     const object = value as Record<string, unknown>
 
-    if (object.kind === 'node') {
+    if (object['kind'] === 'node') {
       const node = value as RelateNodeValue
 
       return {
@@ -179,7 +186,7 @@ export function normalizeRelateValue(value: unknown): unknown {
       }
     }
 
-    if (object.kind === 'relationship') {
+    if (object['kind'] === 'relationship') {
       const rel = value as RelateRelationshipValue
 
       return {
@@ -200,20 +207,16 @@ export function normalizeRelateValue(value: unknown): unknown {
     return output
   }
 
-  if (Array.isArray(value)) {
-    return value.map((item) => normalizeRelateValue(item))
-  }
-
-  return value
+  return Array.isArray(value) ? value.map((item) => normalizeRelateValue(item)) : value;
 }
 
-import { classifyError } from '../errors'
+import { classifyError } from '../errors/index.js'
 
 /**
- * The Relate JS client rejects with RelateError carrying the Neo4j error
- * code — classify it into the taxonomy (NTS-129) so both backends surface
- * typed errors
- */
+The Relate JS client rejects with RelateError carrying the Neo4j error
+code — classify it into the taxonomy (NTS-129) so both backends surface
+typed errors
+*/
 async function classified<T>(promise: Promise<T>): Promise<T> {
   try {
     return await promise
@@ -225,12 +228,15 @@ async function classified<T>(promise: Promise<T>): Promise<T> {
 class RelateTransactionHandle implements TransactionHandle {
   private open = true
 
-  constructor(
-    private readonly connection: RelateConnection,
-    private readonly release: () => void = () => {},
-  ) {}
+  private readonly connection: RelateConnection
+  private readonly release: () => void = () => {}
 
-  async run(statement: string, parameters?: QueryParams): Promise<QueryOutput> {
+  constructor(connection: RelateConnection, release?: () => void) {
+    this.connection = connection
+    this.release = release ?? (() => {})
+  }
+
+  async run(statement: string, parameters?: QueryParameters): Promise<QueryOutput> {
     if (!this.open) {
       throw new Error('Transaction has already been closed')
     }
@@ -280,29 +286,29 @@ export class RelateConnectionProvider implements ConnectionProvider {
   private readonly connection: RelateConnection
 
   /**
-   * The embedded engine supports ONE transaction at a time per connection.
-   * Facade flows run concurrently (e.g. Promise.all of saves), so
-   * beginTransaction serialises: each transaction holds the slot from
-   * begin() until its commit/rollback.
-   */
+  The embedded engine supports ONE transaction at a time per connection.
+  Facade flows run concurrently (e.g. Promise.all of saves), so
+  beginTransaction serialises: each transaction holds the slot from
+  begin() until its commit/rollback.
+  */
   private queue: Promise<void> = Promise.resolve()
   private txOpen = false
 
   constructor(database: RelateDatabase, namespace = 'neo4j') {
     const client = requireRelateClient()
-    void client // the native library is loaded at require-time
+    client // the native library is loaded at require-time
 
     this.connection = database.connect(namespace)
   }
 
   /**
-   * The embedded engine runs in a single namespace, fixed when the provider
-   * is constructed (`namespace`): the per-call `database` override and the
-   * access mode are accepted for port parity and ignored.
-   */
+  The embedded engine runs in a single namespace, fixed when the provider
+  is constructed (`namespace`): the per-call `database` override and the
+  access mode are accepted for port parity and ignored.
+  */
   async run(
     statement: string,
-    parameters?: QueryParams,
+    parameters?: QueryParameters,
     _mode?: AccessMode,
     _database?: string,
   ): Promise<QueryOutput> {

@@ -1,46 +1,54 @@
-import { ConnectionProvider, QueryOutput, Runner } from '../../driver/types'
-import { THIS_NODE } from '../../constants'
-import { hydrate } from '../../hydrate'
-import EntitySchema from '../../meta/entity/entity-schema'
-import { PropertyType, isProjectedProperty } from '../../meta/property-schema'
-import { getValueOrDefault } from '../../utils'
-import { modelPropertyValues } from '../write-utils'
-import { validate } from '../../validation'
-import QueryService from './query.service'
-import { getMergeFields } from './merge.service'
+import type { ConnectionProvider, QueryOutput, Runner } from '../../driver/types.js'
+import { THIS_NODE } from '../../constants.js'
+import { hydrate } from '../../hydrate.js'
+import type EntitySchema from '../../meta/entity/entity-schema.js'
+import { PropertyType, isProjectedProperty } from '../../meta/property-schema.js'
+import { getValueOrDefault } from '../../utils.js'
+import { modelPropertyValues } from '../write-utils.js'
+import { validate } from '../../validation/index.js'
+import QueryService from './query.service.js'
+import { getMergeFields } from './merge.service.js'
 
 /**
- * Rows per UNWIND statement / managed write transaction. Chunking keeps
- * each statement's parameter map within driver limits (the reason the
- * chunkSize option exists at all)
- */
+Rows per UNWIND statement / managed write transaction. Chunking keeps
+each statement's parameter map within driver limits (the reason the
+chunkSize option exists at all)
+*/
 export const DEFAULT_CHUNK_SIZE = 1000
 
-/** Property types that are never written as node properties */
-const NON_WRITABLE_TYPES = new Set([
+/**
+Property types that are never written as node properties
+*/
+const NON_WRITABLE_TYPES = new Set<PropertyType>([
   PropertyType.INTERNAL_ID,
   PropertyType.ALL_PROPERTIES,
   PropertyType.NODE,
 ])
 
 export interface BulkOptions {
-  /** Rows per statement and per write transaction (default 1000) */
+  /**
+  Rows per statement and per write transaction (default 1000)
+  */
   chunkSize?: number
 
-  /** Per-call database override (a bare Runner runs in its own scope) */
-  database?: string
+  /**
+  Per-call database override (a bare Runner runs in its own scope)
+  */
+  database?: string | undefined
 }
 
 /**
- * The result of one chunk: the rows attempted and the hydrated
- * created/merged entities, in row order
- */
+The result of one chunk: the rows attempted and the hydrated
+created/merged entities, in row order
+*/
 export interface BulkChunk<T> {
   count: number
   entities: T[]
 }
 
-/** Split rows into chunks of at most chunkSize */
+/**
+Split rows into chunks of at most chunkSize
+*/
 export function chunk<T>(rows: T[], chunkSize: number): T[][] {
   requireChunkSize(chunkSize)
 
@@ -59,16 +67,18 @@ function requireChunkSize(chunkSize: number): void {
   }
 }
 
-/** `:Label:Label` node pattern suffix for a schema's labels */
+/**
+`:Label:Label` node pattern suffix for a schema's labels
+*/
 export function labelPattern(labels: string[]): string {
-  return labels.length ? `:${labels.join(':')}` : ''
+  return labels.length > 0 ? `:${labels.join(':')}` : ''
 }
 
 /**
- * Validate a row exactly like the single-create path (defaults resolved,
- * Zod rules applied) and reduce it to the plain property map the UNWIND
- * statement writes
- */
+Validate a row exactly like the single-create path (defaults resolved,
+Zod rules applied) and reduce it to the plain property map the UNWIND
+statement writes
+*/
 export function processCreateRow(
   row: Record<string, unknown>,
   schema: EntitySchema,
@@ -90,8 +100,8 @@ export function processCreateRow(
 
   const values: Record<string, unknown> = {}
 
-  schema.getProperties().forEach((property) => {
-    if (NON_WRITABLE_TYPES.has(property.getType()) || isProjectedProperty(property)) return
+  for (const property of schema.getProperties()) {
+    if (NON_WRITABLE_TYPES.has(property.getType()) || isProjectedProperty(property)) {continue}
 
     const value = getValueOrDefault(row, property, schema)
 
@@ -99,17 +109,17 @@ export function processCreateRow(
     if (value !== undefined && value !== null) {
       values[property.getKey()] = value
     }
-  })
+  }
 
   return values
 }
 
 /**
- * Validate a row and split it into the merge match (the merge fields —
- * unique, indexed or primary key properties — the row explicitly sets,
- * never default-resolved) and the remaining set values
- * (the merge-field semantics of mergeOn)
- */
+Validate a row and split it into the merge match (the merge fields —
+unique, indexed or primary key properties — the row explicitly sets,
+never default-resolved) and the remaining set values
+(the merge-field semantics of mergeOn)
+*/
 export function processMergeRow(
   row: Record<string, unknown>,
   schema: EntitySchema,
@@ -121,13 +131,13 @@ export function processMergeRow(
   // (e.g. a fresh UUID per row) would never match anything
   const match: Record<string, unknown> = {}
 
-  mergeFields.forEach((property) => {
+  for (const property of mergeFields) {
     const key = property.getKey()
 
     if (Object.hasOwn(row, key) && row[key] !== undefined) {
       match[key] = row[key]
     }
-  })
+  }
 
   if (Object.keys(match).length === 0) {
     throw new Error(
@@ -140,19 +150,19 @@ export function processMergeRow(
 
   const set: Record<string, unknown> = {}
 
-  schema.getProperties().forEach((property) => {
-    if (NON_WRITABLE_TYPES.has(property.getType()) || isProjectedProperty(property)) return
+  for (const property of schema.getProperties()) {
+    if (NON_WRITABLE_TYPES.has(property.getType()) || isProjectedProperty(property)) {continue}
 
     // Match keys ride in the match map; they must never be
     // default-resolved into the set map
-    if (mergeKeys.has(property.getKey())) return
+    if (mergeKeys.has(property.getKey())) {continue}
 
     const value = getValueOrDefault(row, property, schema)
 
     if (value !== undefined) {
       set[property.getKey()] = value
     }
-  })
+  }
 
   validate({ ...match, ...set }, schema)
 
@@ -160,11 +170,11 @@ export function processMergeRow(
 }
 
 /**
- * UNWIND $rows AS row
- * CREATE (this:Label)
- * SET this += row
- * RETURN this
- */
+UNWIND $rows AS row
+CREATE (this:Label)
+SET this += row
+RETURN this
+*/
 export function buildCreateQuery(labels: string[]): string {
   return [
     'UNWIND $rows AS row',
@@ -175,11 +185,11 @@ export function buildCreateQuery(labels: string[]): string {
 }
 
 /**
- * UNWIND $rows AS row
- * MERGE (this:Label { key: row.key, ... })
- * SET this += row
- * RETURN this
- */
+UNWIND $rows AS row
+MERGE (this:Label { key: row.key, ... })
+SET this += row
+RETURN this
+*/
 export function buildMergeQuery(labels: string[], matchKeys: string[]): string {
   if (matchKeys.length === 0) {
     throw new Error('mergeMany requires at least one match property')
@@ -196,10 +206,10 @@ export function buildMergeQuery(labels: string[], matchKeys: string[]): string {
 }
 
 /**
- * Run one unit of work per chunk: a managed WRITE transaction when the
- * runner is a ConnectionProvider, or the runner's own scope when it is an
- * already-open transaction
- */
+Run one unit of work per chunk: a managed WRITE transaction when the
+runner is a ConnectionProvider, or the runner's own scope when it is an
+already-open transaction
+*/
 async function inWriteTransaction(
   runner: Runner,
   database: string | undefined,
@@ -227,18 +237,18 @@ async function inWriteTransaction(
 }
 
 /**
- * Bulk CREATE and MERGE via UNWIND: one managed write transaction per
- * chunk, one UNWIND statement per transaction, rows validated and reduced
- * to property maps exactly like the single-create / merge paths
- */
+Bulk CREATE and MERGE via UNWIND: one managed write transaction per
+chunk, one UNWIND statement per transaction, rows validated and reduced
+to property maps exactly like the single-create / merge paths
+*/
 export default class BulkService extends QueryService {
   /**
-   * CREATE every row in chunks. Rows are flat property records: nested
-   * relationship targets are not supported (they throw), defaults and
-   * validation behave exactly like create()
-   */
+  CREATE every row in chunks. Rows are flat property records: nested
+  relationship targets are not supported (they throw), defaults and
+  validation behave exactly like create()
+  */
   async createMany<T>(
-    constructor: new (...args: never[]) => T,
+    constructor: new (...arguments_: never[]) => T,
     schema: EntitySchema,
     rows: Record<string, unknown>[],
     options: BulkOptions = {},
@@ -249,13 +259,13 @@ export default class BulkService extends QueryService {
   }
 
   /**
-   * MERGE every row in chunks on the model's merge fields (the unique,
-   * indexed or primary key properties each row explicitly sets): rows
-   * matching an existing node update it (`+=`), the rest are created.
-   * Every row must merge on the same merge fields
-   */
+  MERGE every row in chunks on the model's merge fields (the unique,
+  indexed or primary key properties each row explicitly sets): rows
+  matching an existing node update it (`+=`), the rest are created.
+  Every row must merge on the same merge fields
+  */
   async mergeMany<T>(
-    constructor: new (...args: never[]) => T,
+    constructor: new (...arguments_: never[]) => T,
     schema: EntitySchema,
     rows: Record<string, unknown>[],
     options: BulkOptions = {},
@@ -266,9 +276,15 @@ export default class BulkService extends QueryService {
 
     const parts = rows.map((row) => processMergeRow(row, schema))
 
-    const matchKeys = Object.keys(parts[0].match).sort()
+    const firstPart = parts[0]
 
-    parts.forEach((part, index) => {
+    if (firstPart === undefined) {
+      return []
+    }
+
+    const matchKeys = Object.keys(firstPart.match).sort()
+
+    for (const [index, part] of parts.entries()) {
       const keys = Object.keys(part.match).sort()
 
       if (keys.join(',') !== matchKeys.join(',')) {
@@ -277,7 +293,7 @@ export default class BulkService extends QueryService {
             `row 0 merges on ${matchKeys.join(', ')}, row ${index} on ${keys.join(', ')}`,
         )
       }
-    })
+    }
 
     const query = buildMergeQuery(schema.getLabels(), matchKeys)
 
@@ -288,7 +304,7 @@ export default class BulkService extends QueryService {
   }
 
   private async writeChunks<T>(
-    constructor: new (...args: never[]) => T,
+    constructor: new (...arguments_: never[]) => T,
     rowMaps: Record<string, unknown>[],
     query: string,
     options: BulkOptions,
@@ -298,7 +314,7 @@ export default class BulkService extends QueryService {
     const chunks: BulkChunk<T>[] = []
 
     for (const rows of chunk(rowMaps, chunkSize)) {
-      const output = await inWriteTransaction(this.runner, options.database, (tx) =>
+      const output = await inWriteTransaction(this.runner, options.database, async (tx) =>
         tx.run(query, { rows }),
       )
 

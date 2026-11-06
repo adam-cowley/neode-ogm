@@ -1,16 +1,22 @@
-import { ConnectionProvider } from '../../driver/types'
-import { ConstraintAction, ConstraintType, SchemaResult, schemaObjectName } from './schema.service'
+import type { ConnectionProvider } from '../../driver/types.js'
+import { ConstraintAction, ConstraintType, type SchemaResult, schemaObjectName } from './schema.service.js'
 
 const SIMILARITY_FUNCTIONS = ['cosine', 'euclidean'] as const
 
-/** A vector index to keep installed on the database */
+/**
+A vector index to keep installed on the database
+*/
 export interface VectorIndexDefinition {
   label: string
   property: string
-  /** Number of dimensions of the stored vectors — must match the embedding model */
+  /**
+  Number of dimensions of the stored vectors — must match the embedding model
+  */
   dimensions: number
   similarityFunction?: (typeof SIMILARITY_FUNCTIONS)[number]
-  /** Defaults to `<label>_<property>_vector` */
+  /**
+  Defaults to `<label>_<property>_vector`
+  */
   name?: string
 }
 
@@ -51,25 +57,28 @@ export function dropVectorStatement(name: string): string {
 }
 
 /**
- * Installs/drops the given vector index definitions, following the same
- * result-reporting pattern as SchemaService
- */
+Installs/drops the given vector index definitions, following the same
+result-reporting pattern as SchemaService
+*/
 export default class VectorIndexService {
-  constructor(
-    private readonly connection: ConnectionProvider,
-    private readonly definitions: VectorIndexDefinition[],
-  ) {}
+  private readonly connection: ConnectionProvider
+  private readonly definitions: VectorIndexDefinition[]
 
-  create(): Promise<SchemaResult[]> {
+  constructor(connection: ConnectionProvider, definitions: VectorIndexDefinition[]) {
+    this.connection = connection
+    this.definitions = definitions
+  }
+
+  async create(): Promise<SchemaResult[]> {
     return this.run(ConstraintAction.CREATE)
   }
 
-  drop(): Promise<SchemaResult[]> {
+  async drop(): Promise<SchemaResult[]> {
     return this.run(ConstraintAction.DROP)
   }
 
-  private run(action: ConstraintAction): Promise<SchemaResult[]> {
-    return Promise.all(this.definitions.map((definition) => this.runOne(action, definition)))
+  private async run(action: ConstraintAction): Promise<SchemaResult[]> {
+    return Promise.all(this.definitions.map(async (definition) => this.runOne(action, definition)))
   }
 
   private async runOne(
@@ -95,8 +104,8 @@ export default class VectorIndexService {
       await this.connection.run(statement, {}, 'WRITE')
 
       output.success = true
-    } catch (e) {
-      output.error = e as Error
+    } catch (error) {
+      output.error = error as Error
     }
 
     return output

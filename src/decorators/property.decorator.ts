@@ -1,6 +1,6 @@
-import { mergeProperty } from '../meta'
-import { PropertyType } from '../meta/property-schema'
-import PropertyConfig from './property-config.interface'
+import { mergeProperty } from '../meta/index.js'
+import { PropertyType } from '../meta/property-schema.js'
+import type PropertyConfig from './property-config.interface.js'
 
 const TYPE_ALIASES: Record<string, PropertyType> = {
   string: PropertyType.STRING,
@@ -21,16 +21,16 @@ const TYPE_ALIASES: Record<string, PropertyType> = {
 }
 
 /**
- * Register a property with an explicit type and config, e.g.
- * `@Property({ type: 'string', index: true })`.
- *
- * Prefer this over `@String` to avoid shadowing global types.
- */
+Register a property with an explicit type and config, e.g.
+`@Property({ type: 'string', index: true })`.
+
+Prefer this over `@String` to avoid shadowing global types.
+*/
 export default function Property(config: PropertyConfig = {}) {
   return function (target: unknown, propertyKey: string, _descriptor?: unknown): void {
     const constructor = (target as { constructor: object }).constructor
 
-    let type = PropertyType.ANY
+    let type: PropertyType = PropertyType.ANY
 
     if (config.type !== undefined) {
       const mapped: PropertyType | undefined = TYPE_ALIASES[config.type]

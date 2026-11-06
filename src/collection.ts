@@ -1,11 +1,15 @@
-import { toJson } from './serialise'
+import { toJson } from './serialise.js'
 
 /**
- * An iterable wrapper over an array of entities (parity with neode's
- * Collection): reads like an array, serialises through toJson().
- */
+An iterable wrapper over an array of entities (parity with neode's
+Collection): reads like an array, serialises through toJson().
+*/
 export default class Collection<T> {
-  constructor(private readonly values: T[] = []) {}
+  private readonly values: T[]
+
+  constructor(values: T[] = []) {
+    this.values = values
+  }
 
   get length(): number {
     return this.values.length
@@ -23,19 +27,19 @@ export default class Collection<T> {
     return this.values[0]
   }
 
-  map<U>(fn: (value: T, index: number, array: T[]) => U): U[] {
-    return this.values.map(fn)
+  map<U>(function_: (value: T, index: number, array: T[]) => U): U[] {
+    return this.values.map(function_)
   }
 
-  find(fn: (value: T, index: number, array: T[]) => unknown): T | undefined {
-    return this.values.find(fn)
+  find(function_: (value: T, index: number, array: T[]) => unknown): T | undefined {
+    return this.values.find(function_)
   }
 
-  forEach(fn: (value: T, index: number, array: T[]) => void): void {
-    this.values.forEach(fn)
+  forEach(function_: (value: T, index: number, array: T[]) => void): void {
+    this.values.forEach(function_)
   }
 
-  toJson(): Promise<unknown[]> {
+  async toJson(): Promise<unknown[]> {
     return Promise.all(this.values.map((value) => toJson(value)))
   }
 

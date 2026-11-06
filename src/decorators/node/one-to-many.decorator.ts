@@ -1,6 +1,6 @@
-import { Newable } from '../../meta/newable'
-import { Direction } from '../../query'
-import { mergeRelationshipProperty } from '../../meta'
+import type { Newable } from '../../meta/newable.js'
+import { Direction } from '../../query/index.js'
+import { mergeRelationshipProperty } from '../../meta/index.js'
 
 export default function OneToMany(
   entity: () => Newable,

@@ -1,7 +1,8 @@
-import Builder from './Builder'
-import { getModel } from '../meta'
-import EntitySchema, { EntityType } from '../meta/entity/entity-schema'
-import RelationshipPropertySchema from '../meta/relationship-property-schema'
+import Builder from './Builder.js'
+import { getModel } from '../meta/index.js'
+import type EntitySchema from '../meta/entity/entity-schema.js';
+import { EntityType } from '../meta/entity/entity-schema.js'
+import type RelationshipPropertySchema from '../meta/relationship-property-schema.js'
 
 export const EAGER_ID = '__EAGER_ID__'
 export const EAGER_LABELS = '__EAGER_LABELS__'
@@ -9,15 +10,15 @@ export const EAGER_TYPE = '__EAGER_TYPE__'
 export const MAX_EAGER_DEPTH = 3
 
 /**
- * Build a pattern to use in an eager load statement:
- * `<name>: [ <pattern> | <fields> ]`, with a `[0]` suffix on singular
- * relationships.
- *
- * neode resolved the target model via `neode.model(rel.target())` inside a
- * try/catch; here the target schema comes straight from the relationship's
- * metamodel entry, and an unregistered target simply yields no nested eager
- * fields.
- */
+Build a pattern to use in an eager load statement:
+`<name>: [ <pattern> | <fields> ]`, with a `[0]` suffix on singular
+relationships.
+
+neode resolved the target model via `neode.model(rel.target())` inside a
+try/catch; here the target schema comes straight from the relationship's
+metamodel entry, and an unregistered target simply yields no nested eager
+fields.
+*/
 export function eagerPattern(
   depth: number,
   alias: string,
@@ -43,29 +44,21 @@ export function eagerPattern(
 
   let fields: string
 
-  if (targetSchema && targetSchema.getType() === EntityType.RelationshipEntity) {
-    fields = eagerRelationship(depth + 1, relationshipVariable, name, nodeVariable, targetSchema)
-  } else {
-    fields = eagerNode(depth + 1, nodeVariable, targetSchema)
-  }
+  fields = targetSchema && targetSchema.getType() === EntityType.RelationshipEntity ? eagerRelationship(depth + 1, relationshipVariable, name, nodeVariable, targetSchema) : eagerNode(depth + 1, nodeVariable, targetSchema);
 
   const pattern = `${name}: [ ${builder.pattern().trim()} | ${fields} ]`
 
   // Get the first?
-  if (!rel.getMany()) {
-    return pattern + '[0]'
-  }
-
-  return pattern
+  return rel.getMany() ? pattern : pattern + '[0]';
 }
 
 /**
- * Produces a Cypher map projection for a consistent eager loading format for
- * a Node and any subsequent eagerly loaded models up to the maximum depth.
- *
- * neode projected `__EAGER_ID__` with the deprecated `id()`; elementId() is
- * the modern equivalent (it returns a string rather than a number).
- */
+Produces a Cypher map projection for a consistent eager loading format for
+a Node and any subsequent eagerly loaded models up to the maximum depth.
+
+neode projected `__EAGER_ID__` with the deprecated `id()`; elementId() is
+the modern equivalent (it returns a string rather than a number).
+*/
 export function eagerNode(depth: number, alias: string, schema?: EntitySchema): string {
   const indent = `  `.repeat(depth * 2)
   let pattern = `\n${indent} ${alias} { `
@@ -81,12 +74,11 @@ export function eagerNode(depth: number, alias: string, schema?: EntitySchema): 
 
   // Eager
   if (schema && depth <= MAX_EAGER_DEPTH) {
-    schema
+    for (const rel of schema
       .getRelationships()
-      .filter((rel) => rel.getEager())
-      .forEach((rel) => {
+      .filter((rel) => rel.getEager())) {
         pattern += `\n${indent}${indent},` + eagerPattern(depth, alias, rel)
-      })
+      }
   }
 
   pattern += `\n${indent}}`
@@ -95,9 +87,9 @@ export function eagerNode(depth: number, alias: string, schema?: EntitySchema): 
 }
 
 /**
- * Produces a Cypher map projection for a consistent eager loading format for
- * a Relationship and the node it connects to, up to the maximum depth.
- */
+Produces a Cypher map projection for a consistent eager loading format for
+a Relationship and the node it connects to, up to the maximum depth.
+*/
 export function eagerRelationship(
   depth: number,
   alias: string,

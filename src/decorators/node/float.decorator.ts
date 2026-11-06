@@ -1,10 +1,10 @@
-import { mergeProperty } from '../../meta'
-import { PropertyType } from '../../meta/property-schema'
-import PropertyConfig from '../property-config.interface'
+import { mergeProperty } from '../../meta/index.js'
+import { PropertyType } from '../../meta/property-schema.js'
+import type PropertyConfig from '../property-config.interface.js'
 
 /**
- * Register a float property.
- */
+Register a float property.
+*/
 export default function Float(config: PropertyConfig = {}) {
   return function (target: unknown, propertyKey: string, _descriptor?: unknown): void {
     const constructor = (target as { constructor: object }).constructor

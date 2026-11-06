@@ -1,13 +1,14 @@
-import { randomUUID } from 'crypto'
+import { randomUUID } from 'node:crypto'
 
-import { mergeModel, mergeProperty, mergeRelationshipProperty } from './index'
-import { Newable } from './newable'
-import PropertySchema, { PropertyType } from './property-schema'
-import { toDirection } from '../query'
-import {
-  ComputedDefinition,
-  ExpressionDefinition,
-  LabelPresentDefinition,
+import { mergeModel, mergeProperty, mergeRelationshipProperty } from './index.js'
+import type { Newable } from './newable.js'
+import type PropertySchema from './property-schema.js';
+import { PropertyType } from './property-schema.js'
+import { toDirection } from '../query/index.js'
+import type {
+
+
+
   ProjectionDefinition,
   PropertyDefinition,
   PropertyTypeName,
@@ -17,13 +18,17 @@ import {
   RelationshipDefinition,
   RelationshipExistsDefinition,
   SchemaDefinition,
-} from './schema-definition.interface'
+} from './schema-definition.interface.js'
 
-/** neode's Model.js RELATIONSHIP_TYPES — keys that define a relationship */
-const RELATIONSHIP_TYPES = ['relationship', 'relationships', 'node', 'nodes']
+/**
+neode's Model.js RELATIONSHIP_TYPES — keys that define a relationship
+*/
+const RELATIONSHIP_TYPES = new Set(['relationship', 'relationships', 'node', 'nodes'])
 
-/** Definition `type` values that define a projected read-model property */
-const PROJECTION_TYPES = [
+/**
+Definition `type` values that define a projected read-model property
+*/
+const PROJECTION_TYPES = new Set([
   'relatedOne',
   'relatedMany',
   'relationshipCount',
@@ -31,7 +36,7 @@ const PROJECTION_TYPES = [
   'labelPresent',
   'expression',
   'computed',
-]
+])
 
 const PROPERTY_TYPES: Record<PropertyTypeName, PropertyType> = {
   any: PropertyType.ANY,
@@ -51,13 +56,19 @@ const PROPERTY_TYPES: Record<PropertyTypeName, PropertyType> = {
   duration: PropertyType.DURATION,
 }
 
-/** Name index over the shared models registry */
-const modelsByName: Map<string, Newable> = new Map()
+/**
+Name index over the shared models registry
+*/
+const modelsByName = new Map<string, Newable>()
 
-/** Name index of the original definitions, kept for extendModel cloning */
-const definitionsByName: Map<string, SchemaDefinition> = new Map()
+/**
+Name index of the original definitions, kept for extendModel cloning
+*/
+const definitionsByName = new Map<string, SchemaDefinition>()
 
-/** Relationship definitions whose target model was not yet defined */
+/**
+Relationship definitions whose target model was not yet defined
+*/
 interface PendingRelationship {
   constructor: Newable
   key: string
@@ -66,7 +77,9 @@ interface PendingRelationship {
 
 const pendingRelationships: PendingRelationship[] = []
 
-/** Projection definitions whose target model was not yet defined */
+/**
+Projection definitions whose target model was not yet defined
+*/
 interface PendingProjection {
   constructor: Newable
   key: string
@@ -76,10 +89,10 @@ interface PendingProjection {
 const pendingProjections: PendingProjection[] = []
 
 /**
- * A virtual entity class for map-defined models. Instances hydrate and
- * resolve back through the shared registry like decorator-defined classes
- * (`new constructor()` → `.constructor` finds the EntitySchema).
- */
+A virtual entity class for map-defined models. Instances hydrate and
+resolve back through the shared registry like decorator-defined classes
+(`new constructor()` → `.constructor` finds the EntitySchema).
+*/
 function virtualConstructor(name: string): Newable {
   class Virtual {}
 
@@ -92,7 +105,7 @@ function isRelationshipDefinition(value: unknown): value is RelationshipDefiniti
   return (
     typeof value === 'object' &&
     value !== null &&
-    RELATIONSHIP_TYPES.includes((value as RelationshipDefinition).type)
+    RELATIONSHIP_TYPES.has((value as RelationshipDefinition).type)
   )
 }
 
@@ -100,18 +113,20 @@ function isProjectionDefinition(value: unknown): value is ProjectionDefinition {
   return (
     typeof value === 'object' &&
     value !== null &&
-    PROJECTION_TYPES.includes((value as ProjectionDefinition).type)
+    PROJECTION_TYPES.has((value as ProjectionDefinition).type)
   )
 }
 
-/** Register a projected read-model property from its map definition */
+/**
+Register a projected read-model property from its map definition
+*/
 function wireProjectionProperty(
   constructor: Newable,
   key: string,
   definition: ProjectionDefinition,
   target?: Newable,
 ): void {
-  const PROJECTION_PROPERTY_TYPES: Record<string, PropertyType> = {
+  const PROJECTION_PROPERTY_TYPES: Record<ProjectionDefinition['type'], PropertyType> = {
     relatedOne: PropertyType.RELATED_ONE,
     relatedMany: PropertyType.RELATED_MANY,
     relationshipCount: PropertyType.RELATIONSHIP_COUNT,
@@ -128,10 +143,10 @@ function wireProjectionProperty(
     case 'relatedMany': {
       const related: RelatedOneDefinition | RelatedManyDefinition = definition
 
-      if (related.fields) property.setFields(related.fields)
+      if (related.fields) {property.setFields(related.fields)}
       property.setRelationshipType(related.relationship)
       property.setDirection(toDirection(related.direction))
-      if (target) property.setEntity(target)
+      if (target) {property.setEntity(target)}
       break
     }
 
@@ -140,10 +155,10 @@ function wireProjectionProperty(
 
       property.setRelationshipType(count.relationship)
       property.setDirection(toDirection(count.direction))
-      if (count.where) property.setWhere(count.where)
-      if (count.minHops !== undefined) property.setMinHops(count.minHops)
-      if (count.maxHops !== undefined) property.setMaxHops(count.maxHops)
-      if (target) property.setEntity(target)
+      if (count.where) {property.setWhere(count.where)}
+      if (count.minHops !== undefined) {property.setMinHops(count.minHops)}
+      if (count.maxHops !== undefined) {property.setMaxHops(count.maxHops)}
+      if (target) {property.setEntity(target)}
       break
     }
 
@@ -152,21 +167,24 @@ function wireProjectionProperty(
 
       property.setRelationshipType(exists.relationship)
       property.setDirection(toDirection(exists.direction))
-      if (exists.where) property.setWhere(exists.where)
+      if (exists.where) {property.setWhere(exists.where)}
       break
     }
 
-    case 'labelPresent':
-      property.setLabel((definition as LabelPresentDefinition).label)
+    case 'labelPresent': {
+      property.setLabel((definition).label)
       break
+    }
 
-    case 'expression':
-      property.setExpression((definition as ExpressionDefinition).expression)
+    case 'expression': {
+      property.setExpression((definition).expression)
       break
+    }
 
-    case 'computed':
-      property.setCompute((definition as ComputedDefinition).compute)
+    case 'computed': {
+      property.setCompute((definition).compute)
       break
+    }
   }
 }
 
@@ -207,20 +225,25 @@ function wireRelationshipModel(
 }
 
 /**
- * Wire any queued relationship definitions whose target now exists.
- * Targets defined later (e.g. `with()` order) resolve on the next call
- * into this module; targets that never exist simply stay unwired.
- */
+Wire any queued relationship definitions whose target now exists.
+Targets defined later (e.g. `with()` order) resolve on the next call
+into this module; targets that never exist simply stay unwired.
+*/
 function flushPendingRelationships(): void {
-  for (let i = pendingRelationships.length - 1; i >= 0; i--) {
-    const pending = pendingRelationships[i]
+  for (let index = pendingRelationships.length - 1; index >= 0; index--) {
+    const pending = pendingRelationships[index]
+
+    if (pending === undefined) {
+      continue
+    }
+
     const target = modelsByName.get(pending.definition.target)
 
     if (!target) {
       continue
     }
 
-    pendingRelationships.splice(i, 1)
+    pendingRelationships.splice(index, 1)
 
     wireRelationshipModel(pending.constructor, pending.key, pending.definition, target)
   }
@@ -228,10 +251,17 @@ function flushPendingRelationships(): void {
   flushPendingProjections()
 }
 
-/** Same lazy-target resolution for queued projection definitions */
+/**
+Same lazy-target resolution for queued projection definitions
+*/
 function flushPendingProjections(): void {
-  for (let i = pendingProjections.length - 1; i >= 0; i--) {
-    const pending = pendingProjections[i]
+  for (let index = pendingProjections.length - 1; index >= 0; index--) {
+    const pending = pendingProjections[index]
+
+    if (pending === undefined) {
+      continue
+    }
+
     const targetName = (pending.definition as { target?: string }).target
     const target = targetName ? modelsByName.get(targetName) : undefined
 
@@ -239,16 +269,16 @@ function flushPendingProjections(): void {
       continue
     }
 
-    pendingProjections.splice(i, 1)
+    pendingProjections.splice(index, 1)
 
     wireProjectionProperty(pending.constructor, pending.key, pending.definition, target)
   }
 }
 
 /**
- * Register a model from a map-based schema definition (neode parity),
- * returning the generated virtual class for the model.
- */
+Register a model from a map-based schema definition (neode parity),
+returning the generated virtual class for the model.
+*/
 export function defineModel(name: string, schema: SchemaDefinition): Newable {
   const constructor = virtualConstructor(name)
 
@@ -264,9 +294,9 @@ export function defineModel(name: string, schema: SchemaDefinition): Newable {
   modelsByName.set(name, constructor)
   definitionsByName.set(name, schema)
 
-  Object.entries(schema).forEach(([key, value]) => {
+  for (const [key, value] of Object.entries(schema)) {
     if (key === 'labels' || value === undefined) {
-      return
+      continue
     }
 
     if (isRelationshipDefinition(value)) {
@@ -283,7 +313,7 @@ export function defineModel(name: string, schema: SchemaDefinition): Newable {
     } else {
       definePropertyModel(constructor, key, value as PropertyTypeName | PropertyDefinition)
     }
-  })
+  }
 
   flushPendingRelationships()
 
@@ -291,8 +321,8 @@ export function defineModel(name: string, schema: SchemaDefinition): Newable {
 }
 
 /**
- * Get a previously defined model constructor by name
- */
+Get a previously defined model constructor by name
+*/
 export function getModelByName(name: string): Newable | undefined {
   flushPendingRelationships()
 
@@ -300,8 +330,8 @@ export function getModelByName(name: string): Newable | undefined {
 }
 
 /**
- * Get all defined model constructors, keyed by name
- */
+Get all defined model constructors, keyed by name
+*/
 export function getModelsByName(): Map<string, Newable> {
   flushPendingRelationships()
 
@@ -309,9 +339,9 @@ export function getModelsByName(): Map<string, Newable> {
 }
 
 /**
- * neode's extend(): register `as` as a clone of the model `name` with `as`
- * added as an extra label and `schema` merged over the original definition.
- */
+neode's extend(): register `as` as a clone of the model `name` with `as`
+added as an extra label and `schema` merged over the original definition.
+*/
 export function extendModel(name: string, as: string, schema: SchemaDefinition = {}): Newable {
   const original = definitionsByName.get(name)
 
@@ -327,14 +357,14 @@ export function extendModel(name: string, as: string, schema: SchemaDefinition =
 }
 
 /**
- * neode's helpful error message for a model lookup that found nothing
- */
+neode's helpful error message for a model lookup that found nothing
+*/
 export function unknownDefinitionError(name: string): string {
   const defined = Array.from(modelsByName.keys())
 
   let message = `Couldn't find a definition for "${name}".`
 
-  if (!defined.length) {
+  if (defined.length === 0) {
     message += ' It looks like no models have been defined.'
   } else {
     message += ` The models currently defined are [${defined.join(', ')}]`

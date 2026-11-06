@@ -1,14 +1,14 @@
 /**
- * Watch or Not model classes — the decorator API form of the map definitions
- * in `examples/models/models/*.js`.
- *
- * Ordering matters: decorator factories run at class-decoration time, so a
- * relationship's target class must exist before the class that points at it.
- * The one unavoidable cycle — Movie's inverse `director` view of the
- * `DIRECTED` relationship — is registered through the metamodel directly at
- * the bottom of this file (the map API resolves targets lazily by name, so
- * it never hits this).
- */
+Watch or Not model classes — the decorator API form of the map definitions
+in `examples/models/models/*.js`.
+
+Ordering matters: decorator factories run at class-decoration time, so a
+relationship's target class must exist before the class that points at it.
+The one unavoidable cycle — Movie's inverse `director` view of the
+`DIRECTED` relationship — is registered through the metamodel directly at
+the bottom of this file (the map API resolves targets lazily by name, so
+it never hits this).
+*/
 import {
   Direction,
   Float,
@@ -149,10 +149,10 @@ export class Actor {
   lastModified!: string
 
   /**
-   * Outgoing ACTS_IN relationships to Movie. The character name is a
-   * relationship property — set it via `actor.relateTo(movie, 'acts_in',
-   * { name: 'Sam' })`.
-   */
+  Outgoing ACTS_IN relationships to Movie. The character name is a
+  relationship property — set it via `actor.relateTo(movie, 'acts_in',
+  { name: 'Sam' })`.
+  */
   @OneToMany(() => Movie, 'ACTS_IN', Direction.OUTGOING)
   acts_in!: Movie[]
 }

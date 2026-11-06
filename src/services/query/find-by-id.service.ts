@@ -1,8 +1,8 @@
-import { Newable } from '../../meta/newable'
-import Builder from '../../query'
-import { THIS_NODE } from '../../constants'
-import EntitySchema from '../../meta/entity/entity-schema'
-import QueryService from './query.service'
+import type { Newable } from '../../meta/newable.js'
+import Builder from '../../query/index.js'
+import { THIS_NODE } from '../../constants.js'
+import type EntitySchema from '../../meta/entity/entity-schema.js'
+import QueryService from './query.service.js'
 
 export default class FindByIdService extends QueryService {
   async find(

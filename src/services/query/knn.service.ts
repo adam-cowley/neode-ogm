@@ -1,25 +1,34 @@
-import { Runner } from '../../driver/types'
-import { hydrate } from '../../hydrate'
-import { getModel } from '../../meta'
-import EntitySchema from '../../meta/entity/entity-schema'
-import { ScoredEntity, ModelInput, resolveModel } from './search.service'
+import type { Runner } from '../../driver/types.js'
+import type { WithMethods } from '../../entity-methods.js'
+import { hydrate } from '../../hydrate.js'
+import { getModel } from '../../meta/index.js'
+import EntitySchema from '../../meta/entity/entity-schema.js'
+import { type ScoredEntity, type ModelInput, resolveModel } from './search.service.js'
 
-/** Which query form to use for the kNN search */
+/**
+Which query form to use for the kNN search
+*/
 export type KnnMode =
-  /** Try the Cypher 25 `SEARCH` clause, fall back to the procedure (default) */
+  /**
+  Try the Cypher 25 `SEARCH` clause, fall back to the procedure (default)
+  */
   | 'auto'
-  /** Cypher 25 `SEARCH ... IN (VECTOR INDEX ...)` clause only */
+  /**
+  Cypher 25 `SEARCH ... IN (VECTOR INDEX ...)` clause only
+  */
   | 'search-clause'
-  /** `CALL db.index.vector.queryNodes(...)` procedure only */
+  /**
+  `CALL db.index.vector.queryNodes(...)` procedure only
+  */
   | 'procedure'
 
 const NODE_ALIAS = 'node'
 
 /**
- * The Cypher 25 SEARCH clause form — the procedure is deprecated on Cypher 25
- * backends. The index name cannot be bound as a parameter in this form, so it
- * is inlined (backtick-escaped).
- */
+The Cypher 25 SEARCH clause form — the procedure is deprecated on Cypher 25
+backends. The index name cannot be bound as a parameter in this form, so it
+is inlined (backtick-escaped).
+*/
 export function knnSearchClauseStatement(label: string, indexName: string): string {
   return (
     `MATCH (n:${label}) ` +
@@ -29,7 +38,9 @@ export function knnSearchClauseStatement(label: string, indexName: string): stri
   )
 }
 
-/** The db.index.vector.queryNodes procedure form, supported on Neo4j 5.11+ */
+/**
+The db.index.vector.queryNodes procedure form, supported on Neo4j 5.11+
+*/
 export function knnProcedureStatement(): string {
   return (
     `CALL db.index.vector.queryNodes($index, $k, $vector) ` +
@@ -39,13 +50,13 @@ export function knnProcedureStatement(): string {
 }
 
 /**
- * k-nearest-neighbour search over a vector index, returning hydrated
- * entities with their similarity score, best match first.
- *
- * With the default `auto` mode the Cypher 25 `SEARCH` clause is attempted
- * first and the queryNodes procedure is used as a fallback; when the backend
- * supports neither a combined error is raised.
- */
+k-nearest-neighbour search over a vector index, returning hydrated
+entities with their similarity score, best match first.
+
+With the default `auto` mode the Cypher 25 `SEARCH` clause is attempted
+first and the queryNodes procedure is used as a fallback; when the backend
+supports neither a combined error is raised.
+*/
 export async function knn<T>(
   runner: Runner,
   model: ModelInput,
@@ -86,17 +97,21 @@ export async function knn<T>(
   }
 
   const constructor = resolveModel(model)
-  const params = { index: indexName, k, vector }
+  const parameters = { index: indexName, k, vector }
 
   const runForm = async (statement: string): Promise<ScoredEntity<T>[]> => {
-    const output = await runner.run(statement, params)
+    const output = await runner.run(statement, parameters)
 
     // hydrate() keeps only records carrying a node under the alias, in order
-    const entities = hydrate<T>(constructor as new (...args: never[]) => T, output, NODE_ALIAS)
+    const entities = hydrate<T>(constructor as new (...arguments_: never[]) => T, output, NODE_ALIAS)
 
     return output.records
       .filter((row) => row.has(NODE_ALIAS) && row.get(NODE_ALIAS) != null)
-      .map((row, i) => ({ entity: entities[i], score: row.get('score') as number }))
+      .map((row, index) => ({
+        entity: entities[index],
+        score: row.get('score') as number,
+      }))
+      .filter((item): item is { entity: WithMethods<T>; score: number } => item.entity !== undefined)
   }
 
   if (mode === 'procedure') {
@@ -111,8 +126,8 @@ export async function knn<T>(
 
   try {
     return await runForm(knnSearchClauseStatement(label, indexName))
-  } catch (e) {
-    searchClauseError = e
+  } catch (error) {
+    searchClauseError = error
   }
 
   try {

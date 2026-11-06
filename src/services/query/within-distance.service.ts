@@ -1,12 +1,12 @@
-import { Newable } from '../../meta/newable'
-import Builder from '../../query'
-import { THIS_NODE } from '../../constants'
-import EntitySchema from '../../meta/entity/entity-schema'
-import PropertySchema from '../../meta/property-schema'
-import { convertPropertyValue } from '../../utils'
+import type { Newable } from '../../meta/newable.js'
+import Builder from '../../query/index.js'
+import { THIS_NODE } from '../../constants.js'
+import type EntitySchema from '../../meta/entity/entity-schema.js'
+import type PropertySchema from '../../meta/property-schema.js'
+import { convertPropertyValue } from '../../utils.js'
 import neo4j from 'neo4j-driver'
-import QueryService from './query.service'
-import { applyOrder, OrderSpec } from './get.service'
+import QueryService from './query.service.js'
+import { applyOrder, type OrderSpec } from './get.service.js'
 
 // SRIDs of the point types Neo4j supports
 const SRID = {
@@ -25,13 +25,13 @@ const requireFiniteNumber = (value: unknown, label: string): number => {
 }
 
 /**
- * Render the origin point as an inline `point({...})` expression.
- *
- * The point cannot be passed as a query parameter: backends reject driver
- * Point parameters (and a plain {x, y} map would be read as the wrong type),
- * so - like neode's FindWithinDistance - the expression is inlined after the
- * coordinates have been validated as numbers.
- */
+Render the origin point as an inline `point({...})` expression.
+
+The point cannot be passed as a query parameter: backends reject driver
+Point parameters (and a plain {x, y} map would be read as the wrong type),
+so - like neode's FindWithinDistance - the expression is inlined after the
+coordinates have been validated as numbers.
+*/
 function toCypherPoint(point: unknown, property: PropertySchema): string {
   const converted = convertPropertyValue(point, property)
 
@@ -46,15 +46,19 @@ function toCypherPoint(point: unknown, property: PropertySchema): string {
   const y = requireFiniteNumber(converted.y, 'point y')
 
   switch (srid) {
-    case SRID.CARTESIAN_3D:
+    case SRID.CARTESIAN_3D: {
       return `point({ x: ${x}, y: ${y}, z: ${requireFiniteNumber(converted.z, 'point z')} })`
-    case SRID.WGS_84_2D:
+    }
+    case SRID.WGS_84_2D: {
       // Driver Points store longitude as x, latitude as y
       return `point({ longitude: ${x}, latitude: ${y} })`
-    case SRID.WGS_84_3D:
+    }
+    case SRID.WGS_84_3D: {
       return `point({ longitude: ${x}, latitude: ${y}, height: ${requireFiniteNumber(converted.z, 'point height')} })`
-    default:
+    }
+    default: {
       return `point({ x: ${x}, y: ${y} })`
+    }
   }
 }
 
@@ -65,7 +69,7 @@ export default class WithinDistanceService extends QueryService {
     locationProperty: string,
     point: unknown,
     distance: number,
-    params: Record<string, unknown> = {},
+    parameters: Record<string, unknown> = {},
     order?: OrderSpec,
     limit?: number,
     skip?: number,
@@ -74,13 +78,13 @@ export default class WithinDistanceService extends QueryService {
 
     builder.match(THIS_NODE, schema.getLabels())
 
-    schema.getProperties().forEach((property) => {
+    for (const property of schema.getProperties()) {
       const key = property.getKey()
 
-      if (Object.hasOwn(params, key)) {
-        builder.where(`${THIS_NODE}.${key}`, params[key])
+      if (Object.hasOwn(parameters, key)) {
+        builder.where(`${THIS_NODE}.${key}`, parameters[key])
       }
-    })
+    }
 
     const location = schema
       .getProperties()

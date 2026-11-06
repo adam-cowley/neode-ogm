@@ -1,20 +1,22 @@
-import { QueryExecutedEvent } from '../common/events'
-import {
+import type { QueryExecutedEvent } from '../common/events.js'
+import type {
   AccessMode,
   ConnectionProvider,
   QueryOutput,
-  QueryParams,
+  QueryParams as QueryParameters,
   TransactionHandle,
-} from './types'
+} from './types.js'
 
-/** Listener invoked once per executed statement — successful or not. */
+/**
+Listener invoked once per executed statement — successful or not.
+*/
 export type QueryExecutedListener = (event: QueryExecutedEvent) => void
 
 function instrumentRun(
-  run: (statement: string, parameters?: QueryParams) => Promise<QueryOutput>,
+  run: (statement: string, parameters?: QueryParameters) => Promise<QueryOutput>,
   onQuery: QueryExecutedListener,
   database?: string,
-): (statement: string, parameters?: QueryParams) => Promise<QueryOutput> {
+): (statement: string, parameters?: QueryParameters) => Promise<QueryOutput> {
   return async (statement, parameters) => {
     const start = performance.now()
 
@@ -32,24 +34,27 @@ function instrumentRun(
 }
 
 /**
- * A ConnectionProvider forwarding to `inner` and reporting every executed
- * statement — implicit and inside transactions — to `onQuery`. This is the
- * shared runner chokepoint the `query:executed` lifecycle event emits from.
- */
+A ConnectionProvider forwarding to `inner` and reporting every executed
+statement — implicit and inside transactions — to `onQuery`. This is the
+shared runner chokepoint the `query:executed` lifecycle event emits from.
+*/
 export class InstrumentedConnectionProvider implements ConnectionProvider {
-  constructor(
-    private readonly inner: ConnectionProvider,
-    private readonly onQuery: QueryExecutedListener,
-  ) {}
+  private readonly inner: ConnectionProvider
+  private readonly onQuery: QueryExecutedListener
 
-  run(
+  constructor(inner: ConnectionProvider, onQuery: QueryExecutedListener) {
+    this.inner = inner
+    this.onQuery = onQuery
+  }
+
+  async run(
     statement: string,
-    parameters?: QueryParams,
+    parameters?: QueryParameters,
     mode?: AccessMode,
     database?: string,
   ): Promise<QueryOutput> {
     return instrumentRun(
-      (cypher, params) => this.inner.run(cypher, params, mode, database),
+      async (cypher, parameters_) => this.inner.run(cypher, parameters_, mode, database),
       this.onQuery,
       database,
     )(statement, parameters)
@@ -60,41 +65,37 @@ export class InstrumentedConnectionProvider implements ConnectionProvider {
 
     return {
       run: instrumentRun(
-        (statement, parameters) => handle.run(statement, parameters),
+        async (statement, parameters) => handle.run(statement, parameters),
         this.onQuery,
         database,
       ),
-      commit: () => handle.commit(),
-      rollback: () => handle.rollback(),
+      commit: async () => handle.commit(),
+      rollback: async () => handle.rollback(),
     }
   }
 
-  edition(): Promise<'enterprise' | 'community' | 'unknown'> {
+  async edition(): Promise<'enterprise' | 'community' | 'unknown'> {
     return this.inner.edition()
   }
 
-  close(): Promise<void> {
+  async close(): Promise<void> {
     return this.inner.close()
   }
 }
 
 /**
- * Instrument a provider transparently: property reads the wrapper doesn't
- * satisfy — duck-typed introspection such as `connection.database` on the
- * neo4j provider — forward to the inner provider, so consumers holding
- * `Neode#getConnection()` see through the instrumentation.
- */
+Instrument a provider transparently: property reads the wrapper doesn't
+satisfy — duck-typed introspection such as `connection.database` on the
+neo4j provider — forward to the inner provider, so consumers holding
+`Neode#getConnection()` see through the instrumentation.
+*/
 export function instrumentConnectionProvider(
   inner: ConnectionProvider,
   onQuery: QueryExecutedListener,
 ): ConnectionProvider {
   return new Proxy(new InstrumentedConnectionProvider(inner, onQuery), {
     get(target, property, receiver) {
-      if (property in target) {
-        return Reflect.get(target, property, receiver)
-      }
-
-      return Reflect.get(inner as object, property, receiver)
+      return property in target ? Reflect.get(target, property, receiver) : Reflect.get(inner, property, receiver);
     },
   })
 }

@@ -1,25 +1,25 @@
-import Builder, { eagerNode } from '../query'
-import { THIS_NODE } from '../constants'
-import { getModel } from '../meta'
-import { Newable } from '../meta/newable'
-import EntitySchema from '../meta/entity/entity-schema'
-import PropertySchema from '../meta/property-schema'
-import INeode from '../neode.interface'
-import { GraphNode, QueryOutput } from '../driver/types'
-import { hydrateNode } from '../utils'
+import Builder, { eagerNode } from '../query/index.js'
+import { THIS_NODE } from '../constants.js'
+import { getModel } from '../meta/index.js'
+import type { Newable } from '../meta/newable.js'
+import type EntitySchema from '../meta/entity/entity-schema.js'
+import type PropertySchema from '../meta/property-schema.js'
+import type INeode from '../neode.interface.js'
+import type { GraphNode, QueryOutput } from '../driver/types.js'
+import { hydrateNode } from '../utils.js'
 
 /**
- * Ordering spec, matching neode's all() forms:
- *
- * - `'name'` - order by one property ascending
- * - `['name', 'age']` - order by several properties
- * - `{ name: 'DESC' }` - property -> direction map
- * - `[{ name: 'DESC' }, { age: 'ASC' }]` - list of property -> direction maps
- * - `{ field: 'name', order: 'DESC' }` - two-arg (key, direction) descriptor
- */
+Ordering spec, matching neode's all() forms:
+
+- `'name'` - order by one property ascending
+- `['name', 'age']` - order by several properties
+- `{ name: 'DESC' }` - property -> direction map
+- `[{ name: 'DESC' }, { age: 'ASC' }]` - list of property -> direction maps
+- `{ field: 'name', order: 'DESC' }` - two-arg (key, direction) descriptor
+*/
 export type OrderSpec =
   | string
-  | Array<string | Record<string, string>>
+  | (string | Record<string, string>)[]
   | Record<string, string>
   | { field: string; order?: string }
 
@@ -32,11 +32,18 @@ export interface FindOptions {
 export default class Repository<Entity> {
   protected schema: EntitySchema
 
+  protected readonly neode: INeode
+  protected readonly entity: new (...arguments_: never[]) => Entity
+  protected readonly database: string | undefined
+
   constructor(
-    protected readonly neode: INeode,
-    protected readonly entity: new (...args: never[]) => Entity,
-    protected readonly database?: string,
+    neode: INeode,
+    entity: new (...arguments_: never[]) => Entity,
+    database?: string,
   ) {
+    this.neode = neode
+    this.entity = entity
+    this.database = database
     this.schema = getModel(entity)
   }
 
@@ -58,8 +65,8 @@ export default class Repository<Entity> {
     return results[0]
   }
 
-  async findAll(params: Partial<Entity> = {}, options: FindOptions = {}): Promise<Entity[]> {
-    const builder = this.matchAll(params)
+  async findAll(parameters: Partial<Entity> = {}, options: FindOptions = {}): Promise<Entity[]> {
+    const builder = this.matchAll(parameters)
 
     if (options.order) {
       this.applyOrder(builder, options.order)
@@ -67,8 +74,8 @@ export default class Repository<Entity> {
 
     this.returnNodes(builder)
 
-    if (options.skip) builder.skip(options.skip)
-    if (options.limit) builder.limit(options.limit)
+    if (options.skip) {builder.skip(options.skip)}
+    if (options.limit) {builder.limit(options.limit)}
 
     const output = await this.read(builder)
 
@@ -81,28 +88,34 @@ export default class Repository<Entity> {
     )
   }
 
-  where(params: Partial<Entity> = {}): Promise<Entity[]> {
-    return this.findAll(params)
+  async where(parameters: Partial<Entity> = {}): Promise<Entity[]> {
+    return this.findAll(parameters)
   }
 
-  async count(params: Partial<Entity> = {}): Promise<number> {
-    const builder = this.matchAll(params)
+  async count(parameters: Partial<Entity> = {}): Promise<number> {
+    const builder = this.matchAll(parameters)
 
     builder.return(`count(${THIS_NODE}) AS count`)
 
     const output = await this.read(builder)
 
-    return Repository.toCount(output.records[0].get('count'))
+    const firstRecord = output.records[0]
+
+    if (firstRecord === undefined) {
+      throw new Error('count query returned no records')
+    }
+
+    return Repository.toCount(firstRecord.get('count'))
   }
 
-  save(object: Entity): Promise<Entity> {
+  async save(object: Entity): Promise<Entity> {
     return this.neode.save(object as unknown as object, this.database) as Promise<Entity>
   }
 
   /**
-   * Save entities one at a time: each save opens its own write transaction,
-   * so concurrent saves would conflict on single-transaction connections
-   */
+  Save entities one at a time: each save opens its own write transaction,
+  so concurrent saves would conflict on single-transaction connections
+  */
   async saveAll(objects: Entity[]): Promise<Entity[]> {
     const saved: Entity[] = []
 
@@ -114,13 +127,13 @@ export default class Repository<Entity> {
   }
 
   /**
-   * Apply a partial patch to a persisted entity, then persist it.
-   *
-   * The INeode facade has no dedicated update method and the repository
-   * holds no Runner, so update is implemented through save(): a merge on
-   * the entity's primary key that sets the patched properties — update
-   * semantics for anything previously saved.
-   */
+  Apply a partial patch to a persisted entity, then persist it.
+  
+  The INeode facade has no dedicated update method and the repository
+  holds no Runner, so update is implemented through save(): a merge on
+  the entity's primary key that sets the patched properties — update
+  semantics for anything previously saved.
+  */
   async update(entity: Entity, properties: Partial<Entity>): Promise<Entity> {
     Object.assign(entity as unknown as object, properties)
 
@@ -128,8 +141,8 @@ export default class Repository<Entity> {
   }
 
   /**
-   * Delete by primary key value or by entity instance
-   */
+  Delete by primary key value or by entity instance
+  */
   async delete(target: Entity | string | number): Promise<void> {
     if (target !== null && typeof target === 'object') {
       return this.neode.delete(target, this.database)
@@ -145,23 +158,29 @@ export default class Repository<Entity> {
   }
 
   /**
-   * Delete every entity matching params and return the number deleted.
-   *
-   * shortcut: one DETACH DELETE statement rather than per-entity deletes,
-   * so per-node delete events and cascade options do not apply — switch to
-   * a loop over delete() when cascading bulk deletes are needed
-   */
-  async deleteAll(params: Partial<Entity> = {}): Promise<number> {
-    const builder = this.matchAll(params)
+  Delete every entity matching params and return the number deleted.
+  
+  shortcut: one DETACH DELETE statement rather than per-entity deletes,
+  so per-node delete events and cascade options do not apply — switch to
+  a loop over delete() when cascading bulk deletes are needed
+  */
+  async deleteAll(parameters: Partial<Entity> = {}): Promise<number> {
+    const builder = this.matchAll(parameters)
 
     builder.detachDelete(THIS_NODE)
     builder.return(`count(${THIS_NODE}) AS count`)
 
-    const { query, params: queryParams } = builder.build()
+    const { query, params: queryParameters } = builder.build()
 
-    const output = await this.neode.writeCypher(query, queryParams, this.database)
+    const output = await this.neode.writeCypher(query, queryParameters, this.database)
 
-    return Repository.toCount(output.records[0].get('count'))
+    const firstRecord = output.records[0]
+
+    if (firstRecord === undefined) {
+      throw new Error('count query returned no records')
+    }
+
+    return Repository.toCount(firstRecord.get('count'))
   }
 
   matchEntity(variable: string = THIS_NODE, object: Entity): Builder {
@@ -174,23 +193,23 @@ export default class Repository<Entity> {
   }
 
   /**
-   * Match every node of the entity's labels, filtered on the schema's
-   * declared properties only (GetService parity: unknown keys are ignored)
-   */
-  private matchAll(params: Partial<Entity> = {}): Builder {
-    const record = params as Record<string, unknown>
+  Match every node of the entity's labels, filtered on the schema's
+  declared properties only (GetService parity: unknown keys are ignored)
+  */
+  private matchAll(parameters: Partial<Entity> = {}): Builder {
+    const record = parameters as Record<string, unknown>
 
     const builder = new Builder()
 
     builder.match(THIS_NODE, this.schema.getLabels())
 
-    this.schema.getProperties().forEach((property) => {
+    for (const property of this.schema.getProperties()) {
       const key = property.getKey()
 
       if (Object.hasOwn(record, key)) {
         builder.where(`${THIS_NODE}.${key}`, record[key])
       }
-    })
+    }
 
     return builder
   }
@@ -209,34 +228,27 @@ export default class Repository<Entity> {
     if (typeof order === 'string') {
       builder.orderBy(`${THIS_NODE}.${order}`)
     } else if (Array.isArray(order)) {
-      order.forEach((entry) => this.applyOrder(builder, entry))
+      for (const entry of order) {this.applyOrder(builder, entry)}
     } else if ('field' in order && typeof order.field === 'string') {
       builder.orderBy({ field: `${THIS_NODE}.${order.field}`, order: order.order })
     } else {
-      Object.entries(order).forEach(([key, direction]) =>
-        builder.orderBy(`${THIS_NODE}.${key}`, direction),
-      )
+      for (const [key, direction] of Object.entries(order)) {builder.orderBy(`${THIS_NODE}.${key}`, direction)}
+      
     }
   }
 
-  private read(builder: Builder): Promise<QueryOutput> {
+  private async read(builder: Builder): Promise<QueryOutput> {
     const { query, params } = builder.build()
 
     return this.neode.readCypher(query, params, this.database)
   }
 
   /**
-   * Neo4j driver returns count() as an Integer instance, Relate as a number
-   */
+  Neo4j driver returns count() as an Integer instance, Relate as a number
+  */
   private static toCount(value: unknown): number {
-    if (
-      typeof value === 'object' &&
+    return typeof value === 'object' &&
       value !== null &&
-      typeof (value as { toNumber?: unknown }).toNumber === 'function'
-    ) {
-      return (value as { toNumber(): number }).toNumber()
-    }
-
-    return Number(value)
+      typeof (value as { toNumber?: unknown }).toNumber === 'function' ? (value as { toNumber(): number }).toNumber() : Number(value);
   }
 }

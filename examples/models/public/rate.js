@@ -1,6 +1,6 @@
 /**
- * This is some ugly looking jQuery that gets the job done
- */
+This is some ugly looking jQuery that gets the job done
+*/
 !(function ($) {
   var ratings = {}
 

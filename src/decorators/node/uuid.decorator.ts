@@ -1,7 +1,7 @@
-import { randomUUID } from 'crypto'
-import { mergeProperty } from '../../meta'
-import { PropertyType } from '../../meta/property-schema'
-import PropertyConfig from '../property-config.interface'
+import { randomUUID } from 'node:crypto'
+import { mergeProperty } from '../../meta/index.js'
+import { PropertyType } from '../../meta/property-schema.js'
+import type PropertyConfig from '../property-config.interface.js'
 
 export default function Uuid(config: PropertyConfig = {}) {
   return function (target: unknown, propertyKey: string, _descriptor?: unknown): void {

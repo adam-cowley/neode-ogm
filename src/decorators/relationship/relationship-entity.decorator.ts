@@ -1,5 +1,5 @@
-import { Newable } from '../../meta/newable'
-import { mergeRelationshipModel } from '../../meta'
+import type { Newable } from '../../meta/newable.js'
+import { mergeRelationshipModel } from '../../meta/index.js'
 
 export default function RelationshipEntity() {
   return function (constructor: Newable) {

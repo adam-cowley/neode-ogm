@@ -1,11 +1,12 @@
-import Match from './Match'
-import Order from './Order'
-import Property from './Property'
-import Relationship from './Relationship'
+import type Match from './Match.js'
+import type Order from './Order.js'
+import Property from './Property.js'
+import type Relationship from './Relationship.js'
 
 export type SetClause = Property | string
 
 export default class Statement {
+  private readonly prefix: string = 'MATCH'
   private readonly pattern: (Match | Relationship)[] = []
   private readonly whereClauses: string[] = []
   private readonly orderClauses: Order[] = []
@@ -20,15 +21,17 @@ export default class Statement {
   private limitValue?: number
   private skipValue?: number
 
-  constructor(private readonly prefix: string = 'MATCH') {}
+  constructor(prefix = 'MATCH') {
+    this.prefix = prefix
+  }
 
-  match(match: Match | Relationship): Statement {
+  match(match: Match | Relationship): this {
     this.pattern.push(match)
 
     return this
   }
 
-  where(where: string): Statement {
+  where(where: string): this {
     this.whereClauses.push(where)
 
     return this
@@ -46,49 +49,49 @@ export default class Statement {
     this.orderClauses.push(order)
   }
 
-  delete(...values: string[]): Statement {
+  delete(...values: string[]): this {
     this.deleteValues.push(...values)
 
     return this
   }
 
-  detachDelete(...values: string[]): Statement {
+  detachDelete(...values: string[]): this {
     this.detachDeleteValues.push(...values)
 
     return this
   }
 
-  return(...values: string[]): Statement {
+  return(...values: string[]): this {
     this.returnValues.push(...values)
 
     return this
   }
 
-  set(key: string, value: string, operator: string = '='): Statement {
+  set(key: string, value: string, operator = '='): this {
     this.setValues.push(new Property(key, value, operator))
 
     return this
   }
 
-  setRaw(items: SetClause[]): Statement {
+  setRaw(items: SetClause[]): this {
     this.setValues.push(...items)
 
     return this
   }
 
-  onCreateSet(key: string, value: string, operator: string = '='): Statement {
+  onCreateSet(key: string, value: string, operator = '='): this {
     this.onCreateSetValues.push(new Property(key, value, operator))
 
     return this
   }
 
-  onMatchSet(key: string, value: string, operator: string = '='): Statement {
+  onMatchSet(key: string, value: string, operator = '='): this {
     this.onMatchSetValues.push(new Property(key, value, operator))
 
     return this
   }
 
-  remove(items: string[]): Statement {
+  remove(items: string[]): this {
     this.removeValues.push(...items)
 
     return this
@@ -97,7 +100,7 @@ export default class Statement {
   toString(includePrefix = true): string {
     const output: string[] = []
 
-    if (this.pattern.length) {
+    if (this.pattern.length > 0) {
       const pattern = this.pattern.map((pattern) => pattern.toString()).join('')
 
       if (includePrefix) {
@@ -107,43 +110,43 @@ export default class Statement {
       }
     }
 
-    if (this.whereClauses.length) {
+    if (this.whereClauses.length > 0) {
       output.push(this.whereClauses.join(''))
     }
 
-    if (this.removeValues.length) {
+    if (this.removeValues.length > 0) {
       output.push(`REMOVE ${this.removeValues.join(', ')}`)
     }
 
-    if (this.onCreateSetValues.length) {
+    if (this.onCreateSetValues.length > 0) {
       output.push(
         `ON CREATE SET ${this.onCreateSetValues.map((value) => value.toString()).join(', ')}`,
       )
     }
 
-    if (this.onMatchSetValues.length) {
+    if (this.onMatchSetValues.length > 0) {
       output.push(
         `ON MATCH SET ${this.onMatchSetValues.map((value) => value.toString()).join(', ')}`,
       )
     }
 
-    if (this.setValues.length) {
+    if (this.setValues.length > 0) {
       output.push(`SET ${this.setValues.map((value) => value.toString()).join(', ')}`)
     }
 
-    if (this.deleteValues.length) {
+    if (this.deleteValues.length > 0) {
       output.push(`DELETE ${this.deleteValues.join(', ')}`)
     }
 
-    if (this.detachDeleteValues.length) {
+    if (this.detachDeleteValues.length > 0) {
       output.push(`DETACH DELETE ${this.detachDeleteValues.join(', ')}`)
     }
 
-    if (this.returnValues.length) {
+    if (this.returnValues.length > 0) {
       output.push(`RETURN ${this.returnValues.join(', ')}`)
     }
 
-    if (this.orderClauses.length) {
+    if (this.orderClauses.length > 0) {
       output.push(`ORDER BY ${this.orderClauses.map((order) => order.toString()).join(', ')}`)
     }
 
