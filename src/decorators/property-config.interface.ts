@@ -8,4 +8,10 @@ export default interface PropertyConfig {
     onCreateSet?: boolean;
     onMatchSet?: boolean;
     alwaysSet?: boolean;
+    required?: boolean;
+    hidden?: boolean;
+    protected?: boolean;
+    readonly?: boolean;
+    index?: boolean;
+    exists?: boolean;
 }

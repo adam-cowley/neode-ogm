@@ -116,9 +116,15 @@ export default class Builder {
     }
 
     /**
-     * Start an `OR` where clause. Switches the connector of the currently
-     * open where segment to `OR` (creating one if none is open) so that
-     * subsequent conditions combine with `OR` instead of `AND`.
+     * Start an `OR` where clause. Switches the connector used for the next
+     * condition appended to the current where segment (creating one if none
+     * is open) so that it combines with `OR` instead of `AND`.
+     *
+     * P2.2 parity (neode Builder#or): neode opens a separate `OR (...)`
+     * segment, which renders an invalid leading `OR (` when called before
+     * any where condition. Here the connector applies to the next clause
+     * inside the single WHERE group instead; Cypher's operator precedence
+     * keeps the semantics identical to neode's grouped output.
      */
     or(...args: unknown[]): Builder {
         if (!this.whereClause) {
@@ -429,7 +435,11 @@ export default class Builder {
      * Add an order by clause. Supported forms:
      *
      * - `orderBy('n.name', 'DESC')`
-     * - `orderBy({ 'n.name': 'ASC' })`
+     * - `orderBy('n.name')`
+     * - `orderBy(['n.name', 'n.other'])`
+     * - `orderBy({ 'n.name': 'DESC' })`
+     * - `orderBy({ field: 'n.name', order: 'DESC' })`
+     * - `orderBy([{ field: 'n.name', order: 'ASC' }, { field: 'n.other', order: 'DESC' }])`
      */
     orderBy(...args: unknown[]): Builder {
         let order: Order | undefined;
@@ -439,9 +449,21 @@ export default class Builder {
         } else if (Array.isArray(args[0])) {
             (args[0] as unknown[]).forEach((arg) => this.orderBy(arg));
         } else if (typeof args[0] === 'object' && args[0]) {
-            Object.keys(args[0] as Record<string, unknown>).forEach((key) => {
-                this.orderBy(key, (args[0] as Record<string, unknown>)[key]);
-            });
+            const descriptor = args[0] as { field?: unknown; order?: unknown };
+
+            if (descriptor.field) {
+                // P2.2 parity (neode Builder#orderBy): an object carrying a
+                // `field` key is a single `{ field, order }` descriptor,
+                // not a field -> direction map.
+                order = new Order(
+                    String(descriptor.field),
+                    descriptor.order ? String(descriptor.order) : ''
+                );
+            } else {
+                Object.keys(descriptor as Record<string, unknown>).forEach((key) => {
+                    this.orderBy(key, (descriptor as Record<string, unknown>)[key]);
+                });
+            }
         } else if (args[0]) {
             order = new Order(String(args[0]));
         }

@@ -66,6 +66,30 @@ export function mergeProperty(constructor: any, key: string, type: PropertyType,
         property.setArray(true)
     }
 
+    if ( config?.required === true ) {
+        property.setRequired(true)
+    }
+
+    if ( config?.hidden === true ) {
+        property.setHidden(true)
+    }
+
+    if ( config?.protected === true ) {
+        property.setProtected(true)
+    }
+
+    if ( config?.readonly === true ) {
+        property.setReadonly(true)
+    }
+
+    if ( config?.index === true ) {
+        property.setIndex(true)
+    }
+
+    if ( config?.exists === true ) {
+        property.setExists(true)
+    }
+
     if ( Object.hasOwn(config, 'default') ) {
         property.setDefaultValue(config.default!)
     }

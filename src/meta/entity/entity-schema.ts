@@ -19,11 +19,15 @@ export default class EntitySchema {
 
 
     setLabels(labels: string[]) {
-        this.labels = labels
+        this.labels = [ ...new Set(labels) ].sort()
     }
 
     getLabels(): string[] {
-        return this.labels
+        return [ ...this.labels ]
+    }
+
+    addLabel(label: string) {
+        this.setLabels([ ...this.labels, label ])
     }
 
     addRelationship(key: string,) {
@@ -63,9 +67,33 @@ export default class EntitySchema {
         return this.properties.has(key)
     }
 
-    getPrimaryKey() {
-        return this.getProperties()
+    getPrimaryKey(): PropertySchema | undefined {
+        // Explicit primary key always wins
+        const explicit = this.getProperties()
             .find(property => property.isPrimaryKey())
+
+        if ( explicit ) {
+            return explicit
+        }
+
+        // Default Primary Key to <first label lowercased>_id (see neode Model.js)
+        const [ firstLabel ] = this.getLabels()
+
+        if ( !firstLabel ) {
+            return undefined
+        }
+
+        const key = `${firstLabel.toLowerCase()}_id`
+
+        if ( !this.hasProperty(key) ) {
+            this.addProperty(key)
+        }
+
+        const property = this.getProperty(key)
+
+        property.setPrimaryKey()
+
+        return property
     }
 
     getProperty(key: string) {

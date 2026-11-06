@@ -63,6 +63,12 @@ export default class PropertySchema {
     private primaryKey: boolean = false;
     private unique: boolean = false;
     private array: boolean = false;
+    private required: boolean = false;
+    private hidden: boolean = false;
+    private protectedOption: boolean = false;
+    private readOnly: boolean = false;
+    private index: boolean = false;
+    private exists: boolean = false;
     private onCreateSet: boolean = false;
     private onMatchSet: boolean = false;
     private alwaysSet: boolean = false;
@@ -114,6 +120,54 @@ export default class PropertySchema {
 
     isUnique() {
         return this.unique
+    }
+
+    setRequired(value = true) {
+        this.required = value
+    }
+
+    isRequired() {
+        return this.required
+    }
+
+    setHidden(value = true) {
+        this.hidden = value
+    }
+
+    isHidden() {
+        return this.hidden
+    }
+
+    setProtected(value = true) {
+        this.protectedOption = value
+    }
+
+    isProtected() {
+        return this.protectedOption
+    }
+
+    setReadonly(value = true) {
+        this.readOnly = value
+    }
+
+    isReadonly() {
+        return this.readOnly
+    }
+
+    setIndex(value = true) {
+        this.index = value
+    }
+
+    isIndex() {
+        return this.index
+    }
+
+    setExists(value = true) {
+        this.exists = value
+    }
+
+    isExists() {
+        return this.exists
     }
 
     setOnCreateSet(value = true) {
