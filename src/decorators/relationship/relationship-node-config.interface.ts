@@ -1,4 +1,4 @@
-import { Newable } from "../../meta/newable";
+import { Newable } from '../../meta/newable'
 export default interface RelationshipNodeConfig {
-    entity: Newable
+  entity: Newable
 }

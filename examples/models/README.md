@@ -26,18 +26,18 @@ repo, using neode-ogm's map-based models loaded with `withDirectory()`.
 
 ## What changed from the original
 
-| neode 0.4.9 | neode-ogm |
-|---|---|
-| `require('neode')` | `require('../dist')` |
-| `neode.model('Movie').mergeOn(match, set)` | `neode.mergeOn(neode.model('Movie'), match, set)` |
-| `neode.cypher(query, params)` | `neode.readCypher()` / `neode.writeCypher()` |
-| `neode.hydrateFirst(res, 'g')` | `neode.hydrateFirst(constructor, res, 'g')` |
-| `neode.all('Genre')` | `neode.all(neode.model('Genre'))` |
-| `neode.findById('Movie', numericId)` | `neode.findById(Movie, elementId)` |
-| `{param}` in Cypher | `$param` (Neo4j 4+ syntax) |
-| numeric `id()` in Cypher | `elementId()` |
-| `node.get('title')` in views | plain properties (`movie.title`) |
-| `neode.merge` with nested instances | same — nested entity instances create the relationships |
+| neode 0.4.9                                | neode-ogm                                               |
+| ------------------------------------------ | ------------------------------------------------------- |
+| `require('neode')`                         | `require('../dist')`                                    |
+| `neode.model('Movie').mergeOn(match, set)` | `neode.mergeOn(neode.model('Movie'), match, set)`       |
+| `neode.cypher(query, params)`              | `neode.readCypher()` / `neode.writeCypher()`            |
+| `neode.hydrateFirst(res, 'g')`             | `neode.hydrateFirst(constructor, res, 'g')`             |
+| `neode.all('Genre')`                       | `neode.all(neode.model('Genre'))`                       |
+| `neode.findById('Movie', numericId)`       | `neode.findById(Movie, elementId)`                      |
+| `{param}` in Cypher                        | `$param` (Neo4j 4+ syntax)                              |
+| numeric `id()` in Cypher                   | `elementId()`                                           |
+| `node.get('title')` in views               | plain properties (`movie.title`)                        |
+| `neode.merge` with nested instances        | same — nested entity instances create the relationships |
 
 The `models/` definitions are the original map-based schemas — neode-ogm
 supports them unchanged (two tweaks: the original's `indexed: true` key was

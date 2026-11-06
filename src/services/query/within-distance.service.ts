@@ -1,28 +1,28 @@
-import { Newable } from "../../meta/newable";
-import Builder from '../../query';
-import { THIS_NODE } from '../../constants';
-import EntitySchema from '../../meta/entity/entity-schema';
-import PropertySchema from '../../meta/property-schema';
-import { convertPropertyValue } from '../../utils';
-import neo4j from 'neo4j-driver';
-import QueryService from './query.service';
-import { applyOrder, OrderSpec } from './get.service';
+import { Newable } from '../../meta/newable'
+import Builder from '../../query'
+import { THIS_NODE } from '../../constants'
+import EntitySchema from '../../meta/entity/entity-schema'
+import PropertySchema from '../../meta/property-schema'
+import { convertPropertyValue } from '../../utils'
+import neo4j from 'neo4j-driver'
+import QueryService from './query.service'
+import { applyOrder, OrderSpec } from './get.service'
 
 // SRIDs of the point types Neo4j supports
 const SRID = {
-    CARTESIAN_2D: 7203,
-    CARTESIAN_3D: 9157,
-    WGS_84_2D: 4326,
-    WGS_84_3D: 4979,
-} as const;
+  CARTESIAN_2D: 7203,
+  CARTESIAN_3D: 9157,
+  WGS_84_2D: 4326,
+  WGS_84_3D: 4979,
+} as const
 
 const requireFiniteNumber = (value: unknown, label: string): number => {
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-        throw new TypeError(`Cannot query withinDistance: ${label} must be a finite number`);
-    }
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new TypeError(`Cannot query withinDistance: ${label} must be a finite number`)
+  }
 
-    return value;
-};
+  return value
+}
 
 /**
  * Render the origin point as an inline `point({...})` expression.
@@ -33,78 +33,78 @@ const requireFiniteNumber = (value: unknown, label: string): number => {
  * coordinates have been validated as numbers.
  */
 function toCypherPoint(point: unknown, property: PropertySchema): string {
-    const converted = convertPropertyValue(point, property);
+  const converted = convertPropertyValue(point, property)
 
-    if (!neo4j.isPoint(converted)) {
-        throw new TypeError(
-            'Cannot query withinDistance: expected a point ({ x, y[, z] }, { latitude, longitude[, height] } or a driver Point)'
-        );
-    }
+  if (!neo4j.isPoint(converted)) {
+    throw new TypeError(
+      'Cannot query withinDistance: expected a point ({ x, y[, z] }, { latitude, longitude[, height] } or a driver Point)',
+    )
+  }
 
-    const srid = Number(converted.srid);
-    const x = requireFiniteNumber(converted.x, 'point x');
-    const y = requireFiniteNumber(converted.y, 'point y');
+  const srid = Number(converted.srid)
+  const x = requireFiniteNumber(converted.x, 'point x')
+  const y = requireFiniteNumber(converted.y, 'point y')
 
-    switch (srid) {
-        case SRID.CARTESIAN_3D:
-            return `point({ x: ${x}, y: ${y}, z: ${requireFiniteNumber(converted.z, 'point z')} })`;
-        case SRID.WGS_84_2D:
-            // Driver Points store longitude as x, latitude as y
-            return `point({ longitude: ${x}, latitude: ${y} })`;
-        case SRID.WGS_84_3D:
-            return `point({ longitude: ${x}, latitude: ${y}, height: ${requireFiniteNumber(converted.z, 'point height')} })`;
-        default:
-            return `point({ x: ${x}, y: ${y} })`;
-    }
+  switch (srid) {
+    case SRID.CARTESIAN_3D:
+      return `point({ x: ${x}, y: ${y}, z: ${requireFiniteNumber(converted.z, 'point z')} })`
+    case SRID.WGS_84_2D:
+      // Driver Points store longitude as x, latitude as y
+      return `point({ longitude: ${x}, latitude: ${y} })`
+    case SRID.WGS_84_3D:
+      return `point({ longitude: ${x}, latitude: ${y}, height: ${requireFiniteNumber(converted.z, 'point height')} })`
+    default:
+      return `point({ x: ${x}, y: ${y} })`
+  }
 }
 
 export default class WithinDistanceService extends QueryService {
-    async withinDistance<T>(
-        constructor: Newable,
-        schema: EntitySchema,
-        locationProperty: string,
-        point: unknown,
-        distance: number,
-        params: Record<string, unknown> = {},
-        order?: OrderSpec,
-        limit?: number,
-        skip?: number
-    ): Promise<T[]> {
-        const builder = new Builder();
+  async withinDistance<T>(
+    constructor: Newable,
+    schema: EntitySchema,
+    locationProperty: string,
+    point: unknown,
+    distance: number,
+    params: Record<string, unknown> = {},
+    order?: OrderSpec,
+    limit?: number,
+    skip?: number,
+  ): Promise<T[]> {
+    const builder = new Builder()
 
-        builder.match(THIS_NODE, schema.getLabels());
+    builder.match(THIS_NODE, schema.getLabels())
 
-        schema.getProperties().forEach((property) => {
-            const key = property.getKey();
+    schema.getProperties().forEach((property) => {
+      const key = property.getKey()
 
-            if (Object.hasOwn(params, key)) {
-                builder.where(`${THIS_NODE}.${key}`, params[key]);
-            }
-        });
+      if (Object.hasOwn(params, key)) {
+        builder.where(`${THIS_NODE}.${key}`, params[key])
+      }
+    })
 
-        const location = schema
-            .getProperties()
-            .find((property) => property.getKey() === locationProperty);
+    const location = schema
+      .getProperties()
+      .find((property) => property.getKey() === locationProperty)
 
-        if (!location) {
-            throw new TypeError(
-                `Cannot query withinDistance: property "${locationProperty}" is not defined on the schema`
-            );
-        }
-
-        requireFiniteNumber(distance, 'distance');
-
-        const origin = toCypherPoint(point, location);
-
-        builder.whereRaw(`point.distance(${THIS_NODE}.${locationProperty}, ${origin}) <= ${distance}`);
-
-        // Order by distance from the origin when asked for, otherwise by property
-        if (order === 'distance') {
-            builder.orderBy(`point.distance(${THIS_NODE}.${locationProperty}, ${origin})`);
-        } else {
-            applyOrder(builder, order);
-        }
-
-        return this.return<T>(constructor, schema, builder, skip, limit);
+    if (!location) {
+      throw new TypeError(
+        `Cannot query withinDistance: property "${locationProperty}" is not defined on the schema`,
+      )
     }
+
+    requireFiniteNumber(distance, 'distance')
+
+    const origin = toCypherPoint(point, location)
+
+    builder.whereRaw(`point.distance(${THIS_NODE}.${locationProperty}, ${origin}) <= ${distance}`)
+
+    // Order by distance from the origin when asked for, otherwise by property
+    if (order === 'distance') {
+      builder.orderBy(`point.distance(${THIS_NODE}.${locationProperty}, ${origin})`)
+    } else {
+      applyOrder(builder, order)
+    }
+
+    return this.return<T>(constructor, schema, builder, skip, limit)
+  }
 }

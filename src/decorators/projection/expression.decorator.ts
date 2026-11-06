@@ -1,5 +1,5 @@
-import { mergeProperty } from '../../meta';
-import { PropertyType } from '../../meta/property-schema';
+import { mergeProperty } from '../../meta'
+import { PropertyType } from '../../meta/property-schema'
 
 /**
  * NTS-138 — raw Cypher expression projected into the read query: the escape
@@ -18,11 +18,11 @@ import { PropertyType } from '../../meta/property-schema';
  * ```
  */
 export default function Expression(expression: string) {
-    return function(target: any, propertyKey: string, _descriptor?: any): void {
-        const constructor = target.constructor
+  return function (target: any, propertyKey: string, _descriptor?: any): void {
+    const constructor = target.constructor
 
-        const property = mergeProperty(constructor, propertyKey, PropertyType.EXPRESSION, {});
+    const property = mergeProperty(constructor, propertyKey, PropertyType.EXPRESSION, {})
 
-        property.setExpression(expression)
-    }
+    property.setExpression(expression)
+  }
 }

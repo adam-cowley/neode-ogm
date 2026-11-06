@@ -1,18 +1,18 @@
-import NeodeError from './neode-error';
-import ConstraintViolationError from './constraint-violation';
-import TransientError from './transient';
+import NeodeError from './neode-error'
+import ConstraintViolationError from './constraint-violation'
+import TransientError from './transient'
 
 /**
  * The status codes every backend raises for a unique-constraint violation:
  * pre-5.x Neo4j, Neo4j 5.x, and the embedded Relate engine.
  */
 const CONSTRAINT_VIOLATION_CODES = new Set([
-    'Neo.ClientError.Schema.ConstraintValidation',
-    'Neo.ClientError.Schema.ConstraintViolation',
-    'Neo.ClientError.Schema.ConstraintValidationFailed',
-]);
+  'Neo.ClientError.Schema.ConstraintValidation',
+  'Neo.ClientError.Schema.ConstraintViolation',
+  'Neo.ClientError.Schema.ConstraintValidationFailed',
+])
 
-const TRANSIENT_CODE_PREFIX = 'Neo.TransientError.';
+const TRANSIENT_CODE_PREFIX = 'Neo.TransientError.'
 
 /**
  * Label/property of a unique violation, parsed from the message:
@@ -24,7 +24,7 @@ const TRANSIENT_CODE_PREFIX = 'Neo.TransientError.';
  * first property; messages that name no label (the Relate engine names
  * only the constraint) leave both undefined.
  */
-const CONSTRAINT_MESSAGE = /\bwith label `([^`]+)` and propert(?:y|ies) `([^`]+)`/;
+const CONSTRAINT_MESSAGE = /\bwith label `([^`]+)` and propert(?:y|ies) `([^`]+)`/
 
 /**
  * The classification facts both backends' errors carry: neo4j-driver's
@@ -32,8 +32,8 @@ const CONSTRAINT_MESSAGE = /\bwith label `([^`]+)` and propert(?:y|ies) `([^`]+)
  * `gqlStatus` (plus a `retryable` verdict).
  */
 interface ClassifiedError extends Error {
-    code?: unknown;
-    retryable?: unknown;
+  code?: unknown
+  retryable?: unknown
 }
 
 /**
@@ -43,32 +43,27 @@ interface ClassifiedError extends Error {
  * shapes and already-typed errors — passes through untouched.
  */
 export function classifyError(error: unknown): unknown {
-    if (!(error instanceof Error) || error instanceof NeodeError) {
-        return error;
-    }
+  if (!(error instanceof Error) || error instanceof NeodeError) {
+    return error
+  }
 
-    const raw = error as ClassifiedError;
-    const code = typeof raw.code === 'string' ? raw.code : undefined;
+  const raw = error as ClassifiedError
+  const code = typeof raw.code === 'string' ? raw.code : undefined
 
-    if (code && CONSTRAINT_VIOLATION_CODES.has(code)) {
-        const parsed = CONSTRAINT_MESSAGE.exec(error.message);
+  if (code && CONSTRAINT_VIOLATION_CODES.has(code)) {
+    const parsed = CONSTRAINT_MESSAGE.exec(error.message)
 
-        return new ConstraintViolationError(
-            error.message,
-            parsed?.[1],
-            parsed?.[2],
-            { cause: error }
-        );
-    }
+    return new ConstraintViolationError(error.message, parsed?.[1], parsed?.[2], { cause: error })
+  }
 
-    if ((code && code.startsWith(TRANSIENT_CODE_PREFIX)) || raw.retryable === true) {
-        return new TransientError(error.message, code, { cause: error });
-    }
+  if ((code && code.startsWith(TRANSIENT_CODE_PREFIX)) || raw.retryable === true) {
+    return new TransientError(error.message, code, { cause: error })
+  }
 
-    return error;
+  return error
 }
 
 /** Type guard for classified transient errors. */
 export function isTransientError(error: unknown): error is TransientError {
-    return error instanceof TransientError;
+  return error instanceof TransientError
 }

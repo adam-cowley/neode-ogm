@@ -1,4 +1,4 @@
-import NeodeError from './neode-error';
+import NeodeError from './neode-error'
 
 /**
  * A unique-constraint violation, raised on `merge()`/`create()` flows that
@@ -7,14 +7,14 @@ import NeodeError from './neode-error';
  * names the constraint), and stay undefined otherwise.
  */
 export default class ConstraintViolationError extends NeodeError {
-    constructor(
-        message: string,
-        readonly label: string | undefined,
-        readonly property: string | undefined,
-        options?: ErrorOptions
-    ) {
-        super(message, options);
+  constructor(
+    message: string,
+    readonly label: string | undefined,
+    readonly property: string | undefined,
+    options?: ErrorOptions,
+  ) {
+    super(message, options)
 
-        this.name = 'ConstraintViolationError';
-    }
+    this.name = 'ConstraintViolationError'
+  }
 }

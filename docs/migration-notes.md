@@ -7,14 +7,14 @@ and can be discarded).
 
 ## What's already on the target stack (no work needed)
 
-| Area | State |
-|---|---|
-| Language | TypeScript 5.9, `strict: true` |
-| Test runner | Vitest 3, `unit` / `integration` projects, v8 coverage w/ thresholds (80%) |
-| Driver | `neo4j-driver` 6.x, Node >= 20 engines field |
-| Validation | Zod |
-| CI | `.github/workflows/ci.yml` exists (verify against Phase 6 matrix) |
-| Integration backend | Embedded Relate (default) + Neo4j/Memgraph via Bolt env vars |
+| Area                | State                                                                      |
+| ------------------- | -------------------------------------------------------------------------- |
+| Language            | TypeScript 5.9, `strict: true`                                             |
+| Test runner         | Vitest 3, `unit` / `integration` projects, v8 coverage w/ thresholds (80%) |
+| Driver              | `neo4j-driver` 6.x, Node >= 20 engines field                               |
+| Validation          | Zod                                                                        |
+| CI                  | `.github/workflows/ci.yml` exists (verify against Phase 6 matrix)          |
+| Integration backend | Embedded Relate (default) + Neo4j/Memgraph via Bolt env vars               |
 
 Baseline test run (this commit): **unit 627 passed (1.3s), integration 239 passed / 1 skipped (1.5s)** — all green.
 Integration uses the embedded Relate engine (`test/integration/setup.ts`), no external DB required.
@@ -76,6 +76,7 @@ Integration uses the embedded Relate engine (`test/integration/setup.ts`), no ex
 
 The suite is already comprehensive (866 tests incl. builder parity, golden Cypher parity,
 hydration round-trips). Gap check during later phases:
+
 - Cypher **snapshot** tests for every builder method — builder parity suite covers this; extend
   if any builder method lacks a pinned assertion.
 - Type tests (`*.test-d.ts`) for inference — added in Phase 4.

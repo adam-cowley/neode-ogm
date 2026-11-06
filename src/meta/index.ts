@@ -1,220 +1,256 @@
-import { Newable } from "../meta/newable";
-import { Direction } from "../query";
-import INeode from "../neode.interface";
-import PropertySchema, { DefaultValue, PropertyType } from "./property-schema";
+import { Newable } from '../meta/newable'
+import { Direction } from '../query'
+import INeode from '../neode.interface'
+import PropertySchema, { DefaultValue, PropertyType } from './property-schema'
 
-import RelationshipPropertySchema from "./relationship-property-schema";
+import RelationshipPropertySchema from './relationship-property-schema'
 
-import EntitySchema, { EntityType } from "./entity/entity-schema";
-import PropertyConfig from "../decorators/property-config.interface";
-import { PropertyDefinition } from "./schema-definition.interface";
-import Repository from "../repository/index";
+import EntitySchema, { EntityType } from './entity/entity-schema'
+import PropertyConfig from '../decorators/property-config.interface'
+import { PropertyDefinition } from './schema-definition.interface'
+import Repository from '../repository/index'
 
 const models: Map<Newable, EntitySchema> = new Map()
 
 /** Config keys consumed by the metamodel; anything else is a validation rule */
 const METAMODEL_KEYS = new Set([
-    'type', 'primary', 'unique', 'array', 'default', 'onCreateSet', 'onMatchSet',
-    'alwaysSet', 'required', 'hidden', 'protected', 'readonly', 'index', 'exists',
-    'fields', 'where', 'minHops', 'maxHops', 'label', 'expression', 'compute',
-    'coalesce', 'typed',
+  'type',
+  'primary',
+  'unique',
+  'array',
+  'default',
+  'onCreateSet',
+  'onMatchSet',
+  'alwaysSet',
+  'required',
+  'hidden',
+  'protected',
+  'readonly',
+  'index',
+  'exists',
+  'fields',
+  'where',
+  'minHops',
+  'maxHops',
+  'label',
+  'expression',
+  'compute',
+  'coalesce',
+  'typed',
 ])
 
 export function getModels() {
-    return models
+  return models
 }
 
 export function getModel(constructor: any): EntitySchema {
-    return getModels().get(constructor)!
+  return getModels().get(constructor)!
 }
 
 export function mergeModel(constructor: any): EntitySchema {
-    if ( !getModels().has(constructor) ) {
-        getModels().set(constructor, new EntitySchema())
-    }
+  if (!getModels().has(constructor)) {
+    getModels().set(constructor, new EntitySchema())
+  }
 
-    return getModels().get(constructor)!
+  return getModels().get(constructor)!
 }
 
 export function mergeRelationshipModel(constructor: any): EntitySchema {
-    // Decorators are run in a weird order (accessor, property then class decorators)
-    // So this may already exist as a NodeEntity and should be confirmed
-    if ( !getModels().has(constructor) ) {
-        getModels().set(constructor, new EntitySchema())
-    }
+  // Decorators are run in a weird order (accessor, property then class decorators)
+  // So this may already exist as a NodeEntity and should be confirmed
+  if (!getModels().has(constructor)) {
+    getModels().set(constructor, new EntitySchema())
+  }
 
-    const model = getModels().get(constructor)!
-    model.setType(EntityType.RelationshipEntity)
+  const model = getModels().get(constructor)!
+  model.setType(EntityType.RelationshipEntity)
 
-    return model
+  return model
 }
 
 // PropertyConfig | PropertyDefinition: decorator configs vs the map adapter's
 // (structurally compatible; PropertyDefinition just lacks the rule index signature)
-export function mergeProperty(constructor: any, key: string, type: PropertyType, config: PropertyConfig | PropertyDefinition = {}): PropertySchema {
-    const model = mergeModel(constructor)
+export function mergeProperty(
+  constructor: any,
+  key: string,
+  type: PropertyType,
+  config: PropertyConfig | PropertyDefinition = {},
+): PropertySchema {
+  const model = mergeModel(constructor)
 
-    if ( !model.hasProperty(key) ) {
-        model.addProperty(key)
-    }
+  if (!model.hasProperty(key)) {
+    model.addProperty(key)
+  }
 
-    const property = model.getProperty(key) as PropertySchema
+  const property = model.getProperty(key) as PropertySchema
 
-    // If specificially set, then overwrite the type
-    if ( type !== PropertyType.ANY ) {
-        property.setType(type)
-    }
+  // If specificially set, then overwrite the type
+  if (type !== PropertyType.ANY) {
+    property.setType(type)
+  }
 
-    // Set Config
-    if ( config?.primary === true ) {
-        property.setPrimaryKey(true)
-    }
+  // Set Config
+  if (config?.primary === true) {
+    property.setPrimaryKey(true)
+  }
 
-    if ( config?.unique === true ) {
-        property.setUnique(true)
-    }
+  if (config?.unique === true) {
+    property.setUnique(true)
+  }
 
-    if ( Array.isArray(config?.unique) ) {
-        property.setCompositeUnique(config.unique)
-    }
+  if (Array.isArray(config?.unique)) {
+    property.setCompositeUnique(config.unique)
+  }
 
-    if ( config?.array === true ) {
-        property.setArray(true)
-    }
+  if (config?.array === true) {
+    property.setArray(true)
+  }
 
-    if ( config?.required === true ) {
-        property.setRequired(true)
-    }
+  if (config?.required === true) {
+    property.setRequired(true)
+  }
 
-    if ( config?.hidden === true ) {
-        property.setHidden(true)
-    }
+  if (config?.hidden === true) {
+    property.setHidden(true)
+  }
 
-    if ( config?.protected === true ) {
-        property.setProtected(true)
-    }
+  if (config?.protected === true) {
+    property.setProtected(true)
+  }
 
-    if ( config?.readonly === true ) {
-        property.setReadonly(true)
-    }
+  if (config?.readonly === true) {
+    property.setReadonly(true)
+  }
 
-    if ( config?.index === true ) {
-        property.setIndex(true)
-    }
+  if (config?.index === true) {
+    property.setIndex(true)
+  }
 
-    if ( Array.isArray(config?.index) ) {
-        property.setCompositeIndex(config.index)
-    }
+  if (Array.isArray(config?.index)) {
+    property.setCompositeIndex(config.index)
+  }
 
-    if ( config?.typed === true ) {
-        property.setTyped(true)
-    }
+  if (config?.typed === true) {
+    property.setTyped(true)
+  }
 
-    if ( config?.exists === true ) {
-        property.setExists(true)
-    }
+  if (config?.exists === true) {
+    property.setExists(true)
+  }
 
-    if ( Object.hasOwn(config, 'default') ) {
-        property.setDefaultValue(config.default as DefaultValue)
-    }
+  if (Object.hasOwn(config, 'default')) {
+    property.setDefaultValue(config.default as DefaultValue)
+  }
 
-    if ( Object.hasOwn(config, 'onCreateSet') ) {
-        property.setOnCreateSet(config.onCreateSet as boolean)
-    }
+  if (Object.hasOwn(config, 'onCreateSet')) {
+    property.setOnCreateSet(config.onCreateSet as boolean)
+  }
 
-    if ( Object.hasOwn(config, 'onMatchSet') ) {
-        property.setOnMatchSet(config.onMatchSet as boolean)
-    }
+  if (Object.hasOwn(config, 'onMatchSet')) {
+    property.setOnMatchSet(config.onMatchSet as boolean)
+  }
 
-    if ( Object.hasOwn(config, 'alwaysSet') ) {
-        property.setAlwaysSet(config.alwaysSet as boolean)
-    }
+  if (Object.hasOwn(config, 'alwaysSet')) {
+    property.setAlwaysSet(config.alwaysSet as boolean)
+  }
 
-    // Read-model projection config (NTS-135/136/137/138)
-    const projection = config as Record<string, unknown>;
+  // Read-model projection config (NTS-135/136/137/138)
+  const projection = config as Record<string, unknown>
 
-    if ( Array.isArray(projection.fields) ) {
-        property.setFields(projection.fields as string[])
-    }
+  if (Array.isArray(projection.fields)) {
+    property.setFields(projection.fields as string[])
+  }
 
-    if ( typeof projection.where === 'string' ) {
-        property.setWhere(projection.where)
-    }
+  if (typeof projection.where === 'string') {
+    property.setWhere(projection.where)
+  }
 
-    if ( typeof projection.minHops === 'number' ) {
-        property.setMinHops(projection.minHops)
-    }
+  if (typeof projection.minHops === 'number') {
+    property.setMinHops(projection.minHops)
+  }
 
-    if ( typeof projection.maxHops === 'number' ) {
-        property.setMaxHops(projection.maxHops)
-    }
+  if (typeof projection.maxHops === 'number') {
+    property.setMaxHops(projection.maxHops)
+  }
 
-    if ( typeof projection.label === 'string' ) {
-        property.setLabel(projection.label)
-    }
+  if (typeof projection.label === 'string') {
+    property.setLabel(projection.label)
+  }
 
-    if ( typeof projection.expression === 'string' ) {
-        property.setExpression(projection.expression)
-    }
+  if (typeof projection.expression === 'string') {
+    property.setExpression(projection.expression)
+  }
 
-    if ( typeof projection.compute === 'function' ) {
-        property.setCompute(projection.compute as (entity: any) => unknown)
-    }
+  if (typeof projection.compute === 'function') {
+    property.setCompute(projection.compute as (entity: any) => unknown)
+  }
 
-    // Hydration defaults (NTS-139): literal or sibling-property coalesce
-    if ( typeof projection.coalesce === 'string' || Array.isArray(projection.coalesce) ) {
-        property.setCoalesce(projection.coalesce as string | string[])
-    }
+  // Hydration defaults (NTS-139): literal or sibling-property coalesce
+  if (typeof projection.coalesce === 'string' || Array.isArray(projection.coalesce)) {
+    property.setCoalesce(projection.coalesce as string | string[])
+  }
 
-    // Persist every config key the metamodel has no flag for as a validation rule
-    property.setRules(
-        Object.fromEntries(
-            Object.entries(config).filter(([ key ]) => !METAMODEL_KEYS.has(key))
-        )
-    )
+  // Persist every config key the metamodel has no flag for as a validation rule
+  property.setRules(
+    Object.fromEntries(Object.entries(config).filter(([key]) => !METAMODEL_KEYS.has(key))),
+  )
 
-    return property
+  return property
 }
 
-export function mergeRelationshipProperty(constructor: any, key: string,
-    type: string,
-    target: Newable,
-    direction: Direction,
-    many: boolean,
-    eager?: boolean
+export function mergeRelationshipProperty(
+  constructor: any,
+  key: string,
+  type: string,
+  target: Newable,
+  direction: Direction,
+  many: boolean,
+  eager?: boolean,
 ): RelationshipPropertySchema {
-    mergeModel(constructor)
+  mergeModel(constructor)
 
-    if ( !models.get(constructor)!.hasProperty(key) ) {
-        models.get(constructor)!.addRelationship(key)
-    }
+  if (!models.get(constructor)!.hasProperty(key)) {
+    models.get(constructor)!.addRelationship(key)
+  }
 
-    const rel = models.get(constructor)!.getRelationship(key)
+  const rel = models.get(constructor)!.getRelationship(key)
 
-    rel.setType(type)
-    rel.setDirection(direction)
-    rel.setTarget(target)
-    rel.setMany(many)
-    rel.setEager(eager || false)
+  rel.setType(type)
+  rel.setDirection(direction)
+  rel.setTarget(target)
+  rel.setMany(many)
+  rel.setEager(eager || false)
 
-    return rel
+  return rel
 }
 
 /**
  * A (custom) repository class, registered per entity. Instances are created
  * with (neode, entity, database?) at resolution time — never stored.
  */
-export type RepositoryConstructor = new (neode: INeode, entity: any, database?: string) => Repository<any>
+export type RepositoryConstructor = new (
+  neode: INeode,
+  entity: any,
+  database?: string,
+) => Repository<any>
 
 const repositories: Map<Newable, RepositoryConstructor> = new Map()
 
-export function registerRepository(entity: Newable, repository: Repository<any> | RepositoryConstructor) {
-    // An instance is accepted for convenience: its constructor is stored
-    repositories.set(entity, typeof repository === 'function' ? repository : (repository.constructor as RepositoryConstructor))
+export function registerRepository(
+  entity: Newable,
+  repository: Repository<any> | RepositoryConstructor,
+) {
+  // An instance is accepted for convenience: its constructor is stored
+  repositories.set(
+    entity,
+    typeof repository === 'function'
+      ? repository
+      : (repository.constructor as RepositoryConstructor),
+  )
 }
 
 export function getRepository(entity: Newable): RepositoryConstructor | undefined {
-    return repositories.get(entity)
+  return repositories.get(entity)
 }
 
 /**
@@ -222,10 +258,14 @@ export function getRepository(entity: Newable): RepositoryConstructor | undefine
  * the entity (constructed with the given neode and entity), or the default
  * Repository
  */
-export function resolveRepository<Entity>(neode: INeode, entity: new (...args: never[]) => Entity, database?: string): Repository<Entity> {
-    const Custom = repositories.get(entity)
+export function resolveRepository<Entity>(
+  neode: INeode,
+  entity: new (...args: never[]) => Entity,
+  database?: string,
+): Repository<Entity> {
+  const Custom = repositories.get(entity)
 
-    return Custom
-        ? new Custom(neode, entity, database) as Repository<Entity>
-        : new Repository<Entity>(neode, entity, database)
+  return Custom
+    ? (new Custom(neode, entity, database) as Repository<Entity>)
+    : new Repository<Entity>(neode, entity, database)
 }

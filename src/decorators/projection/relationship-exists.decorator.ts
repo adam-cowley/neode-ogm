@@ -1,7 +1,7 @@
-import { mergeProperty } from '../../meta';
-import { PropertyType } from '../../meta/property-schema';
-import { toDirection } from '../../query';
-import { RelationshipExistsConfig } from './projection-config.interface';
+import { mergeProperty } from '../../meta'
+import { PropertyType } from '../../meta/property-schema'
+import { toDirection } from '../../query'
+import { RelationshipExistsConfig } from './projection-config.interface'
 
 /**
  * NTS-137 — relationship existence projected as an inline `EXISTS { }`
@@ -15,17 +15,14 @@ import { RelationshipExistsConfig } from './projection-config.interface';
  * ```
  */
 export default function RelationshipExists(config: RelationshipExistsConfig) {
-    return function(target: any, propertyKey: string, _descriptor?: any): void {
-        const constructor = target.constructor
+  return function (target: any, propertyKey: string, _descriptor?: any): void {
+    const constructor = target.constructor
 
-        const property = mergeProperty(
-            constructor,
-            propertyKey,
-            PropertyType.RELATIONSHIP_EXISTS,
-            { where: config.where }
-        );
+    const property = mergeProperty(constructor, propertyKey, PropertyType.RELATIONSHIP_EXISTS, {
+      where: config.where,
+    })
 
-        property.setRelationshipType(config.type)
-        property.setDirection(toDirection(config.direction))
-    }
+    property.setRelationshipType(config.type)
+    property.setDirection(toDirection(config.direction))
+  }
 }

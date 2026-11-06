@@ -1,4 +1,4 @@
-import NeodeError from './neode-error';
+import NeodeError from './neode-error'
 
 /**
  * A transient failure (`Neo.TransientError.*` codes, or the driver's /
@@ -7,11 +7,15 @@ import NeodeError from './neode-error';
  * is only ever created for a retryable failure.
  */
 export default class TransientError extends NeodeError {
-    readonly isRetryable = true;
+  readonly isRetryable = true
 
-    constructor(message: string, readonly code?: string, options?: ErrorOptions) {
-        super(message, options);
+  constructor(
+    message: string,
+    readonly code?: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options)
 
-        this.name = 'TransientError';
-    }
+    this.name = 'TransientError'
+  }
 }

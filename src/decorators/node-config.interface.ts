@@ -1,3 +1,3 @@
 export default interface NodeConfig {
-    labels?: string[];
+  labels?: string[]
 }

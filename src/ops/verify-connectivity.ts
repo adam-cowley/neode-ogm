@@ -7,25 +7,25 @@
  * facade methods; they construct a throwaway driver per check and close it.
  */
 
-import neo4j from 'neo4j-driver';
-import type { AuthToken } from 'neo4j-driver';
+import neo4j from 'neo4j-driver'
+import type { AuthToken } from 'neo4j-driver'
 
 export interface ConnectivityConfig {
-    uri: string;
-    auth?: AuthToken;
-    /** Driver config (encryption, pool sizes, connectionTimeout, …) */
-    config?: Record<string, unknown>;
-    /** Database the check targets — passed to the driver's verifyConnectivity */
-    database?: string;
+  uri: string
+  auth?: AuthToken
+  /** Driver config (encryption, pool sizes, connectionTimeout, …) */
+  config?: Record<string, unknown>
+  /** Database the check targets — passed to the driver's verifyConnectivity */
+  database?: string
 }
 
 /** Rejected by waitUntilReachable when the deadline passes. */
 export class ConnectivityTimeoutError extends Error {
-    constructor(uri: string, timeout: number) {
-        super(`Database at ${uri} was not reachable within ${timeout}ms`);
+  constructor(uri: string, timeout: number) {
+    super(`Database at ${uri} was not reachable within ${timeout}ms`)
 
-        this.name = 'ConnectivityTimeoutError';
-    }
+    this.name = 'ConnectivityTimeoutError'
+  }
 }
 
 /**
@@ -36,29 +36,29 @@ export class ConnectivityTimeoutError extends Error {
  * the driver's default applies otherwise.
  */
 export async function verifyConnectivity(target: ConnectivityConfig): Promise<void> {
-    const driver = neo4j.driver(target.uri, target.auth, target.config);
+  const driver = neo4j.driver(target.uri, target.auth, target.config)
 
-    try {
-        await driver.verifyConnectivity(
-            target.database !== undefined ? { database: target.database } : undefined
-        );
-    } finally {
-        await driver.close();
-    }
+  try {
+    await driver.verifyConnectivity(
+      target.database !== undefined ? { database: target.database } : undefined,
+    )
+  } finally {
+    await driver.close()
+  }
 }
 
 export interface WaitUntilReachableOptions {
-    /** Total budget in ms; past it the call rejects with ConnectivityTimeoutError. Default 30_000. */
-    timeout?: number;
+  /** Total budget in ms; past it the call rejects with ConnectivityTimeoutError. Default 30_000. */
+  timeout?: number
 
-    /** First wait between attempts in ms; doubles after each failure up to 10x. Default 500. */
-    interval?: number;
+  /** First wait between attempts in ms; doubles after each failure up to 10x. Default 500. */
+  interval?: number
 
-    /**
-     * Probe override — lets callers (and tests) check reachability through
-     * something other than a Bolt driver, e.g. an embedded engine.
-     */
-    check?: (target: ConnectivityConfig) => Promise<void>;
+  /**
+   * Probe override — lets callers (and tests) check reachability through
+   * something other than a Bolt driver, e.g. an embedded engine.
+   */
+  check?: (target: ConnectivityConfig) => Promise<void>
 }
 
 /**
@@ -66,52 +66,49 @@ export interface WaitUntilReachableOptions {
  * is reachable or the timeout elapses (then: ConnectivityTimeoutError).
  */
 export async function waitUntilReachable(
-    target: ConnectivityConfig,
-    options: WaitUntilReachableOptions = {}
+  target: ConnectivityConfig,
+  options: WaitUntilReachableOptions = {},
 ): Promise<void> {
-    const timeout = options.timeout ?? 30_000;
-    const interval = options.interval ?? 500;
-    const check = options.check ?? verifyConnectivity;
+  const timeout = options.timeout ?? 30_000
+  const interval = options.interval ?? 500
+  const check = options.check ?? verifyConnectivity
 
-    const deadline = Date.now() + timeout;
-    let wait = interval;
+  const deadline = Date.now() + timeout
+  let wait = interval
 
-    for (;;) {
-        const remaining = deadline - Date.now();
+  for (;;) {
+    const remaining = deadline - Date.now()
 
-        if (remaining <= 0) {
-            throw new ConnectivityTimeoutError(target.uri, timeout);
-        }
-
-        try {
-            // Raced so a hung probe cannot blow the deadline (it settles
-            // later; Promise.race already attached handlers to it)
-            await Promise.race([
-                check(target),
-                rejectAfter(remaining, target.uri, timeout),
-            ]);
-
-            return;
-        } catch (error) {
-            if (error instanceof ConnectivityTimeoutError) {
-                throw error;
-            }
-
-            await sleep(Math.min(wait, deadline - Date.now()));
-            wait = Math.min(wait * 2, interval * 10);
-        }
+    if (remaining <= 0) {
+      throw new ConnectivityTimeoutError(target.uri, timeout)
     }
+
+    try {
+      // Raced so a hung probe cannot blow the deadline (it settles
+      // later; Promise.race already attached handlers to it)
+      await Promise.race([check(target), rejectAfter(remaining, target.uri, timeout)])
+
+      return
+    } catch (error) {
+      if (error instanceof ConnectivityTimeoutError) {
+        throw error
+      }
+
+      await sleep(Math.min(wait, deadline - Date.now()))
+      wait = Math.min(wait * 2, interval * 10)
+    }
+  }
 }
 
 function sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function rejectAfter(ms: number, uri: string, timeout: number): Promise<never> {
-    return new Promise((_, reject) => {
-        const timer = setTimeout(() => reject(new ConnectivityTimeoutError(uri, timeout)), ms);
+  return new Promise((_, reject) => {
+    const timer = setTimeout(() => reject(new ConnectivityTimeoutError(uri, timeout)), ms)
 
-        // The loser of the race must not keep the process alive
-        timer.unref();
-    });
+    // The loser of the race must not keep the process alive
+    timer.unref()
+  })
 }

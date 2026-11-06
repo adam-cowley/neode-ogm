@@ -23,38 +23,38 @@ The map-based `model()` / `with()` / `withDirectory()` / `extend()` API is kept 
 
 ```typescript
 neode.model('Person', {
-    person_id: { primary: true, type: 'uuid' },
-    name: { type: 'string', unique: true },
-    age: 'number',
-    acts_in: {
-        type: 'relationship',
-        relationship: 'ACTS_IN',
-        direction: 'out',
-        target: 'Movie',
-        eager: true,
-    },
-});
+  person_id: { primary: true, type: 'uuid' },
+  name: { type: 'string', unique: true },
+  age: 'number',
+  acts_in: {
+    type: 'relationship',
+    relationship: 'ACTS_IN',
+    direction: 'out',
+    target: 'Movie',
+    eager: true,
+  },
+})
 ```
 
 Two schema-level differences to know about:
 
-- **`cascade` is not carried per relationship.** neode-ogm takes cascade as a *delete-time* option instead — see [Cascade delete](#cascade-delete--and-detach--now-both-work). The `cascade` key in a map schema is accepted but ignored.
+- **`cascade` is not carried per relationship.** neode-ogm takes cascade as a _delete-time_ option instead — see [Cascade delete](#cascade-delete--and-detach--now-both-work). The `cascade` key in a map schema is accepted but ignored.
 - **Relationship `properties` (edge properties) are parsed but not writable yet** — a generated relationship entity is needed for edge-property saves.
 
 ### Path 2 — the decorator API
 
 The decorator-first API is the recommended way to write new models: classes with `@NodeEntity`, typed properties, and IDE support. The mapping from neode concepts:
 
-| neode (map) | neode-ogm (decorators) |
-|---|---|
-| `instance.model('Person', { … })` | `@NodeEntity() class Person { … }` |
-| `person_id: { primary: true, type: 'uuid' }` | `@Uuid({ primary: true }) id: string` |
-| `name: { type: 'string', unique: true }` | `@Property({ type: 'string', unique: true }) name: string` |
-| `age: 'number'` | `@Property({ type: 'number' }) age: number` |
-| internal node id | `@InternalId() _id: string` |
+| neode (map)                                                                    | neode-ogm (decorators)                                                                            |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| `instance.model('Person', { … })`                                              | `@NodeEntity() class Person { … }`                                                                |
+| `person_id: { primary: true, type: 'uuid' }`                                   | `@Uuid({ primary: true }) id: string`                                                             |
+| `name: { type: 'string', unique: true }`                                       | `@Property({ type: 'string', unique: true }) name: string`                                        |
+| `age: 'number'`                                                                | `@Property({ type: 'number' }) age: number`                                                       |
+| internal node id                                                               | `@InternalId() _id: string`                                                                       |
 | relationship entry `{ type: 'relationship', relationship, direction, target }` | `@OneToMany(() => Target, 'TYPE', Direction.OUTGOING)` / `@OneToOne({ type, direction, target })` |
-| `labels: ['Person', 'Actor']` | `@NodeEntity({ labels: ['Person', 'Actor'] })` |
-| `extend('Person', 'Actor', { … })` | unchanged — still `neode.extend('Person', 'Actor', { … })` |
+| `labels: ['Person', 'Actor']`                                                  | `@NodeEntity({ labels: ['Person', 'Actor'] })`                                                    |
+| `extend('Person', 'Actor', { … })`                                             | unchanged — still `neode.extend('Person', 'Actor', { … })`                                        |
 
 Every decorator is listed in the [API reference](api-reference.md#entities--decorators).
 
@@ -68,16 +68,16 @@ neode took a Bolt URL and credentials in the constructor. neode-ogm takes a **Co
 
 ```typescript
 // neode 0.4.9
-const neode = new Neode('bolt://localhost:7687', 'username', 'password', true);
+const neode = new Neode('bolt://localhost:7687', 'username', 'password', true)
 ```
 
 ```typescript
 // neode-ogm
-import neo4j from 'neo4j-driver';
-import Neode, { fromEnv } from '@neode/beta';
+import neo4j from 'neo4j-driver'
+import Neode, { fromEnv } from '@neode/beta'
 
-const neode = Neode.forDriver(driver, 'neo4j', true); // database, enterprise
-const neode = fromEnv();                              // NEO4J_* env vars
+const neode = Neode.forDriver(driver, 'neo4j', true) // database, enterprise
+const neode = fromEnv() // NEO4J_* env vars
 ```
 
 Notes:
@@ -90,43 +90,43 @@ Notes:
 
 Neo4j 5+ replaced numeric internal node ids with `elementId` strings, and neode-ogm follows.
 
-| | neode 0.4.9 | neode-ogm |
-|---|---|---|
-| Look up by internal id | `findById('Person', 123)` | `findById(Person, '4:uuid:0')` — an elementId **string** |
+|                                         | neode 0.4.9                     | neode-ogm                                                                       |
+| --------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------- |
+| Look up by internal id                  | `findById('Person', 123)`       | `findById(Person, '4:uuid:0')` — an elementId **string**                        |
 | Hydrate the internal id onto the entity | `node.id()` / `node.get('id')`… | declare `@InternalId() _id: string` — hydrated with the elementId on every read |
-| Look up by primary key | `find('Person', 'uuid-here')` | unchanged: `neode.find(Person, 'uuid-here')` |
+| Look up by primary key                  | `find('Person', 'uuid-here')`   | unchanged: `neode.find(Person, 'uuid-here')`                                    |
 
 ```typescript
 @NodeEntity()
 class Person {
-    @InternalId()
-    _id: string; // elementId — hydrated by the OGM, never written
+  @InternalId()
+  _id: string // elementId — hydrated by the OGM, never written
 
-    @Uuid({ primary: true })
-    id: string; // your primary key
+  @Uuid({ primary: true })
+  id: string // your primary key
 }
 
-const saved = await neode.create(Person, { name: 'Adam' });
+const saved = await neode.create(Person, { name: 'Adam' })
 
-const byPk = await neode.find(Person, saved.id);       // primary key
-const byElId = await neode.findById(Person, saved._id); // elementId string
+const byPk = await neode.find(Person, saved.id) // primary key
+const byElId = await neode.findById(Person, saved._id) // elementId string
 ```
 
 ## Facade signatures: first / relate / deleteAll
 
 neode's string-labelled facade is now class-based, and a few methods changed shape:
 
-| neode 0.4.9 | neode-ogm |
-|---|---|
-| `first('Person', 'name', 'Adam')` | `neode.getFirst(Person, { name: 'Adam' })` |
-| `first('Person', { name: 'Adam', age: 29 })` | `neode.getFirst(Person, { name: 'Adam', age: 29 })` |
-| `all('Person', props, order, limit, skip)` | `neode.all(Person, props, order, limit, skip)` — same order spec forms (`'name'`, `['name']`, `{ name: 'DESC' }`, …) |
-| `find('Person', id)` / `findById('Person', id)` | `neode.find(Person, id)` / `neode.findById(Person, elementId)` |
-| `create('Person', props)` / `mergeOn('Person', match, set)` | `neode.create(Person, props)` / `neode.mergeOn(Person, match, set)` |
-| `adam.relateTo(joe, 'knows', { since }, forceCreate)` | `neode.relate(Person, adam, joe, 'knows', { since }, forceCreate)` — or the instance method `adam.relateTo(joe, 'knows', { since })` |
-| `adam.detachFrom(joe)` | `neode.detach(Person, adam, joe, 'knows')` — or `adam.detachFrom(joe, 'knows')` (the key is required — neode resolved it from the schema) |
-| `delete('Person', where)` / `deleteAll('Person')` | `neode.getRepository(Person).deleteAll(where)` — one `DETACH DELETE`, returns the number deleted |
-| `instance.cypher(q, p)` | `neode.readCypher(q, p)` / `neode.writeCypher(q, p)` |
+| neode 0.4.9                                                 | neode-ogm                                                                                                                                 |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `first('Person', 'name', 'Adam')`                           | `neode.getFirst(Person, { name: 'Adam' })`                                                                                                |
+| `first('Person', { name: 'Adam', age: 29 })`                | `neode.getFirst(Person, { name: 'Adam', age: 29 })`                                                                                       |
+| `all('Person', props, order, limit, skip)`                  | `neode.all(Person, props, order, limit, skip)` — same order spec forms (`'name'`, `['name']`, `{ name: 'DESC' }`, …)                      |
+| `find('Person', id)` / `findById('Person', id)`             | `neode.find(Person, id)` / `neode.findById(Person, elementId)`                                                                            |
+| `create('Person', props)` / `mergeOn('Person', match, set)` | `neode.create(Person, props)` / `neode.mergeOn(Person, match, set)`                                                                       |
+| `adam.relateTo(joe, 'knows', { since }, forceCreate)`       | `neode.relate(Person, adam, joe, 'knows', { since }, forceCreate)` — or the instance method `adam.relateTo(joe, 'knows', { since })`      |
+| `adam.detachFrom(joe)`                                      | `neode.detach(Person, adam, joe, 'knows')` — or `adam.detachFrom(joe, 'knows')` (the key is required — neode resolved it from the schema) |
+| `delete('Person', where)` / `deleteAll('Person')`           | `neode.getRepository(Person).deleteAll(where)` — one `DETACH DELETE`, returns the number deleted                                          |
+| `instance.cypher(q, p)`                                     | `neode.readCypher(q, p)` / `neode.writeCypher(q, p)`                                                                                      |
 
 Two changes to the values coming back:
 
@@ -139,27 +139,27 @@ neode exposed raw driver sessions (`session()`, `readSession()`, `writeSession()
 
 ```typescript
 // One-off statements (implicit transactions)
-await neode.readCypher('MATCH (p:Person) RETURN p LIMIT 10');
-await neode.writeCypher('CREATE (p:Person { name: $name }) RETURN p', { name: 'Adam' });
+await neode.readCypher('MATCH (p:Person) RETURN p LIMIT 10')
+await neode.writeCypher('CREATE (p:Person { name: $name }) RETURN p', { name: 'Adam' })
 
 // Explicit transaction — full CRUD surface, you commit or roll back
-const tx = await neode.openWriteTransaction();
-await tx.save(Person.create('Adam'));
-await tx.commit();
+const tx = await neode.openWriteTransaction()
+await tx.save(Person.create('Adam'))
+await tx.commit()
 
 // Or a unit of work: rolled back automatically if your callback throws
 await neode.inWriteTransaction(async (tx) => {
-    const adam = await tx.save(Person.create('Adam'));
-    await tx.relate(Person, adam, joe, 'knows', {});
-    return adam;
-});
+  const adam = await tx.save(Person.create('Adam'))
+  await tx.relate(Person, adam, joe, 'knows', {})
+  return adam
+})
 ```
 
-| neode 0.4.9 | neode-ogm |
-|---|---|
-| `instance.cypher(q, p)` | `neode.readCypher(q, p)` / `neode.writeCypher(q, p)` |
+| neode 0.4.9                                               | neode-ogm                                                                                     |
+| --------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `instance.cypher(q, p)`                                   | `neode.readCypher(q, p)` / `neode.writeCypher(q, p)`                                          |
 | `instance.readSession()` / `writeSession()` / `session()` | `neode.readTransaction(db?)` / `writeTransaction(db?)` — or the `open*Transaction()` variants |
-| manual session/transaction bookkeeping | `inReadTransaction(work)` / `inWriteTransaction(work)` with auto-rollback |
+| manual session/transaction bookkeeping                    | `inReadTransaction(work)` / `inWriteTransaction(work)` with auto-rollback                     |
 
 Inside a transaction, `tx` (a `TransactionalService`) offers the query surface — `save`, `update`, `delete`, `find`, `findById`, `get`, `getFirst`, `all`, `relate`, `detach`, `withinDistance`, `readCypher`, `writeCypher` — all scoped to the transaction (`create` is facade-only). There are no read/write routing surprises: statements run where you opened the transaction.
 
@@ -174,8 +174,8 @@ email: string;
 
 ```typescript
 neode.model('Person', {
-    email: { type: 'string', min: 2, max: 50, email: true },
-});
+  email: { type: 'string', min: 2, max: 50, email: true },
+})
 ```
 
 The complete rule list is in the [API reference](api-reference.md#validation-rules) — `min`, `max`, `length`, `regex`, `email`, `ip`, `uri`, `alphanum`, `allow`, `valid`, `invalid`, `positive`, `precision`, `before`/`after`, `lowercase`/`uppercase`, `truncate`, … Unknown rule names throw neode's familiar `Not sure how to validate <rule> on <key>`.
@@ -195,15 +195,15 @@ Validation runs automatically on every write path (`save`, `create`, `update`), 
 
 ```typescript
 try {
-    await neode.batch([
-        'CREATE (n:Person { name: "Adam" })',
-        { query: 'CREATE (n:Person { name: $name })', params: { name: 'Joe' } },
-    ]);
+  await neode.batch([
+    'CREATE (n:Person { name: "Adam" })',
+    { query: 'CREATE (n:Person { name: $name })', params: { name: 'Joe' } },
+  ])
 } catch (e) {
-    // TransactionError:
-    //   e.errors   — aligned with the input array, null where a statement succeeded
-    //   e.results  — results produced before the failure
-    //   e.details  — { index, query, params, error } for every failed statement
+  // TransactionError:
+  //   e.errors   — aligned with the input array, null where a statement succeeded
+  //   e.results  — results produced before the failure
+  //   e.details  — { index, query, params, error } for every failed statement
 }
 ```
 
@@ -218,18 +218,18 @@ Improvements over neode:
 neode declared cascade behaviour per relationship in the schema (`cascade: 'delete' | 'detach'`), and its `detach` mode was broken. neode-ogm makes cascade a **delete-time option** that works, for every relationship declared on the model's schema:
 
 ```typescript
-await neode.delete(adam); // plain DETACH DELETE — related nodes untouched
+await neode.delete(adam) // plain DETACH DELETE — related nodes untouched
 
 await neode.delete(adam, {
-    cascade: true,        // cascade into every relationship on the schema
-    mode: 'delete',       // default: delete related nodes recursively
-    depth: 10,            // max hops, this is the default
-});
+  cascade: true, // cascade into every relationship on the schema
+  mode: 'delete', // default: delete related nodes recursively
+  depth: 10, // max hops, this is the default
+})
 
 await neode.delete(adam, {
-    cascade: true,
-    mode: 'detach',       // remove the relationships, KEEP the related nodes
-});
+  cascade: true,
+  mode: 'detach', // remove the relationships, KEEP the related nodes
+})
 ```
 
 - The instance method works too: `await adam.delete({ cascade: true, mode: 'detach' })`.

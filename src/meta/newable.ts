@@ -5,5 +5,5 @@
  * demands every static Object method.
  */
 export interface Newable {
-    new (...args: never[]): unknown;
+  new (...args: never[]): unknown
 }

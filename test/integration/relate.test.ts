@@ -1,22 +1,22 @@
 // The backend import loads neode.service first, resolving the
 // query.service -> utils -> neode.service module cycle before the
 // query services below are evaluated
-import { openBackend, TestBackend } from './support/backend';
+import { openBackend, TestBackend } from './support/backend'
 import {
-    InternalId,
-    NodeEntity,
-    OneToMany,
-    Property,
-    RelationshipEntity,
-    String,
-    Uuid,
-} from '../../src/decorators';
-import { Direction } from '../../src/query';
-import { getModel } from '../../src/meta';
-import EntitySchema from '../../src/meta/entity/entity-schema';
-import DetachService from '../../src/services/query/detach.service';
-import RelateService from '../../src/services/query/relate.service';
-import RelationshipService from '../../src/services/query/relationship.service';
+  InternalId,
+  NodeEntity,
+  OneToMany,
+  Property,
+  RelationshipEntity,
+  String,
+  Uuid,
+} from '../../src/decorators'
+import { Direction } from '../../src/query'
+import { getModel } from '../../src/meta'
+import EntitySchema from '../../src/meta/entity/entity-schema'
+import DetachService from '../../src/services/query/detach.service'
+import RelateService from '../../src/services/query/relate.service'
+import RelationshipService from '../../src/services/query/relationship.service'
 
 // ---- Fixtures (per-file: decorator registry is global per module registry) --
 //
@@ -26,304 +26,296 @@ import RelationshipService from '../../src/services/query/relationship.service';
 
 @NodeEntity()
 class Pet {
-    @InternalId()
-    _id: string;
+  @InternalId()
+  _id: string
 
-    @Uuid({ primary: true })
-    id: string;
+  @Uuid({ primary: true })
+  id: string
 
-    @String({ unique: true })
-    name: string;
+  @String({ unique: true })
+  name: string
 
-    static create(name: string): Pet {
-        const pet = new Pet();
-        pet.name = name;
+  static create(name: string): Pet {
+    const pet = new Pet()
+    pet.name = name
 
-        return pet;
-    }
+    return pet
+  }
 }
 
 @RelationshipEntity()
 class Ownership {
-    @InternalId()
-    _id: string;
+  @InternalId()
+  _id: string
 
-    @Property()
-    since: string;
+  @Property()
+  since: string
 
-    @Property({ type: 'number' })
-    years: number;
+  @Property({ type: 'number' })
+  years: number
 }
 
 @NodeEntity()
 class Person {
-    @InternalId()
-    _id: string;
+  @InternalId()
+  _id: string
 
-    @Uuid({ primary: true })
-    id: string;
+  @Uuid({ primary: true })
+  id: string
 
-    @String({ unique: true })
-    name: string;
+  @String({ unique: true })
+  name: string
 
-    @OneToMany(() => Pet, 'OWNS', Direction.OUTGOING)
-    pets: Pet[];
+  @OneToMany(() => Pet, 'OWNS', Direction.OUTGOING)
+  pets: Pet[]
 
-    @OneToMany(() => Pet, 'FED_BY', Direction.INCOMING)
-    fedBy: Pet[];
+  @OneToMany(() => Pet, 'FED_BY', Direction.INCOMING)
+  fedBy: Pet[]
 
-    @OneToMany(() => Pet, 'PLAYS_WITH', Direction.BOTH)
-    playsWith: Pet[];
+  @OneToMany(() => Pet, 'PLAYS_WITH', Direction.BOTH)
+  playsWith: Pet[]
 
-    @OneToMany(() => Ownership, 'LEASES', Direction.OUTGOING)
-    leases: Ownership[];
+  @OneToMany(() => Ownership, 'LEASES', Direction.OUTGOING)
+  leases: Ownership[]
 
-    static create(name: string): Person {
-        const person = new Person();
-        person.name = name;
+  static create(name: string): Person {
+    const person = new Person()
+    person.name = name
 
-        return person;
-    }
+    return person
+  }
 }
 
 // ---------------------------------------------------------------------------
 
 describe('Relate / detach / relationship services', () => {
-    let backend: TestBackend;
-    let relateService: RelateService;
-    let detachService: DetachService;
-    let relationshipService: RelationshipService;
-    let personSchema: EntitySchema;
+  let backend: TestBackend
+  let relateService: RelateService
+  let detachService: DetachService
+  let relationshipService: RelationshipService
+  let personSchema: EntitySchema
 
-    const count = async (query: string): Promise<number> => {
-        const res = await backend.neode.readCypher(query);
+  const count = async (query: string): Promise<number> => {
+    const res = await backend.neode.readCypher(query)
 
-        return Number(res.records[0].get('c'));
-    };
+    return Number(res.records[0].get('c'))
+  }
 
-    const createFixtures = async () => ({
-        adam: await backend.neode.save(Person.create('Adam')),
-        rex: await backend.neode.save(Pet.create('Rex')),
-    });
+  const createFixtures = async () => ({
+    adam: await backend.neode.save(Person.create('Adam')),
+    rex: await backend.neode.save(Pet.create('Rex')),
+  })
 
-    beforeAll(async () => {
-        backend = await openBackend();
+  beforeAll(async () => {
+    backend = await openBackend()
 
-        relateService = new RelateService(backend.connection);
-        detachService = new DetachService(backend.connection);
-        relationshipService = new RelationshipService(backend.connection);
+    relateService = new RelateService(backend.connection)
+    detachService = new DetachService(backend.connection)
+    relationshipService = new RelationshipService(backend.connection)
 
-        personSchema = getModel(Person);
-    });
+    personSchema = getModel(Person)
+  })
 
-    afterEach(async () => {
-        await backend.clearGraph();
-    });
+  afterEach(async () => {
+    await backend.clearGraph()
+  })
 
-    afterAll(async () => {
-        await backend.close();
-    });
+  afterAll(async () => {
+    await backend.close()
+  })
 
-    describe('RelateService', () => {
-        it('relates two nodes with an outgoing relationship', async () => {
-            const { adam, rex } = await createFixtures();
+  describe('RelateService', () => {
+    it('relates two nodes with an outgoing relationship', async () => {
+      const { adam, rex } = await createFixtures()
 
-            const result = await relateService.relate(
-                personSchema,
-                adam,
-                rex,
-                personSchema.getRelationship('pets')
-            );
+      const result = await relateService.relate(
+        personSchema,
+        adam,
+        rex,
+        personSchema.getRelationship('pets'),
+      )
 
-            expect(result).toBeDefined();
-            expect(result!.type).toBe('OWNS');
-            expect(result!.elementId).toBeDefined();
+      expect(result).toBeDefined()
+      expect(result!.type).toBe('OWNS')
+      expect(result!.elementId).toBeDefined()
 
-            expect(
-                await count(
-                    'MATCH (:Person { name: "Adam" })-[r:OWNS]->(:Pet { name: "Rex" }) RETURN count(r) AS c'
-                )
-            ).toBe(1);
-            expect(
-                await count(
-                    'MATCH (:Pet { name: "Rex" })-[r:OWNS]->(:Person { name: "Adam" }) RETURN count(r) AS c'
-                )
-            ).toBe(0);
-        });
+      expect(
+        await count(
+          'MATCH (:Person { name: "Adam" })-[r:OWNS]->(:Pet { name: "Rex" }) RETURN count(r) AS c',
+        ),
+      ).toBe(1)
+      expect(
+        await count(
+          'MATCH (:Pet { name: "Rex" })-[r:OWNS]->(:Person { name: "Adam" }) RETURN count(r) AS c',
+        ),
+      ).toBe(0)
+    })
 
-        it('stores incoming relationships from the target to the source', async () => {
-            const { adam, rex } = await createFixtures();
+    it('stores incoming relationships from the target to the source', async () => {
+      const { adam, rex } = await createFixtures()
 
-            await relateService.relate(
-                personSchema,
-                adam,
-                rex,
-                personSchema.getRelationship('fedBy')
-            );
+      await relateService.relate(personSchema, adam, rex, personSchema.getRelationship('fedBy'))
 
-            // DIRECTION_IN inversion: the edge points pet -> person
-            expect(
-                await count(
-                    'MATCH (:Pet { name: "Rex" })-[r:FED_BY]->(:Person { name: "Adam" }) RETURN count(r) AS c'
-                )
-            ).toBe(1);
-            expect(
-                await count(
-                    'MATCH (:Person { name: "Adam" })-[r:FED_BY]->(:Pet { name: "Rex" }) RETURN count(r) AS c'
-                )
-            ).toBe(0);
-        });
+      // DIRECTION_IN inversion: the edge points pet -> person
+      expect(
+        await count(
+          'MATCH (:Pet { name: "Rex" })-[r:FED_BY]->(:Person { name: "Adam" }) RETURN count(r) AS c',
+        ),
+      ).toBe(1)
+      expect(
+        await count(
+          'MATCH (:Person { name: "Adam" })-[r:FED_BY]->(:Pet { name: "Rex" }) RETURN count(r) AS c',
+        ),
+      ).toBe(0)
+    })
 
-        it('relates with a both direction', async () => {
-            const { adam, rex } = await createFixtures();
+    it('relates with a both direction', async () => {
+      const { adam, rex } = await createFixtures()
 
-            await relateService.relate(
-                personSchema,
-                adam,
-                rex,
-                personSchema.getRelationship('playsWith')
-            );
+      await relateService.relate(personSchema, adam, rex, personSchema.getRelationship('playsWith'))
 
-            expect(
-                await count(
-                    'MATCH (:Person { name: "Adam" })-[r:PLAYS_WITH]-(:Pet { name: "Rex" }) RETURN count(r) AS c'
-                )
-            ).toBe(1);
-        });
+      expect(
+        await count(
+          'MATCH (:Person { name: "Adam" })-[r:PLAYS_WITH]-(:Pet { name: "Rex" }) RETURN count(r) AS c',
+        ),
+      ).toBe(1)
+    })
 
-        it('sets properties through the relationship entity schema', async () => {
-            const { adam, rex } = await createFixtures();
+    it('sets properties through the relationship entity schema', async () => {
+      const { adam, rex } = await createFixtures()
 
-            const result = await relateService.relate(
-                personSchema,
-                adam,
-                rex,
-                personSchema.getRelationship('leases'),
-                { since: '2020-01-01', years: '3' }
-            );
+      const result = await relateService.relate(
+        personSchema,
+        adam,
+        rex,
+        personSchema.getRelationship('leases'),
+        { since: '2020-01-01', years: '3' },
+      )
 
-            expect(result).toBeDefined();
-            expect(result!.type).toBe('LEASES');
-            expect(result!.properties.since).toBe('2020-01-01');
-            // number-typed relationship entity property is converted
-            expect(result!.properties.years).toBe(3);
-        });
+      expect(result).toBeDefined()
+      expect(result!.type).toBe('LEASES')
+      expect(result!.properties.since).toBe('2020-01-01')
+      // number-typed relationship entity property is converted
+      expect(result!.properties.years).toBe(3)
+    })
 
-        it('merges by default and creates duplicates with forceCreate', async () => {
-            const { adam, rex } = await createFixtures();
-            const rel = personSchema.getRelationship('pets');
+    it('merges by default and creates duplicates with forceCreate', async () => {
+      const { adam, rex } = await createFixtures()
+      const rel = personSchema.getRelationship('pets')
 
-            await relateService.relate(personSchema, adam, rex, rel);
-            await relateService.relate(personSchema, adam, rex, rel);
+      await relateService.relate(personSchema, adam, rex, rel)
+      await relateService.relate(personSchema, adam, rex, rel)
 
-            expect(
-                await count('MATCH (:Person { name: "Adam" })-[r:OWNS]->(:Pet) RETURN count(r) AS c')
-            ).toBe(1);
+      expect(
+        await count('MATCH (:Person { name: "Adam" })-[r:OWNS]->(:Pet) RETURN count(r) AS c'),
+      ).toBe(1)
 
-            await relateService.relate(personSchema, adam, rex, rel, {}, true);
+      await relateService.relate(personSchema, adam, rex, rel, {}, true)
 
-            expect(
-                await count('MATCH (:Person { name: "Adam" })-[r:OWNS]->(:Pet) RETURN count(r) AS c')
-            ).toBe(2);
-        });
+      expect(
+        await count('MATCH (:Person { name: "Adam" })-[r:OWNS]->(:Pet) RETURN count(r) AS c'),
+      ).toBe(2)
+    })
 
-        it('throws when an entity has no primary key value', async () => {
-            const { adam, rex } = await createFixtures();
+    it('throws when an entity has no primary key value', async () => {
+      const { adam, rex } = await createFixtures()
 
-            await expect(
-                relateService.relate(personSchema, {} as Person, rex, personSchema.getRelationship('pets'))
-            ).rejects.toThrow(/primary key/i);
+      await expect(
+        relateService.relate(personSchema, {} as Person, rex, personSchema.getRelationship('pets')),
+      ).rejects.toThrow(/primary key/i)
 
-            await expect(
-                relateService.relate(personSchema, adam, {} as Pet, personSchema.getRelationship('pets'))
-            ).rejects.toThrow(/primary key/i);
-        });
-    });
+      await expect(
+        relateService.relate(personSchema, adam, {} as Pet, personSchema.getRelationship('pets')),
+      ).rejects.toThrow(/primary key/i)
+    })
+  })
 
-    describe('DetachService', () => {
-        it('removes the relationship and returns both re-hydrated nodes', async () => {
-            const { adam, rex } = await createFixtures();
-            const rel = personSchema.getRelationship('pets');
+  describe('DetachService', () => {
+    it('removes the relationship and returns both re-hydrated nodes', async () => {
+      const { adam, rex } = await createFixtures()
+      const rel = personSchema.getRelationship('pets')
 
-            await relateService.relate(personSchema, adam, rex, rel);
+      await relateService.relate(personSchema, adam, rex, rel)
 
-            const { from, to } = await detachService.detach(personSchema, adam, rex, rel);
+      const { from, to } = await detachService.detach(personSchema, adam, rex, rel)
 
-            expect(from).toBeInstanceOf(Person);
-            expect(from!.name).toBe('Adam');
-            expect(to).toBeInstanceOf(Pet);
-            expect(to!.name).toBe('Rex');
+      expect(from).toBeInstanceOf(Person)
+      expect(from!.name).toBe('Adam')
+      expect(to).toBeInstanceOf(Pet)
+      expect(to!.name).toBe('Rex')
 
-            expect(
-                await count('MATCH (:Person { name: "Adam" })-[r:OWNS]->(:Pet { name: "Rex" }) RETURN count(r) AS c')
-            ).toBe(0);
+      expect(
+        await count(
+          'MATCH (:Person { name: "Adam" })-[r:OWNS]->(:Pet { name: "Rex" }) RETURN count(r) AS c',
+        ),
+      ).toBe(0)
 
-            // Both nodes survive
-            expect(await backend.neode.find(Person, adam.id)).toBeInstanceOf(Person);
-            expect(await backend.neode.find(Pet, rex.id)).toBeInstanceOf(Pet);
-        });
-    });
+      // Both nodes survive
+      expect(await backend.neode.find(Person, adam.id)).toBeInstanceOf(Person)
+      expect(await backend.neode.find(Pet, rex.id)).toBeInstanceOf(Pet)
+    })
+  })
 
-    describe('RelationshipService', () => {
-        it('updates relationship properties by element ID', async () => {
-            const { adam, rex } = await createFixtures();
+  describe('RelationshipService', () => {
+    it('updates relationship properties by element ID', async () => {
+      const { adam, rex } = await createFixtures()
 
-            const rel = await relateService.relate(
-                personSchema,
-                adam,
-                rex,
-                personSchema.getRelationship('leases'),
-                { since: '2020-01-01', years: 1 }
-            );
+      const rel = await relateService.relate(
+        personSchema,
+        adam,
+        rex,
+        personSchema.getRelationship('leases'),
+        { since: '2020-01-01', years: 1 },
+      )
 
-            const updated = await relationshipService.update(rel!.elementId, {
-                since: '2021-06-01',
-                years: 2,
-            });
+      const updated = await relationshipService.update(rel!.elementId, {
+        since: '2021-06-01',
+        years: 2,
+      })
 
-            expect(updated!.since).toBe('2021-06-01');
-            expect(updated!.years).toBe(2);
+      expect(updated!.since).toBe('2021-06-01')
+      expect(updated!.years).toBe(2)
 
-            const stored = await backend.neode.readCypher(
-                'MATCH ()-[r:LEASES]->() RETURN properties(r) AS p'
-            );
+      const stored = await backend.neode.readCypher(
+        'MATCH ()-[r:LEASES]->() RETURN properties(r) AS p',
+      )
 
-            expect(stored.records[0].get('p')).toMatchObject({
-                since: '2021-06-01',
-                years: 2,
-            });
-        });
+      expect(stored.records[0].get('p')).toMatchObject({
+        since: '2021-06-01',
+        years: 2,
+      })
+    })
 
-        it('updates relationship properties by property match', async () => {
-            const { adam, rex } = await createFixtures();
+    it('updates relationship properties by property match', async () => {
+      const { adam, rex } = await createFixtures()
 
-            await relateService.relate(personSchema, adam, rex, personSchema.getRelationship('leases'), {
-                since: '2020-01-01',
-            });
+      await relateService.relate(personSchema, adam, rex, personSchema.getRelationship('leases'), {
+        since: '2020-01-01',
+      })
 
-            const updated = await relationshipService.update({ since: '2020-01-01' }, { years: 5 });
+      const updated = await relationshipService.update({ since: '2020-01-01' }, { years: 5 })
 
-            expect(updated!.since).toBe('2020-01-01');
-            expect(updated!.years).toBe(5);
-        });
+      expect(updated!.since).toBe('2020-01-01')
+      expect(updated!.years).toBe(5)
+    })
 
-        it('deletes a relationship by element ID', async () => {
-            const { adam, rex } = await createFixtures();
+    it('deletes a relationship by element ID', async () => {
+      const { adam, rex } = await createFixtures()
 
-            const rel = await relateService.relate(
-                personSchema,
-                adam,
-                rex,
-                personSchema.getRelationship('leases')
-            );
+      const rel = await relateService.relate(
+        personSchema,
+        adam,
+        rex,
+        personSchema.getRelationship('leases'),
+      )
 
-            await relationshipService.delete(rel!.elementId);
+      await relationshipService.delete(rel!.elementId)
 
-            expect(await count('MATCH ()-[r:LEASES]->() RETURN count(r) AS c')).toBe(0);
+      expect(await count('MATCH ()-[r:LEASES]->() RETURN count(r) AS c')).toBe(0)
 
-            // Nodes survive
-            expect(await backend.neode.find(Person, adam.id)).toBeInstanceOf(Person);
-            expect(await backend.neode.find(Pet, rex.id)).toBeInstanceOf(Pet);
-        });
-    });
-});
+      // Nodes survive
+      expect(await backend.neode.find(Person, adam.id)).toBeInstanceOf(Person)
+      expect(await backend.neode.find(Pet, rex.id)).toBeInstanceOf(Pet)
+    })
+  })
+})

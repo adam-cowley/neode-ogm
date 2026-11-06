@@ -1,72 +1,69 @@
-import { Newable } from "../meta/newable";
-import { Direction } from "../query";
-import PropertySchema, { PropertyType } from "./property-schema";
+import { Newable } from '../meta/newable'
+import { Direction } from '../query'
+import PropertySchema, { PropertyType } from './property-schema'
 
 export type RelationshipType = PropertyType.ONE_TO_ONE | PropertyType.ONE_TO_MANY
 
 export default class RelationshipPropertySchema {
+  private type: string
+  private direction: Direction
+  private target: Newable
+  private many: boolean
+  private eager: boolean = false
 
-    private type: string;
-    private direction: Direction;
-    private target: Newable;
-    private many: boolean;
-    private eager: boolean = false;
+  constructor(private readonly key: string) {}
 
-    constructor(private readonly key: string ) {}
+  static fromPropertySchema(original: PropertySchema): RelationshipPropertySchema {
+    const cloned = new RelationshipPropertySchema(original.getKey())
 
-    static fromPropertySchema(original: PropertySchema): RelationshipPropertySchema {
-        const cloned = new RelationshipPropertySchema(original.getKey())
+    return cloned
+  }
 
+  getKey() {
+    return this.key
+  }
 
-        return cloned;
-    }
+  setType(type: string) {
+    this.type = type
+  }
 
-    getKey() {
-        return this.key
-    }
+  getType() {
+    return this.type
+  }
 
-    setType(type: string) {
-        this.type = type
-    }
+  setDirection(direction: Direction) {
+    this.direction = direction
+  }
 
-    getType() {
-        return this.type
-    }
+  getDirection() {
+    return this.direction
+  }
 
-    setDirection(direction: Direction) {
-        this.direction = direction
-    }
+  setTarget(target: Newable) {
+    this.target = target
+  }
 
-    getDirection() {
-        return this.direction
-    }
+  getTarget() {
+    return this.target
+  }
 
-    setTarget(target: Newable) {
-        this.target = target
-    }
+  setMany(many: boolean) {
+    this.many = many
+  }
 
-    getTarget() {
-        return this.target
-    }
+  getMany() {
+    return this.many
+  }
 
-    setMany(many: boolean) {
-        this.many = many
-    }
+  setEager(eager: boolean) {
+    this.eager = eager
+  }
 
-    getMany() {
-        return this.many
-    }
+  getEager() {
+    return this.eager
+  }
 
-    setEager(eager: boolean) {
-        this.eager = eager
-    }
-
-    getEager() {
-        return this.eager
-    }
-
-    toString(relAlias: string = '') {
-        return `${this.direction === Direction.INCOMING ? '<' : ''}-[${relAlias}:${this.type}]-${this.direction === Direction.OUTGOING ? '>' : ''}`
-    }
-
+  toString(relAlias: string = '') {
+    return `${this.direction === Direction.INCOMING ? '<' : ''}-[${relAlias}:${this.type}]-${this.direction === Direction.OUTGOING ? '>' : ''}`
+  }
 }

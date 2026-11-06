@@ -1,20 +1,20 @@
 export enum NodePosition {
-    START = 'start',
-    END = 'end',
-    OTHER = 'other'
+  START = 'start',
+  END = 'end',
+  OTHER = 'other',
 }
 
 export default class RelationshipNodeSchema {
-    constructor(
-        private readonly target: object,
-        private readonly position: NodePosition
-    ) {}
+  constructor(
+    private readonly target: object,
+    private readonly position: NodePosition,
+  ) {}
 
-    getTarget() {
-        return this.target
-    }
+  getTarget() {
+    return this.target
+  }
 
-    getPosition() {
-        return this.position
-    }
+  getPosition() {
+    return this.position
+  }
 }

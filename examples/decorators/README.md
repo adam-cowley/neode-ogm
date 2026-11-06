@@ -31,13 +31,13 @@ decorated classes:
 ```ts
 @NodeEntity({ labels: ['Movie', 'Person'] })
 export class Director {
-    @InternalId() _id!: string;
+  @InternalId() _id!: string
 
-    @Property({ type: 'string', index: true })
-    name!: string;
+  @Property({ type: 'string', index: true })
+  name!: string
 
-    @OneToMany(() => Movie, 'DIRECTED', Direction.OUTGOING)
-    directed!: Movie[];
+  @OneToMany(() => Movie, 'DIRECTED', Direction.OUTGOING)
+  directed!: Movie[]
 }
 ```
 
@@ -56,11 +56,11 @@ Things the decorator API makes you decide that the map API resolved for you:
 
 ## What changed from `examples/models`
 
-| | models (map API) | decorators (this app) |
-|---|---|---|
-| Model definition | `models/*.js` map objects | `models.ts` decorated classes |
-| Registration | `.withDirectory(...)` | import the classes |
-| Facade calls | `neode.model('Movie')` | the class itself |
-| Compile step | none (plain JS) | `tsc` with `experimentalDecorators` |
+|                  | models (map API)          | decorators (this app)               |
+| ---------------- | ------------------------- | ----------------------------------- |
+| Model definition | `models/*.js` map objects | `models.ts` decorated classes       |
+| Registration     | `.withDirectory(...)`     | import the classes                  |
+| Facade calls     | `neode.model('Movie')`    | the class itself                    |
+| Compile step     | none (plain JS)           | `tsc` with `experimentalDecorators` |
 
 Everything else — routes, views, the Cypher, the workflow — is the same app.

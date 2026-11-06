@@ -6,9 +6,9 @@ import PropertyConfig from '../property-config.interface'
  * Register a local datetime property.
  */
 export default function LocalDateTime(config: PropertyConfig = {}) {
-    return function(target: unknown, propertyKey: string, _descriptor?: unknown): void {
-        const constructor = (target as { constructor: object }).constructor
+  return function (target: unknown, propertyKey: string, _descriptor?: unknown): void {
+    const constructor = (target as { constructor: object }).constructor
 
-        mergeProperty(constructor, propertyKey, PropertyType.LOCALDATETIME, config)
-    }
+    mergeProperty(constructor, propertyKey, PropertyType.LOCALDATETIME, config)
+  }
 }

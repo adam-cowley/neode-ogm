@@ -49,7 +49,12 @@ export { default as RelationshipExists } from './projection/relationship-exists.
 export { default as LabelPresent } from './projection/label-present.decorator'
 export { default as Computed } from './projection/computed.decorator'
 export { default as Expression } from './projection/expression.decorator'
-export type { RelatedConfig, RelationshipCountConfig, RelationshipExistsConfig, ProjectionDirection } from './projection/projection-config.interface'
+export type {
+  RelatedConfig,
+  RelationshipCountConfig,
+  RelationshipExistsConfig,
+  ProjectionDirection,
+} from './projection/projection-config.interface'
 
 // Repositories
 export { default as EntityRepository } from './repository.decorator'

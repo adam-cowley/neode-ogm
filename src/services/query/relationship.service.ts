@@ -1,68 +1,63 @@
-import Builder from '../../query';
-import QueryService from './query.service';
+import Builder from '../../query'
+import QueryService from './query.service'
 
-const REL = 'rel';
+const REL = 'rel'
 
 export default class RelationshipService extends QueryService {
-    /**
-     * Update the properties of a relationship, matched by element ID or by
-     * property equality on the relationship itself
-     * (neode UpdateRelationship.js, elementId instead of id()).
-     *
-     * @returns the updated properties, or undefined when nothing matched
-     */
-    async update(
-        match: string | Record<string, unknown>,
-        properties: Record<string, unknown>
-    ): Promise<Record<string, unknown> | undefined> {
-        const builder = new Builder();
+  /**
+   * Update the properties of a relationship, matched by element ID or by
+   * property equality on the relationship itself
+   * (neode UpdateRelationship.js, elementId instead of id()).
+   *
+   * @returns the updated properties, or undefined when nothing matched
+   */
+  async update(
+    match: string | Record<string, unknown>,
+    properties: Record<string, unknown>,
+  ): Promise<Record<string, unknown> | undefined> {
+    const builder = new Builder()
 
-        this.matchRelationship(builder, match);
+    this.matchRelationship(builder, match)
 
-        Object.entries(properties).forEach(([key, value]) => {
-            if (value !== undefined) {
-                builder.set(`${REL}.${key}`, value);
-            }
-        });
+    Object.entries(properties).forEach(([key, value]) => {
+      if (value !== undefined) {
+        builder.set(`${REL}.${key}`, value)
+      }
+    })
 
-        builder.return(`properties(${REL}) AS props`);
+    builder.return(`properties(${REL}) AS props`)
 
-        const { query, params } = builder.build();
+    const { query, params } = builder.build()
 
-        const res = await this.runner.run(query, params);
+    const res = await this.runner.run(query, params)
 
-        return res.records[0]?.get('props') as Record<string, unknown> | undefined;
+    return res.records[0]?.get('props') as Record<string, unknown> | undefined
+  }
+
+  /**
+   * Delete a relationship by element ID (neode DeleteRelationship.js)
+   */
+  async delete(relElementId: string): Promise<void> {
+    const builder = new Builder()
+
+    this.matchRelationship(builder, relElementId)
+    builder.delete(REL)
+
+    const { query, params } = builder.build()
+
+    await this.runner.run(query, params)
+  }
+
+  /**
+   * `MATCH ()-[rel]-()` plus an elementId or property-equality where clause
+   */
+  private matchRelationship(builder: Builder, match: string | Record<string, unknown>): void {
+    builder.match().relationship(undefined, undefined, REL).toAnything()
+
+    if (typeof match === 'string') {
+      builder.where(`elementId(${REL})`, match)
+    } else {
+      Object.entries(match).forEach(([key, value]) => builder.where(`${REL}.${key}`, value))
     }
-
-    /**
-     * Delete a relationship by element ID (neode DeleteRelationship.js)
-     */
-    async delete(relElementId: string): Promise<void> {
-        const builder = new Builder();
-
-        this.matchRelationship(builder, relElementId);
-        builder.delete(REL);
-
-        const { query, params } = builder.build();
-
-        await this.runner.run(query, params);
-    }
-
-    /**
-     * `MATCH ()-[rel]-()` plus an elementId or property-equality where clause
-     */
-    private matchRelationship(
-        builder: Builder,
-        match: string | Record<string, unknown>
-    ): void {
-        builder.match().relationship(undefined, undefined, REL).toAnything();
-
-        if (typeof match === 'string') {
-            builder.where(`elementId(${REL})`, match);
-        } else {
-            Object.entries(match).forEach(([key, value]) =>
-                builder.where(`${REL}.${key}`, value)
-            );
-        }
-    }
+  }
 }

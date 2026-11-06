@@ -1,149 +1,148 @@
-import EntitySchema from '../../../src/meta/entity/entity-schema';
-import PropertySchema from '../../../src/meta/property-schema';
+import EntitySchema from '../../../src/meta/entity/entity-schema'
+import PropertySchema from '../../../src/meta/property-schema'
 
 describe('EntitySchema', () => {
+  describe('labels', () => {
+    it('should sort labels when set', () => {
+      const schema = new EntitySchema()
 
-    describe('labels', () => {
-        it('should sort labels when set', () => {
-            const schema = new EntitySchema();
+      schema.setLabels(['Person', 'Employee'])
 
-            schema.setLabels(['Person', 'Employee']);
+      expect(schema.getLabels()).toEqual(['Employee', 'Person'])
+    })
 
-            expect(schema.getLabels()).toEqual(['Employee', 'Person']);
-        });
+    it('should deduplicate labels when set', () => {
+      const schema = new EntitySchema()
 
-        it('should deduplicate labels when set', () => {
-            const schema = new EntitySchema();
+      schema.setLabels(['Person', 'Employee', 'Person', 'Employee'])
 
-            schema.setLabels(['Person', 'Employee', 'Person', 'Employee']);
+      expect(schema.getLabels()).toEqual(['Employee', 'Person'])
+    })
 
-            expect(schema.getLabels()).toEqual(['Employee', 'Person']);
-        });
+    it('should not mutate the array passed to setLabels', () => {
+      const schema = new EntitySchema()
+      const labels = ['Person', 'Employee']
 
-        it('should not mutate the array passed to setLabels', () => {
-            const schema = new EntitySchema();
-            const labels = ['Person', 'Employee'];
+      schema.setLabels(labels)
 
-            schema.setLabels(labels);
+      expect(labels).toEqual(['Person', 'Employee'])
+      expect(schema.getLabels()).not.toBe(labels)
+    })
 
-            expect(labels).toEqual(['Person', 'Employee']);
-            expect(schema.getLabels()).not.toBe(labels);
-        });
+    it('should add a label maintaining sort order', () => {
+      const schema = new EntitySchema()
 
-        it('should add a label maintaining sort order', () => {
-            const schema = new EntitySchema();
+      schema.setLabels(['Person'])
+      schema.addLabel('Employee')
 
-            schema.setLabels(['Person']);
-            schema.addLabel('Employee');
+      expect(schema.getLabels()).toEqual(['Employee', 'Person'])
+    })
 
-            expect(schema.getLabels()).toEqual(['Employee', 'Person']);
-        });
+    it('should add a label at the end of the sort order', () => {
+      const schema = new EntitySchema()
 
-        it('should add a label at the end of the sort order', () => {
-            const schema = new EntitySchema();
+      schema.setLabels(['Employee'])
+      schema.addLabel('Person')
 
-            schema.setLabels(['Employee']);
-            schema.addLabel('Person');
+      expect(schema.getLabels()).toEqual(['Employee', 'Person'])
+    })
 
-            expect(schema.getLabels()).toEqual(['Employee', 'Person']);
-        });
+    it('should not add a duplicate label', () => {
+      const schema = new EntitySchema()
 
-        it('should not add a duplicate label', () => {
-            const schema = new EntitySchema();
+      schema.setLabels(['Person'])
+      schema.addLabel('Person')
 
-            schema.setLabels(['Person']);
-            schema.addLabel('Person');
+      expect(schema.getLabels()).toEqual(['Person'])
+    })
 
-            expect(schema.getLabels()).toEqual(['Person']);
-        });
+    it('should return a copy of the labels from getLabels()', () => {
+      const schema = new EntitySchema()
 
-        it('should return a copy of the labels from getLabels()', () => {
-            const schema = new EntitySchema();
+      schema.setLabels(['Person'])
 
-            schema.setLabels(['Person']);
+      schema.getLabels().push('Mutant')
 
-            schema.getLabels().push('Mutant');
+      expect(schema.getLabels()).toEqual(['Person'])
+    })
+  })
 
-            expect(schema.getLabels()).toEqual(['Person']);
-        });
-    });
+  describe('getPrimaryKey', () => {
+    it('should return the explicitly defined primary key', () => {
+      const schema = new EntitySchema()
+      schema.setLabels(['Person'])
 
-    describe('getPrimaryKey', () => {
-        it('should return the explicitly defined primary key', () => {
-            const schema = new EntitySchema();
-            schema.setLabels(['Person']);
+      schema.addProperty('id')
+      schema.getProperty('id').setPrimaryKey()
 
-            schema.addProperty('id');
-            schema.getProperty('id').setPrimaryKey();
+      const primaryKey = schema.getPrimaryKey()
 
-            const primaryKey = schema.getPrimaryKey();
+      expect(primaryKey).toBeInstanceOf(PropertySchema)
+      expect(primaryKey?.getKey()).toEqual('id')
+    })
 
-            expect(primaryKey).toBeInstanceOf(PropertySchema);
-            expect(primaryKey?.getKey()).toEqual('id');
-        });
+    it('should prefer the explicit primary key over the fallback name', () => {
+      const schema = new EntitySchema()
+      schema.setLabels(['Person'])
 
-        it('should prefer the explicit primary key over the fallback name', () => {
-            const schema = new EntitySchema();
-            schema.setLabels(['Person']);
+      schema.addProperty('id')
+      schema.getProperty('id').setPrimaryKey()
+      schema.addProperty('person_id')
 
-            schema.addProperty('id');
-            schema.getProperty('id').setPrimaryKey();
-            schema.addProperty('person_id');
+      expect(schema.getPrimaryKey()?.getKey()).toEqual('id')
+    })
 
-            expect(schema.getPrimaryKey()?.getKey()).toEqual('id');
-        });
+    it('should fall back to a <first label lowercased>_id primary key', () => {
+      const schema = new EntitySchema()
+      schema.setLabels(['Person'])
 
-        it('should fall back to a <first label lowercased>_id primary key', () => {
-            const schema = new EntitySchema();
-            schema.setLabels(['Person']);
+      const primaryKey = schema.getPrimaryKey()
 
-            const primaryKey = schema.getPrimaryKey();
+      expect(primaryKey).toBeInstanceOf(PropertySchema)
+      expect(primaryKey?.getKey()).toEqual('person_id')
+      expect(primaryKey?.isPrimaryKey()).toEqual(true)
+    })
 
-            expect(primaryKey).toBeInstanceOf(PropertySchema);
-            expect(primaryKey?.getKey()).toEqual('person_id');
-            expect(primaryKey?.isPrimaryKey()).toEqual(true);
-        });
+    it('should use the first label after sorting for the fallback name', () => {
+      const schema = new EntitySchema()
+      schema.setLabels(['Person', 'Employee'])
 
-        it('should use the first label after sorting for the fallback name', () => {
-            const schema = new EntitySchema();
-            schema.setLabels(['Person', 'Employee']);
+      const primaryKey = schema.getPrimaryKey()
 
-            const primaryKey = schema.getPrimaryKey();
+      expect(primaryKey?.getKey()).toEqual('employee_id')
+    })
 
-            expect(primaryKey?.getKey()).toEqual('employee_id');
-        });
+    it('should register the fallback primary key as a property', () => {
+      const schema = new EntitySchema()
+      schema.setLabels(['Person'])
 
-        it('should register the fallback primary key as a property', () => {
-            const schema = new EntitySchema();
-            schema.setLabels(['Person']);
+      const primaryKey = schema.getPrimaryKey()
 
-            const primaryKey = schema.getPrimaryKey();
+      expect(schema.hasProperty('person_id')).toEqual(true)
+      expect(schema.getProperty('person_id')).toBe(primaryKey)
+    })
 
-            expect(schema.hasProperty('person_id')).toEqual(true);
-            expect(schema.getProperty('person_id')).toBe(primaryKey);
-        });
+    it('should mark the fallback primary key as unique', () => {
+      const schema = new EntitySchema()
+      schema.setLabels(['Person'])
 
-        it('should mark the fallback primary key as unique', () => {
-            const schema = new EntitySchema();
-            schema.setLabels(['Person']);
+      expect(schema.getPrimaryKey()?.isUnique()).toEqual(true)
+    })
 
-            expect(schema.getPrimaryKey()?.isUnique()).toEqual(true);
-        });
+    it('should be idempotent across calls', () => {
+      const schema = new EntitySchema()
+      schema.setLabels(['Person'])
 
-        it('should be idempotent across calls', () => {
-            const schema = new EntitySchema();
-            schema.setLabels(['Person']);
+      const first = schema.getPrimaryKey()
+      const second = schema.getPrimaryKey()
 
-            const first = schema.getPrimaryKey();
-            const second = schema.getPrimaryKey();
+      expect(second).toBe(first)
+    })
 
-            expect(second).toBe(first);
-        });
+    it('should return undefined when the schema has no labels', () => {
+      const schema = new EntitySchema()
 
-        it('should return undefined when the schema has no labels', () => {
-            const schema = new EntitySchema();
-
-            expect(schema.getPrimaryKey()).toBeUndefined();
-        });
-    });
-});
+      expect(schema.getPrimaryKey()).toBeUndefined()
+    })
+  })
+})

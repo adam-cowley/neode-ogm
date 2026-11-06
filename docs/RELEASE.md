@@ -18,13 +18,13 @@ Changing the name means: update `package.json` `name`, `repository`/`bugs`/
 
 ## 3. Gates (all must pass)
 
-| Gate                  | Command                              |
-| --------------------- | ------------------------------------ |
-| Types                 | `npx tsc --noEmit`                   |
-| Lint                  | `npx eslint src test`                |
-| Full test suite       | `npx vitest run` (559+ tests green)  |
-| Coverage thresholds   | `npm run coverage` (80% floors — see below) |
-| Package sanity        | `npm pack --dry-run` (dist + types only) |
+| Gate                | Command                                     |
+| ------------------- | ------------------------------------------- |
+| Types               | `npx tsc --noEmit`                          |
+| Lint                | `npx eslint src test`                       |
+| Full test suite     | `npx vitest run` (559+ tests green)         |
+| Coverage thresholds | `npm run coverage` (80% floors — see below) |
+| Package sanity      | `npm pack --dry-run` (dist + types only)    |
 
 `npm publish` is additionally gated by the `prepublishOnly` script
 (`npm run build && npm run test:unit`), so a failed build or unit test aborts

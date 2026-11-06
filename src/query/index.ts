@@ -1,29 +1,29 @@
-import Builder from './Builder';
+import Builder from './Builder'
 
-export default Builder;
-export { Builder };
-export type { EntityMatchCriteria } from './Builder';
-export { default as Statement } from './Statement';
-export { default as Match } from './Match';
-export { default as Order } from './Order';
-export { default as Property } from './Property';
-export { default as Relationship } from './Relationship';
-export { default as Where } from './Where';
-export { default as WhereBetween } from './WhereBetween';
-export { default as WhereId } from './WhereId';
-export { default as WhereNull } from './WhereNull';
-export { default as WhereRaw } from './WhereRaw';
-export { default as WhereStatement } from './WhereStatement';
-export { default as LabelPredicate } from './LabelPredicate';
-export { default as WithStatement } from './WithStatement';
-export { default as WithDistinctStatement } from './WithDistinctStatement';
-export { Direction, toDirection } from './Direction';
+export default Builder
+export { Builder }
+export type { EntityMatchCriteria } from './Builder'
+export { default as Statement } from './Statement'
+export { default as Match } from './Match'
+export { default as Order } from './Order'
+export { default as Property } from './Property'
+export { default as Relationship } from './Relationship'
+export { default as Where } from './Where'
+export { default as WhereBetween } from './WhereBetween'
+export { default as WhereId } from './WhereId'
+export { default as WhereNull } from './WhereNull'
+export { default as WhereRaw } from './WhereRaw'
+export { default as WhereStatement } from './WhereStatement'
+export { default as LabelPredicate } from './LabelPredicate'
+export { default as WithStatement } from './WithStatement'
+export { default as WithDistinctStatement } from './WithDistinctStatement'
+export { Direction, toDirection } from './Direction'
 export {
-    EAGER_ID,
-    EAGER_LABELS,
-    EAGER_TYPE,
-    MAX_EAGER_DEPTH,
-    eagerNode,
-    eagerPattern,
-    eagerRelationship,
-} from './eager-utils';
+  EAGER_ID,
+  EAGER_LABELS,
+  EAGER_TYPE,
+  MAX_EAGER_DEPTH,
+  eagerNode,
+  eagerPattern,
+  eagerRelationship,
+} from './eager-utils'

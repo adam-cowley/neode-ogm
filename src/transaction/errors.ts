@@ -1,15 +1,15 @@
-import { QueryOutput, QueryParams } from '../driver/types';
-import NeodeError from '../errors/neode-error';
+import { QueryOutput, QueryParams } from '../driver/types'
+import NeodeError from '../errors/neode-error'
 
-export const ERROR_TRANSACTION_FAILED = 'ERROR_TRANSACTION_FAILED';
+export const ERROR_TRANSACTION_FAILED = 'ERROR_TRANSACTION_FAILED'
 
 /** A single failed statement within a batch. */
 export interface BatchStatementError {
-    /** Zero-based position of the statement in the batch */
-    index: number;
-    query: string;
-    params: QueryParams;
-    error: unknown;
+  /** Zero-based position of the statement in the batch */
+  index: number
+  query: string
+  params: QueryParams
+  error: unknown
 }
 
 /**
@@ -22,16 +22,16 @@ export interface BatchStatementError {
  *  - `details` — the failed statements only ({ index, query, params, error })
  */
 export default class TransactionError extends NeodeError {
-    constructor(
-        readonly errors: (BatchStatementError | null)[],
-        readonly results: QueryOutput[],
-        readonly details: BatchStatementError[]
-    ) {
-        super(
-            `${ERROR_TRANSACTION_FAILED}: failed statement(s) ` +
-                details.map((statement) => statement.index).join(', ')
-        );
+  constructor(
+    readonly errors: (BatchStatementError | null)[],
+    readonly results: QueryOutput[],
+    readonly details: BatchStatementError[],
+  ) {
+    super(
+      `${ERROR_TRANSACTION_FAILED}: failed statement(s) ` +
+        details.map((statement) => statement.index).join(', '),
+    )
 
-        this.name = 'TransactionError';
-    }
+    this.name = 'TransactionError'
+  }
 }

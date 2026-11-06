@@ -1,34 +1,34 @@
-import { ConnectionProvider, QueryOutput, Runner } from '../../driver/types';
-import { THIS_NODE } from '../../constants';
-import { hydrate } from '../../hydrate';
-import EntitySchema from '../../meta/entity/entity-schema';
-import { PropertyType, isProjectedProperty } from '../../meta/property-schema';
-import { getValueOrDefault } from '../../utils';
-import { modelPropertyValues } from '../write-utils';
-import { validate } from '../../validation';
-import QueryService from './query.service';
-import { getMergeFields } from './merge.service';
+import { ConnectionProvider, QueryOutput, Runner } from '../../driver/types'
+import { THIS_NODE } from '../../constants'
+import { hydrate } from '../../hydrate'
+import EntitySchema from '../../meta/entity/entity-schema'
+import { PropertyType, isProjectedProperty } from '../../meta/property-schema'
+import { getValueOrDefault } from '../../utils'
+import { modelPropertyValues } from '../write-utils'
+import { validate } from '../../validation'
+import QueryService from './query.service'
+import { getMergeFields } from './merge.service'
 
 /**
  * Rows per UNWIND statement / managed write transaction. Chunking keeps
  * each statement's parameter map within driver limits (the reason the
  * chunkSize option exists at all)
  */
-export const DEFAULT_CHUNK_SIZE = 1000;
+export const DEFAULT_CHUNK_SIZE = 1000
 
 /** Property types that are never written as node properties */
 const NON_WRITABLE_TYPES = new Set([
-    PropertyType.INTERNAL_ID,
-    PropertyType.ALL_PROPERTIES,
-    PropertyType.NODE,
-]);
+  PropertyType.INTERNAL_ID,
+  PropertyType.ALL_PROPERTIES,
+  PropertyType.NODE,
+])
 
 export interface BulkOptions {
-    /** Rows per statement and per write transaction (default 1000) */
-    chunkSize?: number;
+  /** Rows per statement and per write transaction (default 1000) */
+  chunkSize?: number
 
-    /** Per-call database override (a bare Runner runs in its own scope) */
-    database?: string;
+  /** Per-call database override (a bare Runner runs in its own scope) */
+  database?: string
 }
 
 /**
@@ -36,32 +36,32 @@ export interface BulkOptions {
  * created/merged entities, in row order
  */
 export interface BulkChunk<T> {
-    count: number;
-    entities: T[];
+  count: number
+  entities: T[]
 }
 
 /** Split rows into chunks of at most chunkSize */
 export function chunk<T>(rows: T[], chunkSize: number): T[][] {
-    requireChunkSize(chunkSize);
+  requireChunkSize(chunkSize)
 
-    const chunks: T[][] = [];
+  const chunks: T[][] = []
 
-    for (let index = 0; index < rows.length; index += chunkSize) {
-        chunks.push(rows.slice(index, index + chunkSize));
-    }
+  for (let index = 0; index < rows.length; index += chunkSize) {
+    chunks.push(rows.slice(index, index + chunkSize))
+  }
 
-    return chunks;
+  return chunks
 }
 
 function requireChunkSize(chunkSize: number): void {
-    if (!Number.isInteger(chunkSize) || chunkSize < 1) {
-        throw new Error(`chunkSize must be a positive integer, received ${chunkSize}`);
-    }
+  if (!Number.isInteger(chunkSize) || chunkSize < 1) {
+    throw new Error(`chunkSize must be a positive integer, received ${chunkSize}`)
+  }
 }
 
 /** `:Label:Label` node pattern suffix for a schema's labels */
 export function labelPattern(labels: string[]): string {
-    return labels.length ? `:${labels.join(':')}` : '';
+  return labels.length ? `:${labels.join(':')}` : ''
 }
 
 /**
@@ -70,38 +70,38 @@ export function labelPattern(labels: string[]): string {
  * statement writes
  */
 export function processCreateRow(
-    row: Record<string, unknown>,
-    schema: EntitySchema
+  row: Record<string, unknown>,
+  schema: EntitySchema,
 ): Record<string, unknown> {
-    // Bulk rows are flat: a declared relationship key would otherwise be
-    // silently dropped
-    const relationship = schema
-        .getRelationships()
-        .find((rel) => row[rel.getKey()] !== undefined && row[rel.getKey()] !== null);
+  // Bulk rows are flat: a declared relationship key would otherwise be
+  // silently dropped
+  const relationship = schema
+    .getRelationships()
+    .find((rel) => row[rel.getKey()] !== undefined && row[rel.getKey()] !== null)
 
-    if (relationship) {
-        throw new Error(
-            `createMany does not support nested relationship values ("${relationship.getKey()}" given); ` +
-                'create relationships separately'
-        );
+  if (relationship) {
+    throw new Error(
+      `createMany does not support nested relationship values ("${relationship.getKey()}" given); ` +
+        'create relationships separately',
+    )
+  }
+
+  validate(modelPropertyValues(row, schema), schema)
+
+  const values: Record<string, unknown> = {}
+
+  schema.getProperties().forEach((property) => {
+    if (NON_WRITABLE_TYPES.has(property.getType()) || isProjectedProperty(property)) return
+
+    const value = getValueOrDefault(row, property, schema)
+
+    // Like the single-create pattern: unset and null properties are skipped
+    if (value !== undefined && value !== null) {
+      values[property.getKey()] = value
     }
+  })
 
-    validate(modelPropertyValues(row, schema), schema);
-
-    const values: Record<string, unknown> = {};
-
-    schema.getProperties().forEach((property) => {
-        if (NON_WRITABLE_TYPES.has(property.getType()) || isProjectedProperty(property)) return;
-
-        const value = getValueOrDefault(row, property, schema);
-
-        // Like the single-create pattern: unset and null properties are skipped
-        if (value !== undefined && value !== null) {
-            values[property.getKey()] = value;
-        }
-    });
-
-    return values;
+  return values
 }
 
 /**
@@ -111,52 +111,52 @@ export function processCreateRow(
  * (the merge-field semantics of mergeOn)
  */
 export function processMergeRow(
-    row: Record<string, unknown>,
-    schema: EntitySchema
+  row: Record<string, unknown>,
+  schema: EntitySchema,
 ): { match: Record<string, unknown>; set: Record<string, unknown> } {
-    const mergeFields = getMergeFields(schema);
-    const mergeKeys = new Set(mergeFields.map((property) => property.getKey()));
+  const mergeFields = getMergeFields(schema)
+  const mergeKeys = new Set(mergeFields.map((property) => property.getKey()))
 
-    // Match only on explicitly set merge fields: default-resolving them
-    // (e.g. a fresh UUID per row) would never match anything
-    const match: Record<string, unknown> = {};
+  // Match only on explicitly set merge fields: default-resolving them
+  // (e.g. a fresh UUID per row) would never match anything
+  const match: Record<string, unknown> = {}
 
-    mergeFields.forEach((property) => {
-        const key = property.getKey();
+  mergeFields.forEach((property) => {
+    const key = property.getKey()
 
-        if (Object.hasOwn(row, key) && row[key] !== undefined) {
-            match[key] = row[key];
-        }
-    });
-
-    if (Object.keys(match).length === 0) {
-        throw new Error(
-            'mergeMany requires every row to set at least one merge field ' +
-                `(unique, indexed or primary key properties): ${mergeFields
-                    .map((property) => property.getKey())
-                    .join(', ')}`
-        );
+    if (Object.hasOwn(row, key) && row[key] !== undefined) {
+      match[key] = row[key]
     }
+  })
 
-    const set: Record<string, unknown> = {};
+  if (Object.keys(match).length === 0) {
+    throw new Error(
+      'mergeMany requires every row to set at least one merge field ' +
+        `(unique, indexed or primary key properties): ${mergeFields
+          .map((property) => property.getKey())
+          .join(', ')}`,
+    )
+  }
 
-    schema.getProperties().forEach((property) => {
-        if (NON_WRITABLE_TYPES.has(property.getType()) || isProjectedProperty(property)) return;
+  const set: Record<string, unknown> = {}
 
-        // Match keys ride in the match map; they must never be
-        // default-resolved into the set map
-        if (mergeKeys.has(property.getKey())) return;
+  schema.getProperties().forEach((property) => {
+    if (NON_WRITABLE_TYPES.has(property.getType()) || isProjectedProperty(property)) return
 
-        const value = getValueOrDefault(row, property, schema);
+    // Match keys ride in the match map; they must never be
+    // default-resolved into the set map
+    if (mergeKeys.has(property.getKey())) return
 
-        if (value !== undefined) {
-            set[property.getKey()] = value;
-        }
-    });
+    const value = getValueOrDefault(row, property, schema)
 
-    validate({ ...match, ...set }, schema);
+    if (value !== undefined) {
+      set[property.getKey()] = value
+    }
+  })
 
-    return { match, set };
+  validate({ ...match, ...set }, schema)
+
+  return { match, set }
 }
 
 /**
@@ -166,12 +166,12 @@ export function processMergeRow(
  * RETURN this
  */
 export function buildCreateQuery(labels: string[]): string {
-    return [
-        'UNWIND $rows AS row',
-        `CREATE (${THIS_NODE}${labelPattern(labels)})`,
-        `SET ${THIS_NODE} += row`,
-        `RETURN ${THIS_NODE}`,
-    ].join('\n');
+  return [
+    'UNWIND $rows AS row',
+    `CREATE (${THIS_NODE}${labelPattern(labels)})`,
+    `SET ${THIS_NODE} += row`,
+    `RETURN ${THIS_NODE}`,
+  ].join('\n')
 }
 
 /**
@@ -181,18 +181,18 @@ export function buildCreateQuery(labels: string[]): string {
  * RETURN this
  */
 export function buildMergeQuery(labels: string[], matchKeys: string[]): string {
-    if (matchKeys.length === 0) {
-        throw new Error('mergeMany requires at least one match property');
-    }
+  if (matchKeys.length === 0) {
+    throw new Error('mergeMany requires at least one match property')
+  }
 
-    const pattern = matchKeys.map((key) => `${key}: row.${key}`).join(', ');
+  const pattern = matchKeys.map((key) => `${key}: row.${key}`).join(', ')
 
-    return [
-        'UNWIND $rows AS row',
-        `MERGE (${THIS_NODE}${labelPattern(labels)} { ${pattern} })`,
-        `SET ${THIS_NODE} += row`,
-        `RETURN ${THIS_NODE}`,
-    ].join('\n');
+  return [
+    'UNWIND $rows AS row',
+    `MERGE (${THIS_NODE}${labelPattern(labels)} { ${pattern} })`,
+    `SET ${THIS_NODE} += row`,
+    `RETURN ${THIS_NODE}`,
+  ].join('\n')
 }
 
 /**
@@ -201,29 +201,29 @@ export function buildMergeQuery(labels: string[], matchKeys: string[]): string {
  * already-open transaction
  */
 async function inWriteTransaction(
-    runner: Runner,
-    database: string | undefined,
-    work: (tx: Runner) => Promise<QueryOutput>
+  runner: Runner,
+  database: string | undefined,
+  work: (tx: Runner) => Promise<QueryOutput>,
 ): Promise<QueryOutput> {
-    const provider = runner as ConnectionProvider;
+  const provider = runner as ConnectionProvider
 
-    if (typeof provider.beginTransaction !== 'function') {
-        return work(runner);
-    }
+  if (typeof provider.beginTransaction !== 'function') {
+    return work(runner)
+  }
 
-    const tx = await provider.beginTransaction('WRITE', database);
+  const tx = await provider.beginTransaction('WRITE', database)
 
-    try {
-        const output = await work(tx);
+  try {
+    const output = await work(tx)
 
-        await tx.commit();
+    await tx.commit()
 
-        return output;
-    } catch (error) {
-        await tx.rollback().catch(() => {});
+    return output
+  } catch (error) {
+    await tx.rollback().catch(() => {})
 
-        throw error;
-    }
+    throw error
+  }
 }
 
 /**
@@ -232,84 +232,82 @@ async function inWriteTransaction(
  * to property maps exactly like the single-create / merge paths
  */
 export default class BulkService extends QueryService {
-    /**
-     * CREATE every row in chunks. Rows are flat property records: nested
-     * relationship targets are not supported (they throw), defaults and
-     * validation behave exactly like create()
-     */
-    async createMany<T>(
-        constructor: new (...args: never[]) => T,
-        schema: EntitySchema,
-        rows: Record<string, unknown>[],
-        options: BulkOptions = {}
-    ): Promise<BulkChunk<T>[]> {
-        const rowMaps = rows.map((row) => processCreateRow(row, schema));
+  /**
+   * CREATE every row in chunks. Rows are flat property records: nested
+   * relationship targets are not supported (they throw), defaults and
+   * validation behave exactly like create()
+   */
+  async createMany<T>(
+    constructor: new (...args: never[]) => T,
+    schema: EntitySchema,
+    rows: Record<string, unknown>[],
+    options: BulkOptions = {},
+  ): Promise<BulkChunk<T>[]> {
+    const rowMaps = rows.map((row) => processCreateRow(row, schema))
 
-        return this.writeChunks<T>(constructor, rowMaps, buildCreateQuery(schema.getLabels()), options);
+    return this.writeChunks<T>(constructor, rowMaps, buildCreateQuery(schema.getLabels()), options)
+  }
+
+  /**
+   * MERGE every row in chunks on the model's merge fields (the unique,
+   * indexed or primary key properties each row explicitly sets): rows
+   * matching an existing node update it (`+=`), the rest are created.
+   * Every row must merge on the same merge fields
+   */
+  async mergeMany<T>(
+    constructor: new (...args: never[]) => T,
+    schema: EntitySchema,
+    rows: Record<string, unknown>[],
+    options: BulkOptions = {},
+  ): Promise<BulkChunk<T>[]> {
+    if (rows.length === 0) {
+      return []
     }
 
-    /**
-     * MERGE every row in chunks on the model's merge fields (the unique,
-     * indexed or primary key properties each row explicitly sets): rows
-     * matching an existing node update it (`+=`), the rest are created.
-     * Every row must merge on the same merge fields
-     */
-    async mergeMany<T>(
-        constructor: new (...args: never[]) => T,
-        schema: EntitySchema,
-        rows: Record<string, unknown>[],
-        options: BulkOptions = {}
-    ): Promise<BulkChunk<T>[]> {
-        if (rows.length === 0) {
-            return [];
-        }
+    const parts = rows.map((row) => processMergeRow(row, schema))
 
-        const parts = rows.map((row) => processMergeRow(row, schema));
+    const matchKeys = Object.keys(parts[0].match).sort()
 
-        const matchKeys = Object.keys(parts[0].match).sort();
+    parts.forEach((part, index) => {
+      const keys = Object.keys(part.match).sort()
 
-        parts.forEach((part, index) => {
-            const keys = Object.keys(part.match).sort();
+      if (keys.join(',') !== matchKeys.join(',')) {
+        throw new Error(
+          `mergeMany requires every row to merge on the same merge fields: ` +
+            `row 0 merges on ${matchKeys.join(', ')}, row ${index} on ${keys.join(', ')}`,
+        )
+      }
+    })
 
-            if (keys.join(',') !== matchKeys.join(',')) {
-                throw new Error(
-                    `mergeMany requires every row to merge on the same merge fields: ` +
-                        `row 0 merges on ${matchKeys.join(', ')}, row ${index} on ${keys.join(', ')}`
-                );
-            }
-        });
+    const query = buildMergeQuery(schema.getLabels(), matchKeys)
 
-        const query = buildMergeQuery(schema.getLabels(), matchKeys);
+    // The MERGE pattern reads the match values off the row map
+    const rowMaps = parts.map((part) => ({ ...part.set, ...part.match }))
 
-        // The MERGE pattern reads the match values off the row map
-        const rowMaps = parts.map((part) => ({ ...part.set, ...part.match }));
+    return this.writeChunks<T>(constructor, rowMaps, query, options)
+  }
 
-        return this.writeChunks<T>(constructor, rowMaps, query, options);
+  private async writeChunks<T>(
+    constructor: new (...args: never[]) => T,
+    rowMaps: Record<string, unknown>[],
+    query: string,
+    options: BulkOptions,
+  ): Promise<BulkChunk<T>[]> {
+    const chunkSize = options.chunkSize ?? DEFAULT_CHUNK_SIZE
+
+    const chunks: BulkChunk<T>[] = []
+
+    for (const rows of chunk(rowMaps, chunkSize)) {
+      const output = await inWriteTransaction(this.runner, options.database, (tx) =>
+        tx.run(query, { rows }),
+      )
+
+      chunks.push({
+        count: rows.length,
+        entities: hydrate<T>(constructor, output, THIS_NODE),
+      })
     }
 
-    private async writeChunks<T>(
-        constructor: new (...args: never[]) => T,
-        rowMaps: Record<string, unknown>[],
-        query: string,
-        options: BulkOptions
-    ): Promise<BulkChunk<T>[]> {
-        const chunkSize = options.chunkSize ?? DEFAULT_CHUNK_SIZE;
-
-        const chunks: BulkChunk<T>[] = [];
-
-        for (const rows of chunk(rowMaps, chunkSize)) {
-            const output = await inWriteTransaction(
-                this.runner,
-                options.database,
-                (tx) => tx.run(query, { rows })
-            );
-
-            chunks.push({
-                count: rows.length,
-                entities: hydrate<T>(constructor, output, THIS_NODE),
-            });
-        }
-
-        return chunks;
-    }
+    return chunks
+  }
 }

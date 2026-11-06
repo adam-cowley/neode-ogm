@@ -1,12 +1,12 @@
-import Builder from './Builder';
-import { getModel } from '../meta';
-import EntitySchema, { EntityType } from '../meta/entity/entity-schema';
-import RelationshipPropertySchema from '../meta/relationship-property-schema';
+import Builder from './Builder'
+import { getModel } from '../meta'
+import EntitySchema, { EntityType } from '../meta/entity/entity-schema'
+import RelationshipPropertySchema from '../meta/relationship-property-schema'
 
-export const EAGER_ID = '__EAGER_ID__';
-export const EAGER_LABELS = '__EAGER_LABELS__';
-export const EAGER_TYPE = '__EAGER_TYPE__';
-export const MAX_EAGER_DEPTH = 3;
+export const EAGER_ID = '__EAGER_ID__'
+export const EAGER_LABELS = '__EAGER_LABELS__'
+export const EAGER_TYPE = '__EAGER_TYPE__'
+export const MAX_EAGER_DEPTH = 3
 
 /**
  * Build a pattern to use in an eager load statement:
@@ -18,39 +18,45 @@ export const MAX_EAGER_DEPTH = 3;
  * metamodel entry, and an unregistered target simply yields no nested eager
  * fields.
  */
-export function eagerPattern(depth: number, alias: string, rel: RelationshipPropertySchema): string {
-    const builder = new Builder();
+export function eagerPattern(
+  depth: number,
+  alias: string,
+  rel: RelationshipPropertySchema,
+): string {
+  const builder = new Builder()
 
-    const name = rel.getKey();
-    const type = rel.getType();
-    const direction = rel.getDirection();
-    const relationshipVariable = `${alias}_${name}_rel`;
-    const nodeVariable = `${alias}_${name}_node`;
+  const name = rel.getKey()
+  const type = rel.getType()
+  const direction = rel.getDirection()
+  const relationshipVariable = `${alias}_${name}_rel`
+  const nodeVariable = `${alias}_${name}_node`
 
-    const targetSchema = rel.getTarget() ? (getModel(rel.getTarget()) as EntitySchema | undefined) : undefined;
+  const targetSchema = rel.getTarget()
+    ? (getModel(rel.getTarget()) as EntitySchema | undefined)
+    : undefined
 
-    // Build Pattern
-    builder
-        .match(alias)
-        .relationship(type, direction, relationshipVariable)
-        .to(nodeVariable, targetSchema?.getLabels() ?? false);
+  // Build Pattern
+  builder
+    .match(alias)
+    .relationship(type, direction, relationshipVariable)
+    .to(nodeVariable, targetSchema?.getLabels() ?? false)
 
-    let fields: string;
+  let fields: string
 
-    if (targetSchema && targetSchema.getType() === EntityType.RelationshipEntity) {
-        fields = eagerRelationship(depth + 1, relationshipVariable, name, nodeVariable, targetSchema);
-    } else {
-        fields = eagerNode(depth + 1, nodeVariable, targetSchema);
-    }
+  if (targetSchema && targetSchema.getType() === EntityType.RelationshipEntity) {
+    fields = eagerRelationship(depth + 1, relationshipVariable, name, nodeVariable, targetSchema)
+  } else {
+    fields = eagerNode(depth + 1, nodeVariable, targetSchema)
+  }
 
-    const pattern = `${name}: [ ${builder.pattern().trim()} | ${fields} ]`;
+  const pattern = `${name}: [ ${builder.pattern().trim()} | ${fields} ]`
 
-    // Get the first?
-    if (!rel.getMany()) {
-        return pattern + '[0]';
-    }
+  // Get the first?
+  if (!rel.getMany()) {
+    return pattern + '[0]'
+  }
 
-    return pattern;
+  return pattern
 }
 
 /**
@@ -61,31 +67,31 @@ export function eagerPattern(depth: number, alias: string, rel: RelationshipProp
  * the modern equivalent (it returns a string rather than a number).
  */
 export function eagerNode(depth: number, alias: string, schema?: EntitySchema): string {
-    const indent = `  `.repeat(depth * 2);
-    let pattern = `\n${indent} ${alias} { `;
+  const indent = `  `.repeat(depth * 2)
+  let pattern = `\n${indent} ${alias} { `
 
-    // Properties
-    pattern += `\n${indent}${indent}.*`;
+  // Properties
+  pattern += `\n${indent}${indent}.*`
 
-    // ID
-    pattern += `\n${indent}${indent},${EAGER_ID}: elementId(${alias})`;
+  // ID
+  pattern += `\n${indent}${indent},${EAGER_ID}: elementId(${alias})`
 
-    // Labels
-    pattern += `\n${indent}${indent},${EAGER_LABELS}: labels(${alias})`;
+  // Labels
+  pattern += `\n${indent}${indent},${EAGER_LABELS}: labels(${alias})`
 
-    // Eager
-    if (schema && depth <= MAX_EAGER_DEPTH) {
-        schema
-            .getRelationships()
-            .filter(rel => rel.getEager())
-            .forEach(rel => {
-                pattern += `\n${indent}${indent},` + eagerPattern(depth, alias, rel);
-            });
-    }
+  // Eager
+  if (schema && depth <= MAX_EAGER_DEPTH) {
+    schema
+      .getRelationships()
+      .filter((rel) => rel.getEager())
+      .forEach((rel) => {
+        pattern += `\n${indent}${indent},` + eagerPattern(depth, alias, rel)
+      })
+  }
 
-    pattern += `\n${indent}}`;
+  pattern += `\n${indent}}`
 
-    return pattern;
+  return pattern
 }
 
 /**
@@ -93,29 +99,29 @@ export function eagerNode(depth: number, alias: string, schema?: EntitySchema): 
  * a Relationship and the node it connects to, up to the maximum depth.
  */
 export function eagerRelationship(
-    depth: number,
-    alias: string,
-    nodeAlias: string,
-    nodeVariable: string,
-    nodeModel?: EntitySchema
+  depth: number,
+  alias: string,
+  nodeAlias: string,
+  nodeVariable: string,
+  nodeModel?: EntitySchema,
 ): string {
-    const indent = `  `.repeat(depth * 2);
-    let pattern = `\n${indent} ${alias} { `;
+  const indent = `  `.repeat(depth * 2)
+  let pattern = `\n${indent} ${alias} { `
 
-    // Properties
-    pattern += `\n${indent}${indent}.*`;
+  // Properties
+  pattern += `\n${indent}${indent}.*`
 
-    // ID
-    pattern += `\n${indent}${indent},${EAGER_ID}: elementId(${alias})`;
+  // ID
+  pattern += `\n${indent}${indent},${EAGER_ID}: elementId(${alias})`
 
-    // Type
-    pattern += `\n${indent}${indent},${EAGER_TYPE}: type(${alias})`;
+  // Type
+  pattern += `\n${indent}${indent},${EAGER_TYPE}: type(${alias})`
 
-    // Node Alias
-    pattern += `\n${indent}${indent},${nodeAlias}: `;
-    pattern += eagerNode(depth + 1, nodeVariable, nodeModel);
+  // Node Alias
+  pattern += `\n${indent}${indent},${nodeAlias}: `
+  pattern += eagerNode(depth + 1, nodeVariable, nodeModel)
 
-    pattern += `\n${indent}}`;
+  pattern += `\n${indent}}`
 
-    return pattern;
+  return pattern
 }

@@ -4,9 +4,9 @@
  * the original is preserved as `cause`.
  */
 export default class NeodeError extends Error {
-    constructor(message: string, options?: ErrorOptions) {
-        super(message, options);
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options)
 
-        this.name = 'NeodeError';
-    }
+    this.name = 'NeodeError'
+  }
 }

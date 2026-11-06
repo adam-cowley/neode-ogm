@@ -11,14 +11,14 @@
  * methods resolve a module-level default at call time. Set it explicitly
  * with setDefaultNeode(); the most recently set instance wins.
  */
-import type Neode from './neode.service';
-import type { Newable } from './meta/newable';
-import type { DeleteOptions } from './services/query/delete.service';
-import type { DetachResult } from './services/query/detach.service';
-import type { GraphRelationship } from './driver/types';
-import { getModel } from './meta';
-import { elementIdOfEntity } from './utils';
-import { toJson } from './serialise';
+import type Neode from './neode.service'
+import type { Newable } from './meta/newable'
+import type { DeleteOptions } from './services/query/delete.service'
+import type { DetachResult } from './services/query/detach.service'
+import type { GraphRelationship } from './driver/types'
+import { getModel } from './meta'
+import { elementIdOfEntity } from './utils'
+import { toJson } from './serialise'
 
 /**
  * The Neode instance that entity instance methods operate against.
@@ -26,47 +26,49 @@ import { toJson } from './serialise';
  * shortcut: last-set-wins — multiple Neode instances cannot be addressed
  * from instance methods; upgrade by threading the instance through hydration.
  */
-let defaultNeode: Neode | undefined;
+let defaultNeode: Neode | undefined
 
 /**
  * Set the Neode instance used by entity instance methods
  * (`person.save()`, `person.relateTo(...)`, ...).
  */
 export function setDefaultNeode(neode: Neode): void {
-    defaultNeode = neode;
+  defaultNeode = neode
 }
 
 function requireNeode(): Neode {
-    if (!defaultNeode) {
-        throw new Error(
-            'No Neode instance available for entity instance methods — call setDefaultNeode(neode) first'
-        );
-    }
+  if (!defaultNeode) {
+    throw new Error(
+      'No Neode instance available for entity instance methods — call setDefaultNeode(neode) first',
+    )
+  }
 
-    return defaultNeode;
+  return defaultNeode
 }
 
 function constructorOf(entity: object): new (...args: never[]) => object {
-    return (entity as { constructor: unknown }).constructor as new (...args: never[]) => object;
+  return (entity as { constructor: unknown }).constructor as new (
+    ...args: never[]
+  ) => object
 }
 
 /**
  * The elementId of a hydrated entity
  */
 function elementIdOf(entity: object): string {
-    const schema = getModel(constructorOf(entity));
+  const schema = getModel(constructorOf(entity))
 
-    if (!schema) {
-        throw new Error('Entity is not a registered model — cannot resolve its elementId');
-    }
+  if (!schema) {
+    throw new Error('Entity is not a registered model — cannot resolve its elementId')
+  }
 
-    const elementId = elementIdOfEntity(schema, entity);
+  const elementId = elementIdOfEntity(schema, entity)
 
-    if (!elementId) {
-        throw new Error('Entity has no elementId — save() it before changing its labels');
-    }
+  if (!elementId) {
+    throw new Error('Entity has no elementId — save() it before changing its labels')
+  }
 
-    return elementId;
+  return elementId
 }
 
 /**
@@ -74,20 +76,20 @@ function elementIdOf(entity: object): string {
  * cannot be parameterised), then re-hydrate the entity in place
  */
 async function changeLabel(entity: object, label: string, verb: 'SET' | 'REMOVE'): Promise<object> {
-    const neode = requireNeode();
-    const elementId = elementIdOf(entity);
+  const neode = requireNeode()
+  const elementId = elementIdOf(entity)
 
-    await neode.writeCypher(`MATCH (n) WHERE elementId(n) = $elementId ${verb} n:${label}`, {
-        elementId,
-    });
+  await neode.writeCypher(`MATCH (n) WHERE elementId(n) = $elementId ${verb} n:${label}`, {
+    elementId,
+  })
 
-    const hydrated = await neode.findById(constructorOf(entity), elementId);
+  const hydrated = await neode.findById(constructorOf(entity), elementId)
 
-    if (hydrated) {
-        Object.assign(entity, hydrated);
-    }
+  if (hydrated) {
+    Object.assign(entity, hydrated)
+  }
 
-    return entity;
+  return entity
 }
 
 /**
@@ -95,42 +97,42 @@ async function changeLabel(entity: object, label: string, verb: 'SET' | 'REMOVE'
  * `WithMethods<Person>` chains as `Promise<WithMethods<Person>>`.
  */
 export interface EntityMethods {
-    /** MERGE this entity, then re-hydrate the persisted state onto it */
-    save(): Promise<this>;
+  /** MERGE this entity, then re-hydrate the persisted state onto it */
+  save(): Promise<this>
 
-    /** `+=` update the given properties, then re-hydrate onto this entity */
-    update(properties?: Record<string, unknown>): Promise<this>;
+  /** `+=` update the given properties, then re-hydrate onto this entity */
+  update(properties?: Record<string, unknown>): Promise<this>
 
-    /**
-     * Delete this node from the graph (cascade options as in neode.delete).
-     * With `{ soft: label }` the label is SET instead and the refreshed
-     * entity is returned; without it the node is deleted and the same
-     * (detached) instance is returned.
-     */
-    delete(options?: DeleteOptions | string): Promise<this>;
+  /**
+   * Delete this node from the graph (cascade options as in neode.delete).
+   * With `{ soft: label }` the label is SET instead and the refreshed
+   * entity is returned; without it the node is deleted and the same
+   * (detached) instance is returned.
+   */
+  delete(options?: DeleteOptions | string): Promise<this>
 
-    /** Add a label to this node's state (SET n:Label) and re-hydrate */
-    addLabel(label: string): Promise<this>;
+  /** Add a label to this node's state (SET n:Label) and re-hydrate */
+  addLabel(label: string): Promise<this>
 
-    /** Remove a label from this node's state (REMOVE n:Label) and re-hydrate */
-    removeLabel(label: string): Promise<this>;
+  /** Remove a label from this node's state (REMOVE n:Label) and re-hydrate */
+  removeLabel(label: string): Promise<this>
 
-    /**
-     * Relate this entity to another saved entity, resolving the
-     * relationship by its key on this entity's schema
-     */
-    relateTo<To extends object>(
-        other: To,
-        relationshipKey: string,
-        properties?: Record<string, unknown>,
-        forceCreate?: boolean
-    ): Promise<GraphRelationship | undefined>;
+  /**
+   * Relate this entity to another saved entity, resolving the
+   * relationship by its key on this entity's schema
+   */
+  relateTo<To extends object>(
+    other: To,
+    relationshipKey: string,
+    properties?: Record<string, unknown>,
+    forceCreate?: boolean,
+  ): Promise<GraphRelationship | undefined>
 
-    /** Remove the relationship of the given key between this entity and other */
-    detachFrom<To extends object>(other: To, relationshipKey: string): Promise<DetachResult<this, To>>;
+  /** Remove the relationship of the given key between this entity and other */
+  detachFrom<To extends object>(other: To, relationshipKey: string): Promise<DetachResult<this, To>>
 
-    /** JSON-safe serialisation of this entity (properties, labels, elementId) */
-    toJson(): Record<string, unknown>;
+  /** JSON-safe serialisation of this entity (properties, labels, elementId) */
+  toJson(): Record<string, unknown>
 }
 
 /**
@@ -139,88 +141,93 @@ export interface EntityMethods {
  * regardless — this is only for type-checking, since declaration merging
  * onto arbitrary user classes is not possible.
  */
-export type WithMethods<T> = T & EntityMethods;
+export type WithMethods<T> = T & EntityMethods
 
 /**
  * The runtime implementations (this-typed, attached to the prototype)
  */
 interface MethodImpl {
-    save(this: object): Promise<object>;
-    update(this: object, properties?: Record<string, unknown>): Promise<object>;
-    delete(this: object, options?: DeleteOptions | string): Promise<object>;
-    addLabel(this: object, label: string): Promise<object>;
-    removeLabel(this: object, label: string): Promise<object>;
-    toJson(this: object): Record<string, unknown>;
-    relateTo(
-        this: object,
-        other: object,
-        relationshipKey: string,
-        properties?: Record<string, unknown>,
-        forceCreate?: boolean
-    ): Promise<GraphRelationship | undefined>;
-    detachFrom(this: object, other: object, relationshipKey: string): Promise<DetachResult<object, object>>;
+  save(this: object): Promise<object>
+  update(this: object, properties?: Record<string, unknown>): Promise<object>
+  delete(this: object, options?: DeleteOptions | string): Promise<object>
+  addLabel(this: object, label: string): Promise<object>
+  removeLabel(this: object, label: string): Promise<object>
+  toJson(this: object): Record<string, unknown>
+  relateTo(
+    this: object,
+    other: object,
+    relationshipKey: string,
+    properties?: Record<string, unknown>,
+    forceCreate?: boolean,
+  ): Promise<GraphRelationship | undefined>
+  detachFrom(
+    this: object,
+    other: object,
+    relationshipKey: string,
+  ): Promise<DetachResult<object, object>>
 }
 
 const methods: MethodImpl = {
-    async save(this) {
-        const saved = await requireNeode().save(this);
+  async save(this) {
+    const saved = await requireNeode().save(this)
 
-        return Object.assign(this, saved);
-    },
+    return Object.assign(this, saved)
+  },
 
-    toJson(this) {
-        return toJson(this);
-    },
+  toJson(this) {
+    return toJson(this)
+  },
 
-    async update(this, properties = {}) {
-        const hydrated = await requireNeode().update(this, properties);
+  async update(this, properties = {}) {
+    const hydrated = await requireNeode().update(this, properties)
 
-        if (hydrated) {
-            Object.assign(this, hydrated);
-        }
+    if (hydrated) {
+      Object.assign(this, hydrated)
+    }
 
-        return this;
-    },
+    return this
+  },
 
-    async delete(this, options) {
-        const soft = options && typeof options === 'object' ? (options as DeleteOptions).soft : undefined;
+  async delete(this, options) {
+    const soft =
+      options && typeof options === 'object' ? (options as DeleteOptions).soft : undefined
 
-        // Labels-as-state: SET the soft-delete label instead of deleting,
-        // returning the refreshed entity
-        if (soft) {
-            return changeLabel(this, soft, 'SET');
-        }
+    // Labels-as-state: SET the soft-delete label instead of deleting,
+    // returning the refreshed entity
+    if (soft) {
+      return changeLabel(this, soft, 'SET')
+    }
 
-        await requireNeode().delete(this, options);
+    await requireNeode().delete(this, options)
 
-        return this;
-    },
+    return this
+  },
 
-    addLabel(this, label) {
-        return changeLabel(this, label, 'SET');
-    },
+  addLabel(this, label) {
+    return changeLabel(this, label, 'SET')
+  },
 
-    removeLabel(this, label) {
-        return changeLabel(this, label, 'REMOVE');
-    },
+  removeLabel(this, label) {
+    return changeLabel(this, label, 'REMOVE')
+  },
 
-    async relateTo(this, other, relationshipKey, properties = {}, forceCreate = false) {
-        return requireNeode().relate(
-            constructorOf(this),
-            this,
-            other,
-            relationshipKey,
-            properties,
-            forceCreate
-        );
-    },
+  async relateTo(this, other, relationshipKey, properties = {}, forceCreate = false) {
+    return requireNeode().relate(
+      constructorOf(this),
+      this,
+      other,
+      relationshipKey,
+      properties,
+      forceCreate,
+    )
+  },
 
-    async detachFrom(this, other, relationshipKey) {
-        return requireNeode().detach(constructorOf(this), this, other, relationshipKey);
-    },
-};
+  async detachFrom(this, other, relationshipKey) {
+    return requireNeode().detach(constructorOf(this), this, other, relationshipKey)
+  },
+}
 
-const METHODS_APPLIED = Symbol('neode:entity-methods-applied');
+const METHODS_APPLIED = Symbol('neode:entity-methods-applied')
 
 /**
  * Wire the instance methods onto an entity class's PROTOTYPE (idempotent:
@@ -228,32 +235,32 @@ const METHODS_APPLIED = Symbol('neode:entity-methods-applied');
  * Methods the user class already defines are left untouched.
  */
 export function applyEntityMethods(constructor: Newable, neode?: Neode): void {
-    if (neode) {
-        setDefaultNeode(neode);
+  if (neode) {
+    setDefaultNeode(neode)
+  }
+
+  const proto = (constructor as unknown as { prototype: object }).prototype
+
+  if (Object.hasOwn(proto, METHODS_APPLIED)) {
+    return
+  }
+
+  for (const [name, fn] of Object.entries(methods)) {
+    // A user-defined method wins — partial adoption, no clobbering
+    if (name in proto) {
+      continue
     }
 
-    const proto = (constructor as unknown as { prototype: object }).prototype;
+    Object.defineProperty(proto, name, {
+      value: fn,
+      enumerable: false,
+      writable: true,
+      configurable: true,
+    })
+  }
 
-    if (Object.hasOwn(proto, METHODS_APPLIED)) {
-        return;
-    }
-
-    for (const [name, fn] of Object.entries(methods)) {
-        // A user-defined method wins — partial adoption, no clobbering
-        if (name in proto) {
-            continue;
-        }
-
-        Object.defineProperty(proto, name, {
-            value: fn,
-            enumerable: false,
-            writable: true,
-            configurable: true,
-        });
-    }
-
-    Object.defineProperty(proto, METHODS_APPLIED, {
-        value: true,
-        enumerable: false,
-    });
+  Object.defineProperty(proto, METHODS_APPLIED, {
+    value: true,
+    enumerable: false,
+  })
 }

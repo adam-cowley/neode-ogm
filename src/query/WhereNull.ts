@@ -1,15 +1,15 @@
 export default class WhereNull {
-    private negative = false;
+  private negative = false
 
-    constructor(private readonly property: string) {}
+  constructor(private readonly property: string) {}
 
-    setNegative(): void {
-        this.negative = true;
-    }
+  setNegative(): void {
+    this.negative = true
+  }
 
-    toString(): string {
-        const suffix = this.negative ? 'IS NOT NULL' : 'IS NULL';
+  toString(): string {
+    const suffix = this.negative ? 'IS NOT NULL' : 'IS NULL'
 
-        return `${this.property} ${suffix}`;
-    }
+    return `${this.property} ${suffix}`
+  }
 }

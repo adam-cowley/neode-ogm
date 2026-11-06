@@ -1,5 +1,5 @@
-import { mergeProperty } from '../../meta';
-import { PropertyType } from '../../meta/property-schema';
+import { mergeProperty } from '../../meta'
+import { PropertyType } from '../../meta/property-schema'
 
 /**
  * NTS-138 — derived field, computed in TypeScript after hydration from the
@@ -12,11 +12,11 @@ import { PropertyType } from '../../meta/property-schema';
  * ```
  */
 export default function Computed(compute: (entity: any) => unknown) {
-    return function(target: any, propertyKey: string, _descriptor?: any): void {
-        const constructor = target.constructor
+  return function (target: any, propertyKey: string, _descriptor?: any): void {
+    const constructor = target.constructor
 
-        const property = mergeProperty(constructor, propertyKey, PropertyType.COMPUTED, {});
+    const property = mergeProperty(constructor, propertyKey, PropertyType.COMPUTED, {})
 
-        property.setCompute(compute)
-    }
+    property.setCompute(compute)
+  }
 }
