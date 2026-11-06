@@ -1,5 +1,20 @@
 # neode-ogm — Master Build Plan
 
+> **Status: Phases 0–4 complete, Phase 5 in flight, Phase 8 pending.** Live tracking: Linear project `neode-ogm` (team NTS). This file is the design reference; the board is the state.
+>
+> Executed in **6 waves** of parallel subagents, dispatched strictly along the task-level dependency tree (blocked tasks never started):
+>
+> | Wave | Tasks | Result |
+> |---|---|---|
+> | 1 | P1.1, P1.2, P1.5, P2.2 | metamodel types/options/labels, builder parity (66 tests, 2 builder bugs fixed) |
+> | 2 | P1.3, P1.4, P2.1, P3.1–3.3, P4.2, P6.1–6.2 | map adapter, full decorator set, EagerUtils, Zod validation, mergeOn, schema sync |
+> | 3 | P4.1, P4.3–4.9, P1.6, P6.3 | all query services, multi-degree eager, Collection/toJson, golden parity (3 parity bugs fixed), round-trips |
+> | 4 | P3.4, P4.10, P5.2, P7.1 | validation on every write path, full facade + e2e example flow, fromEnv audit, repository surface |
+> | 5 | P5.1, P5.3, P5.4, P7.2, P7.3 | batch, multi-database, events, instance methods, repository registry — **in flight** |
+> | 6 | P8.1–8.4 | bench suites, docs + migration guide, packaging + release — **pending** |
+>
+> After wave 4: **530 tests green** (unit + integration on embedded Relate), strict tsc + eslint clean.
+
 Turning `neode-ogm` into a full-featured, decorator-first OGM for Neo4j with **feature parity with neode 0.4.9**, while **also supporting the classic map-based schema API**. Built test-first (red-green), with unit + integration suites and benchmarks.
 
 ## Decisions (agreed)

@@ -1,5 +1,6 @@
 import { Newable } from "../meta/newable";
 import { Direction } from "../query";
+import INeode from "../neode.interface";
 import PropertySchema, { DefaultValue, PropertyType } from "./property-schema";
 
 import RelationshipPropertySchema from "./relationship-property-schema";
@@ -149,12 +150,32 @@ export function mergeRelationshipProperty(constructor: any, key: string,
     return rel
 }
 
-const repositories: Map<Newable, Repository<any>> = new Map()
+/**
+ * A (custom) repository class, registered per entity. Instances are created
+ * with (neode, entity, database?) at resolution time — never stored.
+ */
+export type RepositoryConstructor = new (neode: INeode, entity: any, database?: string) => Repository<any>
 
-export function registerRepository(entity: Newable, repository: Repository<any>) {
-    repositories.set(entity, repository)
+const repositories: Map<Newable, RepositoryConstructor> = new Map()
+
+export function registerRepository(entity: Newable, repository: Repository<any> | RepositoryConstructor) {
+    // An instance is accepted for convenience: its constructor is stored
+    repositories.set(entity, typeof repository === 'function' ? repository : (repository.constructor as RepositoryConstructor))
 }
 
-export function getRepository<T extends Newable>(entity: T): Repository<T> | undefined {
+export function getRepository(entity: Newable): RepositoryConstructor | undefined {
     return repositories.get(entity)
+}
+
+/**
+ * Resolution point for repositories: the custom repository registered for
+ * the entity (constructed with the given neode and entity), or the default
+ * Repository
+ */
+export function resolveRepository<Entity>(neode: INeode, entity: new (...args: never[]) => Entity, database?: string): Repository<Entity> {
+    const Custom = repositories.get(entity)
+
+    return Custom
+        ? new Custom(neode, entity, database) as Repository<Entity>
+        : new Repository<Entity>(neode, entity, database)
 }

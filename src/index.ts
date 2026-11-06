@@ -5,9 +5,14 @@ export { EventType } from './common/events';
 export { fromEnv } from './utils';
 export { default as Repository } from './repository';
 export { default as TransactionalService } from './transaction/transactional.service';
-export { registerRepository, getRepository } from './meta';
+export { registerRepository, getRepository, resolveRepository } from './meta';
+export type { RepositoryConstructor } from './meta';
 export { default as Collection } from './collection';
 export { toJson, valueToJson } from './serialise';
+
+// Active-record instance methods on hydrated entities (P7.2)
+export { applyEntityMethods, setDefaultNeode } from './entity-methods';
+export type { EntityMethods, WithMethods } from './entity-methods';
 
 // Map-based schema definitions
 export {

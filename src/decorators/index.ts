@@ -40,3 +40,6 @@ export { default as RelationshipEntity } from './relationship/relationship-entit
 export { default as StartNode } from './relationship/start-node.decorator'
 export { default as EndNode } from './relationship/end-node.decorator'
 export { default as OtherNode } from './relationship/other-node.decorator'
+
+// Repositories
+export { default as EntityRepository } from './repository.decorator'
