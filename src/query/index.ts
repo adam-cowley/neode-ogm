@@ -15,3 +15,12 @@ export { default as WhereStatement } from './WhereStatement';
 export { default as WithStatement } from './WithStatement';
 export { default as WithDistinctStatement } from './WithDistinctStatement';
 export { Direction, toDirection } from './Direction';
+export {
+    EAGER_ID,
+    EAGER_LABELS,
+    EAGER_TYPE,
+    MAX_EAGER_DEPTH,
+    eagerNode,
+    eagerPattern,
+    eagerRelationship,
+} from './eager-utils';

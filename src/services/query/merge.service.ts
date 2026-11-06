@@ -1,5 +1,6 @@
 import Builder, { Direction } from '../../query';
 import { INTERNAL_ID, THIS_NODE } from '../../constants';
+import { QueryOutput } from '../../driver/types';
 import { getModel } from '../../meta';
 import EntitySchema, { EntityType } from '../../meta/entity/entity-schema';
 import PropertySchema, { PropertyType } from '../../meta/property-schema';
@@ -7,7 +8,71 @@ import RelationshipPropertySchema from '../../meta/relationship-property-schema'
 import { getValueOrDefault, getValuesAsRecord, setPropertyInBuilder } from '../../utils';
 import QueryService from './query.service';
 
+/**
+ * Properties used for merge matching: unique OR indexed
+ * (neode's Model.mergeFields)
+ */
+export function getMergeFields(schema: EntitySchema): PropertySchema[] {
+    return schema.getProperties().filter((property) => property.isUnique() || property.isIndex());
+}
+
 export default class MergeService extends QueryService {
+    /**
+     * MERGE a node on the given match properties, then set the given properties
+     */
+    async mergeOn(
+        schema: EntitySchema,
+        match: Record<string, unknown>,
+        set: Record<string, unknown>
+    ): Promise<QueryOutput> {
+        // Skip undefined match values
+        const matchRecord = Object.fromEntries(
+            Object.entries(match).filter(([, value]) => value !== undefined)
+        );
+
+        if (Object.keys(matchRecord).length === 0) {
+            throw new Error('mergeOn requires at least one match property');
+        }
+
+        const builder = new Builder();
+
+        builder.merge(THIS_NODE, schema.getLabels(), matchRecord);
+
+        // Set Properties: explicit set values, falling back to schema
+        // defaults (e.g. a UUID primary key on create). Unset values are
+        // skipped rather than deleted.
+        schema.getProperties().forEach((property) => {
+            const key = property.getKey();
+
+            // Match properties are inline in the MERGE, not set
+            if (Object.hasOwn(matchRecord, key)) return;
+
+            const value = getValueOrDefault(set, property, schema);
+
+            if (value !== undefined) {
+                setPropertyInBuilder(builder, THIS_NODE, property, value);
+            }
+        });
+
+        // Extra keys not declared on the schema are plain property sets
+        Object.entries(set).forEach(([key, value]) => {
+            if (
+                value === undefined ||
+                schema.getProperties().some((property) => property.getKey() === key)
+            ) {
+                return;
+            }
+
+            builder.set(`${THIS_NODE}.${key}`, value);
+        });
+
+        builder.return(THIS_NODE, `elementId(${THIS_NODE}) AS ${INTERNAL_ID}`);
+
+        const { query, params } = builder.build();
+
+        return this.runner.run(query, params);
+    }
+
     async save(model: object, schema: EntitySchema): Promise<{ elementId: string }> {
         const builder = new Builder();
 
@@ -27,11 +92,9 @@ export default class MergeService extends QueryService {
             mergeOn = getValuesAsRecord(model, primaryKeys, schema);
         }
 
-        // No primary keys: fall back to unique values
+        // No primary keys: fall back to the merge fields (unique or indexed)
         else {
-            const unique = schema.getProperties().filter((property) => property.isUnique());
-
-            mergeOn = getValuesAsRecord(model, unique, schema);
+            mergeOn = getValuesAsRecord(model, getMergeFields(schema), schema);
         }
 
         builder.merge(THIS_NODE, schema.getLabels(), mergeOn);

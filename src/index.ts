@@ -7,6 +7,21 @@ export { default as Repository } from './repository';
 export { default as TransactionalService } from './transaction/transactional.service';
 export { registerRepository, getRepository } from './meta';
 
+// Map-based schema definitions
+export {
+    defineModel,
+    extendModel,
+    getModelByName,
+    getModelsByName,
+} from './meta/map-schema';
+export type {
+    PropertyTypeName,
+    PropertyDefinition,
+    RelationshipDefinition,
+    SchemaDefinition,
+    SchemaDefinitionEntry,
+} from './meta/schema-definition.interface';
+
 // Query builder
 export { Builder, Direction, toDirection } from './query';
 

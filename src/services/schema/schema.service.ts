@@ -11,6 +11,7 @@ export enum ConstraintAction {
 export enum ConstraintType {
     UNIQUE = 'UNIQUE',
     EXISTS = 'EXISTS',
+    INDEX = 'INDEX',
 }
 
 export interface SchemaResult {
@@ -75,6 +76,12 @@ export default class SchemaService {
             label
         );
 
+        const indexes = await this.runIndexStatementsForLabel(
+            action,
+            model.getProperties(),
+            label
+        );
+
         if (this.enterprise) {
             const exists = await this.runExistsConstraintStatementsForLabel(
                 action,
@@ -82,10 +89,10 @@ export default class SchemaService {
                 label
             );
 
-            return output.concat(...exists);
+            return output.concat(...indexes, ...exists);
         }
 
-        return output;
+        return output.concat(...indexes);
     }
 
     private runUniqueConstraintStatementsForLabel(
@@ -97,7 +104,7 @@ export default class SchemaService {
             properties
                 .filter((property) => property.isUnique())
                 .map((property) =>
-                    this.constraintStatement(
+                    this.runStatement(
                         action,
                         ConstraintType.UNIQUE,
                         label,
@@ -114,9 +121,9 @@ export default class SchemaService {
     ): Promise<SchemaResult[]> {
         return Promise.all(
             properties
-                .filter((property) => property.isUnique())
+                .filter((property) => property.isExists())
                 .map((property) =>
-                    this.constraintStatement(
+                    this.runStatement(
                         action,
                         ConstraintType.EXISTS,
                         label,
@@ -126,25 +133,52 @@ export default class SchemaService {
         );
     }
 
-    private async constraintStatement(
+    private runIndexStatementsForLabel(
+        action: ConstraintAction,
+        properties: PropertySchema[],
+        label: string
+    ): Promise<SchemaResult[]> {
+        return Promise.all(
+            properties
+                .filter((property) => property.isIndex())
+                .map((property) =>
+                    this.runStatement(
+                        action,
+                        ConstraintType.INDEX,
+                        label,
+                        property.getKey()
+                    )
+                )
+        );
+    }
+
+    private async runStatement(
         action: ConstraintAction,
         type: ConstraintType,
         label: string,
         property: string
     ): Promise<SchemaResult> {
-        // Modern (Neo4j 4.4+/5.x) constraint syntax, with IF NOT/DOES NOT
-        // EXIST guards so install and drop are idempotent
-        const predicate =
-            type === ConstraintType.UNIQUE
-                ? `n.\`${property}\` IS UNIQUE`
-                : `n.\`${property}\` IS NOT NULL`;
-
+        // Modern (Neo4j 4.4+/5.x) syntax, with IF NOT/DOES NOT EXIST guards
+        // so install and drop are idempotent
         const guard =
             action === ConstraintAction.CREATE ? 'IF NOT EXISTS' : 'IF EXISTS';
 
-        const name = `${label.toLowerCase()}_${property}_${type === ConstraintType.UNIQUE ? 'unique' : 'exists'}`;
+        const name = `${label.toLowerCase()}_${property}_${type.toLowerCase()}`;
 
-        const statement = `${action} CONSTRAINT ${name} ${guard} FOR (n:${label}) REQUIRE ${predicate}`;
+        const kind = type === ConstraintType.INDEX ? 'INDEX' : 'CONSTRAINT';
+
+        const statement =
+            action === ConstraintAction.CREATE
+                ? `${action} ${kind} ${name} ${guard} FOR (n:${label}) ${
+                      type === ConstraintType.INDEX
+                          ? `ON (n.\`${property}\`)`
+                          : `REQUIRE ${
+                                type === ConstraintType.UNIQUE
+                                    ? `n.\`${property}\` IS UNIQUE`
+                                    : `n.\`${property}\` IS NOT NULL`
+                            }`
+                  }`
+                : `${action} ${kind} ${name} ${guard}`;
 
         const output: SchemaResult = {
             action,

@@ -1,4 +1,7 @@
 import { EventEmitter } from 'events';
+import { createRequire } from 'module';
+import { readdirSync } from 'fs';
+import { basename, extname, resolve } from 'path';
 import {
     ConnectionProvider,
     QueryOutput,
@@ -9,7 +12,15 @@ import {
 import { Neo4jConnectionProvider } from './driver/neo4j';
 import { RelateConnectionProvider } from './driver/relate';
 import { getModel, getModels } from './meta';
+import { Newable } from './meta/newable';
 import EntitySchema from './meta/entity/entity-schema';
+import {
+    defineModel,
+    extendModel,
+    getModelByName,
+    unknownDefinitionError,
+} from './meta/map-schema';
+import { SchemaDefinition } from './meta/schema-definition.interface';
 import { EventType } from './common/events';
 import FindService from './services/query/find.service';
 import MergeService from './services/query/merge.service';
@@ -20,6 +31,7 @@ import SchemaService, { SchemaResult } from './services/schema/schema.service';
 import { Repository } from '.';
 import TransactionalService from './transaction/transactional.service';
 import FindByIdService from './services/query/find-by-id.service';
+import { INTERNAL_ID } from './constants';
 
 export default class Neode implements INeode {
     private eventEmitter: EventEmitter = new EventEmitter();
@@ -268,6 +280,97 @@ export default class Neode implements INeode {
         this.eventEmitter.emit(EventType.NODE_CREATED, res);
 
         return res;
+    }
+
+    /**
+     * MERGE a node on the given match properties, then set the given
+     * properties, hydrating the merged node
+     */
+    async mergeOn<T>(
+        constructor: Newable,
+        match: Record<string, unknown>,
+        set: Record<string, unknown>,
+        database?: string
+    ): Promise<T | undefined> {
+        const schema = this.getSchema(constructor);
+
+        const tx = await this.writeTransaction(database);
+
+        try {
+            const mergeService = new MergeService(tx);
+
+            const output = await mergeService.mergeOn(schema, match, set);
+
+            const elementId = output.records[0].get(INTERNAL_ID) as string;
+
+            const findService = new FindByIdService(tx);
+
+            const hydrated = await findService.find(constructor, schema, elementId);
+
+            await tx.commit();
+
+            return hydrated as T | undefined;
+        } catch (error) {
+            await tx.rollback();
+
+            throw error;
+        }
+    }
+
+    /**
+     * Define a model from a map-based schema definition (neode parity), or,
+     * when no schema is given, look up a previously defined model by name.
+     */
+    model(name: string, schema?: SchemaDefinition): Newable {
+        if ( schema ) {
+            return defineModel(name, schema);
+        }
+
+        const existing = getModelByName(name);
+
+        if ( !existing ) {
+            throw new Error(unknownDefinitionError(name));
+        }
+
+        return existing;
+    }
+
+    /**
+     * Define multiple models at once: { Name: schemaDefinition }
+     */
+    with(models: Record<string, SchemaDefinition>): this {
+        Object.entries(models).forEach(([name, schema]) => this.model(name, schema));
+
+        return this;
+    }
+
+    /**
+     * Scan a directory and register each module's default export as a model
+     * named after the file (neode parity, extended to .ts files)
+     */
+    withDirectory(directory: string): this {
+        const requireModule = createRequire(__filename);
+
+        readdirSync(directory)
+            .filter((file) => [ '.js', '.ts' ].includes(extname(file).toLowerCase()))
+            .forEach((file) => {
+                const name = basename(file, extname(file));
+                const loaded = requireModule(resolve(directory, file)) as {
+                    default?: SchemaDefinition;
+                };
+
+                this.model(name, loaded.default ?? loaded as SchemaDefinition);
+            });
+
+        return this;
+    }
+
+    /**
+     * neode's extend(): clone a model under a new name, adding the new name
+     * as an extra label, with the given schema merged on top
+     */
+    extend(name: string, as: string, schema?: SchemaDefinition): Newable {
+        return extendModel(name, as, schema);
     }
 
     async delete<T>(entity: T, database?: string): Promise<void> {
