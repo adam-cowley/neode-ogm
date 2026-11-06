@@ -12,6 +12,7 @@ import {
 } from './driver/types';
 import { Neo4jConnectionProvider } from './driver/neo4j';
 import { RelateConnectionProvider } from './driver/relate';
+import { setDefaultNeode } from './entity-methods';
 import { getModel, getModels, resolveRepository } from './meta';
 import { Newable } from './meta/newable';
 import EntitySchema from './meta/entity/entity-schema';
@@ -50,7 +51,11 @@ export default class Neode implements INeode {
     constructor(
         private readonly connection: ConnectionProvider,
         private enterprise: boolean = false
-    ) {}
+    ) {
+        // Instance methods on hydrated entities (save/update/delete/relateTo)
+        // resolve their Neode through the last-constructed instance
+        setDefaultNeode(this);
+    }
 
     /**
      * Create a Neode instance over a neo4j-driver Driver

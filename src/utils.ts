@@ -10,6 +10,7 @@ import PropertySchema, { PropertyType } from './meta/property-schema';
 import Neode from './neode.service';
 import { EAGER_ID, EAGER_LABELS, EAGER_TYPE } from './query/eager-utils';
 import { Direction } from './query';
+import { applyEntityMethods } from './entity-methods';
 
 const LOG_LEVELS = ['error', 'warn', 'info', 'debug'];
 
@@ -180,6 +181,10 @@ export function hydrateNode<T>(
     node: GraphNode | EagerProjectionMap,
     eager: Record<string, EagerRelationship[]> = {}
 ): T {
+    // Wire the active-record instance methods onto the class prototype
+    // (idempotent) so hydrated instances can save/update/delete themselves
+    applyEntityMethods(targetEntity);
+
     const entity = new (targetEntity as any)() as Record<string, unknown>;
 
     // A projection map carries its properties inline with the markers and
@@ -290,6 +295,10 @@ export function hydrateRelationship<T>(
     rel?: RelationshipPropertySchema,
     parent?: unknown
 ): T {
+    // Wire the active-record instance methods onto the class prototype
+    // (idempotent) so hydrated instances can save/update/delete themselves
+    applyEntityMethods(targetEntity);
+
     const entity = new (targetEntity as any)() as Record<string, unknown>;
 
     // Eager projection shape: relationship properties inline with the
