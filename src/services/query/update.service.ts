@@ -85,7 +85,7 @@ export default class UpdateService extends QueryService {
             });
 
         if (refill.length) {
-            const node = await this.readNode(schema, pkKey, identity);
+            const node = await this.readNode(schema, identityCriteria);
 
             refill.forEach((property) => {
                 const stored = node?.properties[property.getKey()];
@@ -124,12 +124,15 @@ export default class UpdateService extends QueryService {
     /** Read the node's current properties (required-property refill source) */
     private async readNode(
         schema: EntitySchema,
-        pkKey: string,
-        identity: unknown
+        criteria: { elementId?: string; key: string; value: unknown }
     ): Promise<GraphNode | undefined> {
         const builder = new Builder();
 
-        builder.match(THIS_NODE, schema.getLabels(), { [pkKey]: identity });
+        if (criteria.elementId) {
+            builder.match(THIS_NODE).whereId(THIS_NODE, criteria.elementId);
+        } else {
+            builder.match(THIS_NODE, schema.getLabels(), { [criteria.key]: criteria.value });
+        }
 
         builder.return(THIS_NODE);
 
