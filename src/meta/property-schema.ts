@@ -200,6 +200,52 @@ export default class PropertySchema {
         return this.exists
     }
 
+    // ---- Hydration + schema-sync config (NTS-139/140/141) ----
+
+    /** Read-side fallbacks at hydration (NTS-139): a literal, or sibling property names (first non-null wins) */
+    private coalesce: string | string[] | undefined;
+
+    /** Opt in to a property-type constraint generated from the declared type (NTS-141) */
+    private typed: boolean = false;
+
+    /** Composite unique constraint properties (NTS-140): the full composite, declared on one property */
+    private compositeUnique: string[] | undefined;
+
+    /** Composite index properties (NTS-140): the full composite, declared on one property */
+    private compositeIndex: string[] | undefined;
+
+    setCoalesce(coalesce: string | string[]) {
+        this.coalesce = coalesce
+    }
+
+    getCoalesce() {
+        return this.coalesce
+    }
+
+    setTyped(value: boolean = true) {
+        this.typed = value
+    }
+
+    isTyped() {
+        return this.typed
+    }
+
+    setCompositeUnique(properties: string[]) {
+        this.compositeUnique = properties
+    }
+
+    getCompositeUnique() {
+        return this.compositeUnique
+    }
+
+    setCompositeIndex(properties: string[]) {
+        this.compositeIndex = properties
+    }
+
+    getCompositeIndex() {
+        return this.compositeIndex
+    }
+
     setOnCreateSet(value = true) {
         this.onCreateSet = value
     }

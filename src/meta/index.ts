@@ -17,6 +17,7 @@ const METAMODEL_KEYS = new Set([
     'type', 'primary', 'unique', 'array', 'default', 'onCreateSet', 'onMatchSet',
     'alwaysSet', 'required', 'hidden', 'protected', 'readonly', 'index', 'exists',
     'fields', 'where', 'minHops', 'maxHops', 'label', 'expression', 'compute',
+    'coalesce', 'typed',
 ])
 
 export function getModels() {
@@ -73,6 +74,10 @@ export function mergeProperty(constructor: any, key: string, type: PropertyType,
         property.setUnique(true)
     }
 
+    if ( Array.isArray(config?.unique) ) {
+        property.setCompositeUnique(config.unique)
+    }
+
     if ( config?.array === true ) {
         property.setArray(true)
     }
@@ -95,6 +100,14 @@ export function mergeProperty(constructor: any, key: string, type: PropertyType,
 
     if ( config?.index === true ) {
         property.setIndex(true)
+    }
+
+    if ( Array.isArray(config?.index) ) {
+        property.setCompositeIndex(config.index)
+    }
+
+    if ( config?.typed === true ) {
+        property.setTyped(true)
     }
 
     if ( config?.exists === true ) {
@@ -146,6 +159,11 @@ export function mergeProperty(constructor: any, key: string, type: PropertyType,
 
     if ( typeof projection.compute === 'function' ) {
         property.setCompute(projection.compute as (entity: any) => unknown)
+    }
+
+    // Hydration defaults (NTS-139): literal or sibling-property coalesce
+    if ( typeof projection.coalesce === 'string' || Array.isArray(projection.coalesce) ) {
+        property.setCoalesce(projection.coalesce as string | string[])
     }
 
     // Persist every config key the metamodel has no flag for as a validation rule

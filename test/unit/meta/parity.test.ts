@@ -46,6 +46,10 @@ function properties(schema: EntitySchema) {
             default: typeof property.getDefaultValue() === 'function'
                 ? 'function'
                 : property.getDefaultValue(),
+            coalesce: property.getCoalesce(),
+            typed: property.isTyped(),
+            compositeUnique: property.getCompositeUnique(),
+            compositeIndex: property.getCompositeIndex(),
         }))
         .sort((a, b) => a.key.localeCompare(b.key));
 }
@@ -239,6 +243,28 @@ describe('decorator / map-schema parity (NTS-14)', () => {
         });
 
         expect(snapshot(ParityFlaggedPerson)).toEqual(snapshot(Person));
+    });
+
+    it('coalesce, typed and composite unique/index configs (NTS-139/140/141)', () => {
+        @NodeEntity()
+        class ParityHydratePerson {
+            @InternalId() _id: string;
+            @Property({ type: 'string', coalesce: 'public' }) visibility: string;
+            @Property({ type: 'string', coalesce: [ 'sub', 'id' ] }) handle: string;
+            @Property({ type: 'string', typed: true }) email: string;
+            @Property({ type: 'string', unique: [ 'eventId', 'email' ] }) eventId: string;
+            @Property({ type: 'string', index: [ 'city', 'region' ] }) city: string;
+        }
+
+        const Person = defineModel('ParityHydratePerson', {
+            visibility: { type: 'string', coalesce: 'public' },
+            handle: { type: 'string', coalesce: [ 'sub', 'id' ] },
+            email: { type: 'string', typed: true },
+            eventId: { type: 'string', unique: [ 'eventId', 'email' ] },
+            city: { type: 'string', index: [ 'city', 'region' ] },
+        });
+
+        expect(snapshot(ParityHydratePerson)).toEqual(snapshot(Person));
     });
 
     it('primary key falls back to <first label>_id identically', () => {

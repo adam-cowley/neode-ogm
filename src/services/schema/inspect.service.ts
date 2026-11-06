@@ -1,8 +1,15 @@
 import { ConnectionProvider } from '../../driver/types';
 import { getModels } from '../../meta';
-import { ConstraintType, schemaObjectName } from './schema.service';
+import { ConstraintType, compositeSchemaObjectName, cypherPropertyType, schemaObjectName } from './schema.service';
 import { FulltextIndexDefinition, fulltextIndexName } from './fulltext.service';
 import { VectorIndexDefinition, vectorIndexName } from './vector.service';
+
+/** Push a schema object into the declared list unless its name is already declared */
+function declared(list: SchemaObject[], object: SchemaObject): void {
+    if (!list.some((existing) => existing.name === object.name)) {
+        list.push(object);
+    }
+}
 
 export interface InspectOptions {
     /** Full-text index definitions to include in the declared set */
@@ -74,6 +81,47 @@ export function declaredSchemaObjects(options: InspectOptions = {}): {
                         labelsOrTypes: [ label ],
                         properties: [ key ],
                     });
+                }
+
+                // Property-type constraint (NTS-141), opt-in via `typed: true`
+                if (property.isTyped() && cypherPropertyType(property.getType())) {
+                    constraints.push({
+                        name: schemaObjectName(label, key, ConstraintType.PROPERTY_TYPE),
+                        type: ConstraintType.PROPERTY_TYPE,
+                        labelsOrTypes: [ label ],
+                        properties: [ key ],
+                    });
+                }
+
+                // Composite unique / index (NTS-140): the full composite is
+                // declared on one property — dedup by name when more than
+                // one of its properties declares it
+                const compositeUnique = property.getCompositeUnique();
+
+                if (compositeUnique?.length) {
+                    declared(
+                        constraints,
+                        {
+                            name: compositeSchemaObjectName(label, compositeUnique, ConstraintType.UNIQUE),
+                            type: ConstraintType.UNIQUE,
+                            labelsOrTypes: [ label ],
+                            properties: compositeUnique,
+                        }
+                    );
+                }
+
+                const compositeIndex = property.getCompositeIndex();
+
+                if (compositeIndex?.length) {
+                    declared(
+                        indexes,
+                        {
+                            name: compositeSchemaObjectName(label, compositeIndex, ConstraintType.INDEX),
+                            type: ConstraintType.INDEX,
+                            labelsOrTypes: [ label ],
+                            properties: compositeIndex,
+                        }
+                    );
                 }
             }
         }

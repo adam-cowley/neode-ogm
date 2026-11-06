@@ -6,7 +6,7 @@ import { GraphNode, GraphRelationship } from './driver/types';
 import { getModel } from './meta';
 import EntitySchema, { EntityType } from './meta/entity/entity-schema';
 import RelationshipPropertySchema from './meta/relationship-property-schema';
-import PropertySchema, { PropertyType } from './meta/property-schema';
+import PropertySchema, { PropertyType, isProjectedProperty } from './meta/property-schema';
 import Neode from './neode.service';
 import { EAGER_ID, EAGER_LABELS, EAGER_TYPE } from './query/eager-utils';
 import { ELEMENT_ID } from './constants';
@@ -193,6 +193,41 @@ function isEagerProjectionMap(value: unknown): value is EagerProjectionMap {
     );
 }
 
+/**
+ * Read-side property hydration (NTS-139): a stored/projected `null` hydrates
+ * as `undefined` — a Neo4j property is either present or absent, null never
+ * persists, so `undefined` is the honest shape for "not set" (graphacademy's
+ * `?? undefined` convention). A `coalesce` config then supplies fallbacks:
+ * a literal, or sibling property names whose first non-null value wins.
+ */
+function hydrateScalarProperty(property: PropertySchema, values: Record<string, unknown>): unknown {
+    const value = values[property.getKey()];
+
+    if (value !== null && value !== undefined) {
+        return value;
+    }
+
+    const coalesce = property.getCoalesce();
+
+    if (coalesce === undefined) {
+        return undefined;
+    }
+
+    if (typeof coalesce === 'string') {
+        return coalesce;
+    }
+
+    for (const key of coalesce) {
+        const fallback = values[key];
+
+        if (fallback !== null && fallback !== undefined) {
+            return fallback;
+        }
+    }
+
+    return undefined;
+}
+
 export function hydrateNode<T>(
     targetSchema: EntitySchema,
     targetEntity: Newable,
@@ -254,7 +289,12 @@ export function hydrateNode<T>(
                 break;
 
             default:
-                entity[property.getKey()] = properties[property.getKey()];
+                // Projected read-model values keep their raw shape — the
+                // projection layer post-processes them and a related-one
+                // miss stays null; stored scalars get hydration defaults
+                entity[property.getKey()] = isProjectedProperty(property)
+                    ? properties[property.getKey()]
+                    : hydrateScalarProperty(property, properties);
                 break;
         }
     });
@@ -386,7 +426,7 @@ export function hydrateRelationship<T>(
                 }
 
                 default:
-                    entity[key] = properties[key];
+                    entity[key] = hydrateScalarProperty(property, properties);
                     break;
             }
         });
@@ -441,7 +481,7 @@ export function hydrateRelationship<T>(
             }
 
             default:
-                value = graphRel.properties[property.getKey()];
+                value = hydrateScalarProperty(property, graphRel.properties);
                 break;
         }
 

@@ -23,6 +23,10 @@ export interface BackendCapabilities {
     edition: 'enterprise' | 'community' | 'unknown';
     /** Unique/existence constraints and indexes */
     constraints: boolean;
+    /** Composite (multi-property) unique constraints and indexes */
+    compositeConstraints: boolean;
+    /** Property-type constraints (`REQUIRE n.prop IS :: STRING`) */
+    propertyTypes: boolean;
     /** Temporal types (date, datetime, …) */
     temporals: boolean;
     /** Point type */
@@ -59,6 +63,48 @@ async function probeCapabilities(connection: ConnectionProvider): Promise<Backen
         constraints = true;
     } catch {
         constraints = false;
+    }
+
+    // Composite unique constraints: the parenthesised property list is the
+    // only spelling some engines parse, so probe exactly that syntax — and
+    // require end-to-end enforcement, not just DDL acceptance (Relate
+    // accepts the constraint but does not enforce it)
+    let compositeConstraints = false;
+
+    try {
+        await connection.run(
+            'CREATE CONSTRAINT __ogm_comp_probe__ IF NOT EXISTS FOR (n:__OgmProbe__) REQUIRE (n.__p1__, n.__p2__) IS UNIQUE'
+        );
+
+        let enforced = true;
+
+        try {
+            await connection.run("CREATE (:__OgmProbe__ { __p1__: 'x', __p2__: 'y' })");
+            await connection.run("CREATE (:__OgmProbe__ { __p1__: 'x', __p2__: 'y' })");
+            enforced = false;
+        } catch {
+            enforced = true;
+        }
+
+        await connection.run('MATCH (n:__OgmProbe__) DETACH DELETE n');
+        await connection.run('DROP CONSTRAINT __ogm_comp_probe__ IF EXISTS');
+
+        compositeConstraints = enforced;
+    } catch {
+        compositeConstraints = false;
+    }
+
+    // Property-type constraints (`IS :: TYPE`, Neo4j 5.7+)
+    let propertyTypes = false;
+
+    try {
+        await connection.run(
+            'CREATE CONSTRAINT __ogm_pt_probe__ IF NOT EXISTS FOR (n:__OgmProbe__) REQUIRE n.__probe__ IS :: STRING'
+        );
+        await connection.run('DROP CONSTRAINT __ogm_pt_probe__ IF EXISTS');
+        propertyTypes = true;
+    } catch {
+        propertyTypes = false;
     }
 
     // Temporals
@@ -145,6 +191,8 @@ async function probeCapabilities(connection: ConnectionProvider): Promise<Backen
     return {
         edition: await connection.edition(),
         constraints,
+        compositeConstraints,
+        propertyTypes,
         temporals,
         points,
         multiDatabase,

@@ -1,6 +1,6 @@
 # neode-ogm — Master Build Plan
 
-> **Status: Phases 0–4 complete, Phase 5 in flight, Phase 8 pending.** Live tracking: Linear project `neode-ogm` (team NTS). This file is the design reference; the board is the state.
+> **Status: Phases 0–8 complete (all 52 roadmap issues Done) + all 25 Wishlist issues Done.** Live tracking: Linear project `neode-ogm` (team NTS). This file is the design reference; the board is the state.
 >
 > Executed in **6 waves** of parallel subagents, dispatched strictly along the task-level dependency tree (blocked tasks never started):
 >
@@ -10,10 +10,18 @@
 > | 2 | P1.3, P1.4, P2.1, P3.1–3.3, P4.2, P6.1–6.2 | map adapter, full decorator set, EagerUtils, Zod validation, mergeOn, schema sync |
 > | 3 | P4.1, P4.3–4.9, P1.6, P6.3 | all query services, multi-degree eager, Collection/toJson, golden parity (3 parity bugs fixed), round-trips |
 > | 4 | P3.4, P4.10, P5.2, P7.1 | validation on every write path, full facade + e2e example flow, fromEnv audit, repository surface |
-> | 5 | P5.1, P5.3, P5.4, P7.2, P7.3 | batch, multi-database, events, instance methods, repository registry — **in flight** |
-> | 6 | P8.1–8.4 | bench suites, docs + migration guide, packaging + release — **pending** |
+> | 5 | P5.1, P5.3, P5.4, P7.2, P7.3 | batch, multi-database, events, instance methods, repository registry |
+> | 6 | P8.1–8.4 | bench suites, docs + migration guide, packaging + release |
 >
-> After wave 4: **530 tests green** (unit + integration on embedded Relate), strict tsc + eslint clean.
+> After wave 6: **580 tests green** (unit + integration on embedded Relate), strict tsc + eslint clean, 89.5% coverage, release checklist in docs/RELEASE.md.
+>
+> **Wishlist waves** (graphacademy-driven, NTS-122–146), same discipline:
+>
+> | Wave | Issues | Result |
+> |---|---|---|
+> | W1 | NTS-122–128, 130, 132–138, 142–144, 146 (19 issues, 6 agents) | raw-cypher escape hatch + optional hydration, per-query routing, explain/profile, query:executed; projection decorators (RelatedOne/Many, RelationshipCount/Exists, LabelPresent, Computed, Expression) with one-query-per-read; schema inspect + fulltext/vector sync + search/knn; createMany/mergeMany; paginate (offset + keyset); verifyConnectivity, cypher script runner, wipe/testId; builder predicates + orderBy expressions + labels-as-state — **790 tests green** |
+> | W2 | NTS-129, 131, 145 (3 agents) | typed error taxonomy (constraint violation w/ parsed label+property, transient classification) wired at both providers; fromEnv driver-config passthrough; nested read-model filters/sort — **841 tests green** |
+> | W3 | NTS-139, 140, 141 (1 agent) | hydration defaults (null→undefined + coalesce), composite unique/index constraints, IS :: STRING property-type constraints — **866 tests green** |
 
 Turning `neode-ogm` into a full-featured, decorator-first OGM for Neo4j with **feature parity with neode 0.4.9**, while **also supporting the classic map-based schema API**. Built test-first (red-green), with unit + integration suites and benchmarks.
 

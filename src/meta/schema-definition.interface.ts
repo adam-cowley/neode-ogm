@@ -31,7 +31,12 @@ export interface PropertyDefinition {
     array?: boolean;
     default?: DefaultValue;
     primary?: boolean;
-    unique?: boolean;
+    /**
+     * boolean: single-property unique constraint.
+     * string[]: composite unique covering exactly the listed properties
+     * (NTS-140) — declared on one property, the array is the full composite.
+     */
+    unique?: boolean | string[];
     onCreateSet?: boolean;
     onMatchSet?: boolean;
     alwaysSet?: boolean;
@@ -39,8 +44,20 @@ export interface PropertyDefinition {
     hidden?: boolean;
     protected?: boolean;
     readonly?: boolean;
-    index?: boolean;
+    /**
+     * boolean: single-property index.
+     * string[]: composite index covering exactly the listed properties (NTS-140).
+     */
+    index?: boolean | string[];
     exists?: boolean;
+    /** Opt in to a property-type constraint generated from the declared type (NTS-141): `REQUIRE n.prop IS :: STRING`. */
+    typed?: boolean;
+    /**
+     * Read-side fallbacks applied at hydration when the stored/projected
+     * value is null or absent (NTS-139, the Zod `.catch()` analogue): a
+     * literal, or sibling property names whose first non-null value wins.
+     */
+    coalesce?: string | string[];
 }
 
 /**
