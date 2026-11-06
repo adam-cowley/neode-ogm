@@ -11,6 +11,7 @@ import WhereStatement from './WhereStatement';
 import { Direction } from './Direction';
 import WithDistinctStatement from './WithDistinctStatement';
 import WithStatement from './WithStatement';
+import { AccessMode, ConnectionProvider, QueryOutput, Runner } from '../driver/types';
 
 export const mode = {
     READ: 'READ',
@@ -523,6 +524,19 @@ export default class Builder {
             .map((statement) => statement.toString(false))
             .filter((statement) => statement.length)
             .join('\n');
+    }
+
+    /**
+     * Build and run the query against the given runner (neode's
+     * Builder#execute): pass `neode.getConnection()` to run it through the
+     * connection provider, which honours the READ / WRITE mode
+     */
+    execute(runner: Runner, mode: AccessMode = 'WRITE'): Promise<QueryOutput> {
+        const { query, params } = this.build();
+
+        // A ConnectionProvider routes by mode; a bare Runner ignores the
+        // extra argument
+        return (runner as ConnectionProvider).run(query, params, mode);
     }
 
     /**

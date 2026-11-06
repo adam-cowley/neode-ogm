@@ -27,7 +27,7 @@ import {
 import { SchemaDefinition } from './meta/schema-definition.interface';
 import { EventType, NeodeEventHandler } from './common/events';
 import FindService from './services/query/find.service';
-import MergeService from './services/query/merge.service';
+import MergeService, { getMergeFields } from './services/query/merge.service';
 import CreateService from './services/query/create.service';
 import DeleteService, { DeleteOptions } from './services/query/delete.service';
 import DetachService, { DetachResult } from './services/query/detach.service';
@@ -42,6 +42,7 @@ import TransactionalService from './transaction/transactional.service';
 import TransactionError, { BatchStatementError } from './transaction/errors';
 import FindByIdService from './services/query/find-by-id.service';
 import { INTERNAL_ID } from './constants';
+import Builder from './query';
 
 export default class Neode implements INeode {
     private eventEmitter: EventEmitter = new EventEmitter();
@@ -148,6 +149,29 @@ export default class Neode implements INeode {
         }
 
         return schema.getRelationship(key);
+    }
+
+    /**
+     * Resolve a relationship by its definition KEY, falling back to the
+     * relationship TYPE (neode's relate(from, to, type) accepts either)
+     */
+    private resolveRelationship(
+        schema: EntitySchema,
+        keyOrType: string
+    ): RelationshipPropertySchema {
+        if (schema.hasRelationship(keyOrType)) {
+            return schema.getRelationship(keyOrType);
+        }
+
+        const byType = schema.getRelationships().find((rel) => rel.getType() === keyOrType);
+
+        if (byType) {
+            return byType;
+        }
+
+        throw new Error(
+            `Unknown relationship "${keyOrType}" on ${schema.getLabels().join(':') || 'entity'}`
+        );
     }
 
     /**
@@ -363,6 +387,21 @@ export default class Neode implements INeode {
         return records[0];
     }
 
+    /**
+     * Find the first node matching a key / value pair (or a property map),
+     * neode's Model.first(): sugar over getFirst()
+     */
+    async first<T>(
+        constructor: new (...args: never[]) => T,
+        key: string | Record<string, unknown>,
+        value?: unknown,
+        database?: string
+    ): Promise<T | undefined> {
+        const params = typeof key === 'object' ? key : { [ key ]: value };
+
+        return this.getFirst<T>(constructor, params, database);
+    }
+
     async save<T>(entity: T, database?: string): Promise<T> {
         const entityRecord = entity as unknown as Record<string, unknown>;
         const schema = this.getSchema(entityRecord.constructor);
@@ -470,6 +509,30 @@ export default class Neode implements INeode {
     }
 
     /**
+     * MERGE a node of the given constructor on its merge fields (the unique
+     * and indexed properties, neode's Model.merge): those present in
+     * `properties` form the match, everything else is set, with schema
+     * defaults resolving for properties not given
+     */
+    async merge<T>(
+        constructor: new (...args: never[]) => T,
+        properties: Record<string, unknown> = {},
+        database?: string
+    ): Promise<T | undefined> {
+        const schema = this.getSchema(constructor);
+
+        const mergeKeys = new Set(getMergeFields(schema).map((property) => property.getKey()));
+        const entries = Object.entries(properties);
+
+        return this.mergeOn<T>(
+            constructor,
+            Object.fromEntries(entries.filter(([ key ]) => mergeKeys.has(key))),
+            Object.fromEntries(entries.filter(([ key ]) => !mergeKeys.has(key))),
+            database
+        );
+    }
+
+    /**
      * UPDATE the given properties on a node (`+=` semantics: provided keys
      * only, matched by the entity's primary key), then re-hydrate it
      */
@@ -525,7 +588,7 @@ export default class Neode implements INeode {
         database?: string
     ): Promise<GraphRelationship | undefined> {
         const schema = this.getSchema(constructor);
-        const rel = this.requireRelationship(schema, relationshipKey);
+        const rel = this.resolveRelationship(schema, relationshipKey);
 
         const tx = await this.writeTransaction(database);
 
@@ -742,5 +805,46 @@ export default class Neode implements INeode {
 
         // Emit event
         this.eventEmitter.emit(EventType.NODE_DELETED, entity);
+    }
+
+    /**
+     * DETACH DELETE every node of the given constructor matching the given
+     * properties, returning the deleted count (neode's Model.deleteAll,
+     * extended with a count return)
+     */
+    async deleteAll<T>(
+        constructor: new (...args: never[]) => T,
+        params: Record<string, unknown> = {},
+        database?: string
+    ): Promise<number> {
+        const schema = this.getSchema(constructor);
+
+        const builder = new Builder().match('n', schema.getLabels());
+
+        Object.keys(params).forEach((key) => builder.where(`n.${key}`, params[ key ]));
+
+        const { query, params: parameters } = builder
+            .detachDelete('n')
+            .return('count(n) AS count')
+            .build();
+
+        const output = await this.writeCypher(query, parameters, database);
+
+        return Number(output.records[ 0 ].get('count'));
+    }
+
+    /**
+     * Return a new query Builder (neode parity): chain
+     * `.execute(neode.getConnection())` to run the built statement
+     */
+    query(): Builder {
+        return new Builder();
+    }
+
+    /**
+     * Close the underlying connection (neode parity)
+     */
+    close(): Promise<void> {
+        return this.connection.close();
     }
 }

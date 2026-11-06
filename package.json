@@ -4,11 +4,22 @@
   "description": "Decorator-based Object Graph Mapper for Neo4j and Cypher-compatible graph databases",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "files": [
-    "dist"
+    "dist",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
+  "sideEffects": [
+    "dist/decorators/relationship/other-node.decorator.js"
   ],
   "scripts": {
     "build": "tsc",
+    "prepublishOnly": "npm run build && npm run test:unit",
     "watch": "tsc --watch",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
@@ -30,6 +41,14 @@
   ],
   "author": "Adam Cowley",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adam-cowley/neode-ogm.git"
+  },
+  "bugs": {
+    "url": "https://github.com/adam-cowley/neode-ogm/issues"
+  },
+  "homepage": "https://github.com/adam-cowley/neode-ogm#readme",
   "engines": {
     "node": ">=20"
   },

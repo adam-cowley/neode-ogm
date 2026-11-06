@@ -28,6 +28,14 @@ export default defineConfig({
             provider: 'v8',
             include: ['src/**/*.ts'],
             exclude: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
+            reporter: ['text', 'html', 'lcov'],
+            // Baseline (full suite, Nov 2026): ~89% across all metrics.
+            thresholds: {
+                lines: 80,
+                functions: 80,
+                branches: 80,
+                statements: 80,
+            },
         },
         projects: [
             // Fast tests with no database dependency

@@ -32,6 +32,9 @@ export type {
 // Query builder
 export { Builder, Direction, toDirection } from './query';
 
+// Hydration of raw query results (P4.11 parity)
+export { hydrate, hydrateFirst, toCollection } from './hydrate';
+
 // Database drivers
 export {
     ConnectionProvider,

@@ -62,3 +62,30 @@ jobs:
             NEO4J_USERNAME: ${{ secrets.NEO4J_USERNAME }}
             NEO4J_PASSWORD: ${{ secrets.NEO4J_PASSWORD }}
             NEO4J_DATABASE: ${{ secrets.NEO4J_DATABASE }}
+
+  # Tag-triggered publish (P8.3): inert until a v* tag is pushed AND the
+  # NPM_TOKEN secret is configured. See docs/RELEASE.md before first use.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+            node-version: 22
+            registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Publish
+        run: npm publish
+        env:
+            NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
