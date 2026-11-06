@@ -5,8 +5,11 @@ import { Neo4jConnectionProvider } from './driver/neo4j';
 import { GraphNode, GraphRelationship } from './driver/types';
 import { getModel } from './meta';
 import EntitySchema, { EntityType } from './meta/entity/entity-schema';
+import RelationshipPropertySchema from './meta/relationship-property-schema';
 import PropertySchema, { PropertyType } from './meta/property-schema';
 import Neode from './neode.service';
+import { EAGER_ID, EAGER_LABELS, EAGER_TYPE } from './query/eager-utils';
+import { Direction } from './query';
 
 export function fromEnv(): Neode {
     // Load vars from .env
@@ -88,22 +91,70 @@ export interface EagerRelationship {
     other: EagerNode;
 }
 
+/**
+ * An eager projection map, as produced by the eagerNode/eagerPattern Cypher
+ * builders: node or relationship properties inline, plus the __EAGER_ID__
+ * (and __EAGER_LABELS__ / __EAGER_TYPE__) markers, plus one key per eager
+ * relationship holding the nested projection value(s).
+ */
+export type EagerProjectionMap = Record<string, unknown>;
+
+/**
+ * Eager projections are plain maps carrying the __EAGER_ID__ marker;
+ * driver node values never do.
+ */
+function isEagerProjectionMap(value: unknown): value is EagerProjectionMap {
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        !Array.isArray(value) &&
+        EAGER_ID in value
+    );
+}
+
 export function hydrateNode<T>(
     targetSchema: EntitySchema,
     targetEntity: Newable,
-    node: GraphNode,
+    node: GraphNode | EagerProjectionMap,
     eager: Record<string, EagerRelationship[]> = {}
 ): T {
     const entity = new (targetEntity as any)() as Record<string, unknown>;
 
+    // A projection map carries its properties inline with the markers and
+    // eager relationship values; a driver node keeps the plain shapes
+    const isProjection = isEagerProjectionMap(node);
+
+    let elementId: string | undefined;
+    let properties: Record<string, unknown>;
+    let eagerValues: Record<string, unknown>;
+
+    if (isProjection) {
+        elementId = (node as EagerProjectionMap)[EAGER_ID] as string | undefined;
+
+        // Everything except the reserved markers and the eager relationship
+        // keys is a node property
+        const reserved = new Set<string>([EAGER_ID, EAGER_LABELS, EAGER_TYPE]);
+        targetSchema.getRelationships().forEach((rel) => reserved.add(rel.getKey()));
+
+        properties = Object.fromEntries(
+            Object.entries(node).filter(([key]) => !reserved.has(key))
+        );
+
+        eagerValues = node;
+    } else {
+        elementId = (node as GraphNode).elementId;
+        properties = (node as GraphNode).properties;
+        eagerValues = eager;
+    }
+
     targetSchema.getProperties().forEach((property) => {
         switch (property.getType()) {
             case PropertyType.INTERNAL_ID:
-                entity[property.getKey()] = node.elementId;
+                entity[property.getKey()] = elementId;
                 break;
 
             case PropertyType.ALL_PROPERTIES:
-                entity[property.getKey()] = node.properties;
+                entity[property.getKey()] = properties;
                 break;
 
             case PropertyType.NODE:
@@ -111,7 +162,7 @@ export function hydrateNode<T>(
                 break;
 
             default:
-                entity[property.getKey()] = node.properties[property.getKey()];
+                entity[property.getKey()] = properties[property.getKey()];
                 break;
         }
     });
@@ -120,65 +171,146 @@ export function hydrateNode<T>(
     targetSchema.getRelationships().forEach((rel) => {
         const key = rel.getKey();
 
-        if (!Object.hasOwn(eager, key) || !eager[key]) return;
+        if (!Object.hasOwn(eagerValues, key) || !eagerValues[key]) return;
 
-        const value = eager[key];
+        const value = eagerValues[key];
 
         // Check type - is this a node entity or a relationship entity?
         const targetEntity = rel.getTarget();
         const targetSchema = getModel(targetEntity);
 
-        if (targetSchema.getType() === EntityType.RelationshipEntity) {
-            // If the target is a relationship entity then hydrate it differently
-            if (rel.getMany()) {
-                entity[key] = value.map((item) =>
-                    hydrateRelationship(targetSchema, targetEntity, item)
-                );
-            } else {
-                if (value.length) {
-                    entity[key] = hydrateRelationship(targetSchema, targetEntity, value[0]);
-                }
-            }
-        } else {
-            if (rel.getMany()) {
-                entity[key] = value.map((item) =>
-                    hydrateNode(targetSchema, targetEntity, item.other.node, item.other.eager)
-                );
-            } else {
-                if (value.length) {
-                    entity[key] = hydrateNode(
-                        targetSchema,
-                        targetEntity,
-                        value[0].other.node,
-                        value[0].other.eager || {}
-                    );
-                }
-            }
+        const values = (Array.isArray(value) ? value : [value]) as unknown[];
+        const hydrated = values.map((item) =>
+            targetSchema.getType() === EntityType.RelationshipEntity
+                ? hydrateRelationship(
+                      targetSchema,
+                      targetEntity,
+                      item as EagerRelationship | EagerProjectionMap,
+                      rel,
+                      entity
+                  )
+                : hydrateEagerTargetNode(targetSchema, targetEntity, item)
+        );
+
+        if (rel.getMany()) {
+            entity[key] = hydrated;
+        } else if (hydrated.length) {
+            entity[key] = hydrated[0];
         }
     });
 
     return entity as unknown as T;
 }
 
+/**
+ * Hydrate one eager value for a node-entity target. Projection maps hydrate
+ * recursively; the legacy hand-built shape ({rel, start, end, other}) hydrates
+ * from its `other` node.
+ */
+function hydrateEagerTargetNode(
+    targetSchema: EntitySchema,
+    targetEntity: Newable,
+    item: unknown
+): unknown {
+    if (isEagerProjectionMap(item)) {
+        return hydrateNode(targetSchema, targetEntity, item);
+    }
+
+    const legacy = item as EagerRelationship;
+
+    return hydrateNode(targetSchema, targetEntity, legacy.other.node, legacy.other.eager || {});
+}
+
 export function hydrateRelationship<T>(
     targetSchema: EntitySchema,
     targetEntity: Newable,
-    relObject: EagerRelationship
+    relObject: EagerRelationship | EagerProjectionMap,
+    rel?: RelationshipPropertySchema,
+    parent?: unknown
 ): T {
     const entity = new (targetEntity as any)() as Record<string, unknown>;
 
-    const { rel, start, end, other } = relObject;
+    // Eager projection shape: relationship properties inline with the
+    // __EAGER_ID__ / __EAGER_TYPE__ markers, and the node at the far end
+    // of the relationship projected under the parent relationship's key
+    if (isEagerProjectionMap(relObject)) {
+        const record = relObject;
+        const direction = rel!.getDirection();
+        const relKey = rel!.getKey();
+        const farRecord = record[relKey] as EagerProjectionMap | undefined;
+
+        const properties = Object.fromEntries(
+            Object.entries(record).filter(
+                ([key]) => key !== EAGER_ID && key !== EAGER_TYPE && key !== relKey
+            )
+        );
+
+        targetSchema.getProperties().forEach((property) => {
+            const key = property.getKey();
+
+            switch (property.getType()) {
+                case PropertyType.INTERNAL_ID:
+                    entity[key] = record[EAGER_ID];
+                    break;
+
+                case PropertyType.RELATIONSHIP:
+                    // A projection carries no driver relationship object;
+                    // the raw map is the closest equivalent
+                    entity[key] = record;
+                    break;
+
+                case PropertyType.START_NODE:
+                case PropertyType.END_NODE:
+                case PropertyType.OTHER_NODE: {
+                    // The node at the far end of the pattern is the one
+                    // projected in the map; the near node is the entity
+                    // this relationship hangs off
+                    const incoming = direction === Direction.INCOMING;
+                    const isFar =
+                        property.getType() === PropertyType.OTHER_NODE ||
+                        (property.getType() === PropertyType.START_NODE ? incoming : !incoming);
+
+                    if (!isFar) {
+                        entity[key] = parent;
+                        break;
+                    }
+
+                    if (!farRecord) {
+                        throw new Error(
+                            `Cannot hydrate ${property.getType()} property "${key}": missing node in eager data`
+                        );
+                    }
+
+                    entity[key] = hydrateNode(
+                        getModel(property.getEntity()),
+                        property.getEntity(),
+                        farRecord
+                    );
+                    break;
+                }
+
+                default:
+                    entity[key] = properties[key];
+                    break;
+            }
+        });
+
+        return entity as unknown as T;
+    }
+
+    // Legacy hand-built shape: { rel, start, end, other }
+    const { rel: graphRel, start, end, other } = relObject as EagerRelationship;
 
     targetSchema.getProperties().forEach((property) => {
         let value: unknown;
 
         switch (property.getType()) {
             case PropertyType.INTERNAL_ID:
-                value = rel.elementId;
+                value = graphRel.elementId;
                 break;
 
             case PropertyType.RELATIONSHIP:
-                value = rel;
+                value = graphRel;
                 break;
 
             case PropertyType.START_NODE:
@@ -213,7 +345,7 @@ export function hydrateRelationship<T>(
             }
 
             default:
-                value = rel.properties[property.getKey()];
+                value = graphRel.properties[property.getKey()];
                 break;
         }
 

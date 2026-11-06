@@ -298,7 +298,7 @@ async function main() {
 
     for (const issue of existing.issues.nodes) {
         const phaseMatch = issue.title.match(/^Phase (\d):/);
-        const taskMatch = issue.title.match(/^(P\d\.\d+)\b/);
+        const taskMatch = issue.title.match(/^(P\d+\.\d+)\s*[—–-]/);
 
         if (phaseMatch) issueIds[`P${phaseMatch[1]}`] = issue.id;
         if (taskMatch) issueIds[taskMatch[1]] = issue.id;

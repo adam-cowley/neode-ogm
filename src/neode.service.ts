@@ -24,6 +24,7 @@ import { SchemaDefinition } from './meta/schema-definition.interface';
 import { EventType } from './common/events';
 import FindService from './services/query/find.service';
 import MergeService from './services/query/merge.service';
+import CreateService from './services/query/create.service';
 import DeleteService from './services/query/delete.service';
 import INeode from './neode.interface';
 import GetService from './services/query/get.service';
@@ -280,6 +281,49 @@ export default class Neode implements INeode {
         this.eventEmitter.emit(EventType.NODE_CREATED, res);
 
         return res;
+    }
+
+    /**
+     * CREATE a new entity of the given constructor with the given properties
+     * (nested relationship targets included), then hydrate the created node
+     */
+    async create<T>(
+        constructor: new (...args: never[]) => T,
+        properties: Record<string, unknown> = {},
+        database?: string
+    ): Promise<T> {
+        const schema = this.getSchema(constructor);
+
+        const tx = await this.writeTransaction(database);
+
+        try {
+            const entity = new constructor() as unknown as Record<string, unknown>;
+
+            Object.assign(entity, properties);
+
+            const createService = new CreateService(tx);
+
+            const { elementId } = await createService.create(schema, entity);
+
+            const findService = new FindByIdService(tx);
+
+            const hydrated = await findService.find(constructor, schema, elementId);
+
+            if (!hydrated) {
+                throw new Error('Entity was created but could not be found immediately afterwards');
+            }
+
+            await tx.commit();
+
+            // Emit event
+            this.eventEmitter.emit(EventType.NODE_CREATED, hydrated);
+
+            return hydrated as T;
+        } catch (error) {
+            await tx.rollback();
+
+            throw error;
+        }
     }
 
     /**

@@ -9,6 +9,7 @@ export default function Number(config: PropertyConfig = {}) {
     return function(target: unknown, propertyKey: string, _descriptor?: unknown): void {
         const constructor = (target as { constructor: object }).constructor
 
-        mergeProperty(constructor, propertyKey, PropertyType.INTEGER, config)
+        // NUMBER (int/integer are the INTEGER spellings, see @Property and the map API)
+        mergeProperty(constructor, propertyKey, PropertyType.NUMBER, config)
     }
 }

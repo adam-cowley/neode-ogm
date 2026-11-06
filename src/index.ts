@@ -6,6 +6,8 @@ export { fromEnv } from './utils';
 export { default as Repository } from './repository';
 export { default as TransactionalService } from './transaction/transactional.service';
 export { registerRepository, getRepository } from './meta';
+export { default as Collection } from './collection';
+export { toJson, valueToJson } from './serialise';
 
 // Map-based schema definitions
 export {

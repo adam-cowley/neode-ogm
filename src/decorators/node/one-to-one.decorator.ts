@@ -5,7 +5,9 @@ export default function OneToOne(config: RelationshipConfig) {
     return function(target: any, propertyKey: string, _descriptor?: any): void {
         const constructor = target.constructor
 
-        const entity = Reflect.getMetadata("design:type", target, propertyKey)
+        // An explicit target() overrides design:type, which SWC cannot emit for
+        // self-referential property types (it falls back to Object)
+        const entity = config.target?.() ?? Reflect.getMetadata("design:type", target, propertyKey)
 
         // Merge Property Key
         mergeRelationshipProperty(

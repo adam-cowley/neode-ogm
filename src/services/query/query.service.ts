@@ -2,8 +2,9 @@ import { Newable } from "../../meta/newable";
 import Builder from '../../query';
 import { Runner } from '../../driver/types';
 import { GraphNode } from '../../driver/types';
-import { EagerRelationship, hydrateNode } from '../../utils';
+import { hydrateNode } from '../../utils';
 import { THIS_NODE } from '../../constants';
+import { eagerNode } from '../../query/eager-utils';
 import EntitySchema from '../../meta/entity/entity-schema';
 
 export default class QueryService {
@@ -26,25 +27,14 @@ export default class QueryService {
         skip?: number,
         limit?: number
     ): Promise<T[]> {
-        // Return
-        builder.return(THIS_NODE);
-
-        // Eager Loading
-        schema.getRelationships().forEach((rel) => {
-            const key = rel.getKey();
-
-            // TODO: Nested eager statements inside `other: { eager: { ... } }`
-            if (rel.getEager()) {
-                builder.return(
-                    `[ (${THIS_NODE})${rel.toString(key)}(other) | {
-                        rel: ${key},
-                        start: { node: startNode(${key}) },
-                        end: { node: endNode(${key}) },
-                        other: { node: other }
-                    }] AS ${key}`
-                );
-            }
-        });
+        // Eager Loading: when the schema declares eager relationships the
+        // root node is returned as a map projection nesting an eager pattern
+        // comprehension per relationship, up to MAX_EAGER_DEPTH degrees deep
+        if (schema.getRelationships().some((rel) => rel.getEager())) {
+            builder.return(`${eagerNode(1, THIS_NODE, schema)} AS ${THIS_NODE}`);
+        } else {
+            builder.return(THIS_NODE);
+        }
 
         // Skip and limit
         if (skip) builder.skip(skip);
@@ -69,16 +59,11 @@ export default class QueryService {
         schema: EntitySchema
     ): Promise<T[]> {
         return Promise.all(
-            res.records.map(async (row) => {
-                const node = row.get(THIS_NODE) as GraphNode;
-                const eager = Object.fromEntries(
-                    row.keys
-                        .filter((key) => key !== THIS_NODE)
-                        .map((key) => [key, row.get(key)])
-                ) as Record<string, EagerRelationship[]>;
-
-                return hydrateNode<T>(schema, constructor, node, eager);
-            })
+            res.records.map(async (row) =>
+                // With eager relationships the root column is a projection
+                // map carrying its own eager values, without them a plain node
+                hydrateNode<T>(schema, constructor, row.get(THIS_NODE) as GraphNode)
+            )
         );
     }
 }
