@@ -28,6 +28,11 @@ Full form property definition, mirroring neode's schema object options.
 */
 export interface PropertyDefinition {
   type: PropertyTypeName
+  /**
+  Free-text explanation of the property for LLM-agent-facing ontology
+  emission (NTS-445): surfaced by `ontology()` / `ontologyMarkdown()`.
+  */
+  description?: string
   array?: boolean
   default?: DefaultValue
   primary?: boolean
@@ -62,6 +67,14 @@ export interface PropertyDefinition {
   literal, or sibling property names whose first non-null value wins.
   */
   coalesce?: string | string[]
+  /**
+  Per-property fake data generator (NTS-444): user-supplied, no faker
+  dependency. Invoked by factory seeding (and the create path) when
+  neither an explicit value nor `default` applies — precedence on
+  create is explicit value > `default` > `fake`, and generated values
+  are validated like any other write.
+  */
+  fake?: () => unknown
 }
 
 /**
@@ -72,6 +85,11 @@ one, 'relationships'/'nodes' for many).
 */
 export interface RelationshipDefinition {
   type: 'relationship' | 'relationships' | 'node' | 'nodes'
+  /**
+  Free-text explanation of the relationship for LLM-agent-facing ontology
+  emission (NTS-445): surfaced by `ontology()` / `ontologyMarkdown()`.
+  */
+  description?: string
   /**
   Neo4j relationship type, e.g. 'KNOWS'
   */
@@ -189,5 +207,10 @@ values may be shorthand type names (`age: 'number'`) or full definitions.
 */
 export interface SchemaDefinition {
   labels?: string[]
-  [key: string]: SchemaDefinitionEntry | string[] | undefined
+  /**
+  Free-text explanation of the model for LLM-agent-facing ontology
+  emission (NTS-445): surfaced by `ontology()` / `ontologyMarkdown()`.
+  */
+  description?: string
+  [key: string]: SchemaDefinitionEntry | string[] | string | undefined
 }

@@ -44,6 +44,21 @@ export default interface PropertyConfig {
   coalesce?: string | string[]
 
   /**
+  Free-text explanation of the property for LLM-agent-facing ontology
+  emission (NTS-445): surfaced by `ontology()` / `ontologyMarkdown()`.
+  */
+  description?: string
+
+  /**
+  Per-property fake data generator (NTS-444): user-supplied, no faker
+  dependency. Invoked by factory seeding (and the create path) when
+  neither an explicit value nor `default` applies — precedence on
+  create is explicit value > `default` > `fake`, and generated values
+  are validated like any other write.
+  */
+  fake?: () => unknown
+
+  /**
   neode validation rules (min, max, email, regex, …) — persisted as-is
   */
   [rule: string]: unknown

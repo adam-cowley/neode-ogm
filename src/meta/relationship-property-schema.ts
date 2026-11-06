@@ -15,6 +15,11 @@ export default class RelationshipPropertySchema {
   private many!: boolean
   private eager = false
 
+  /**
+  Free-text explanation emitted by the agent ontology (NTS-445)
+  */
+  private description: string | undefined
+
   constructor(key: string) {
     this.key = key
   }
@@ -67,6 +72,14 @@ export default class RelationshipPropertySchema {
 
   getEager() {
     return this.eager
+  }
+
+  setDescription(description: string) {
+    this.description = description
+  }
+
+  getDescription() {
+    return this.description
   }
 
   toString(relAlias = '') {

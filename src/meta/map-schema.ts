@@ -221,6 +221,7 @@ function wireRelationshipModel(
     toDirection(definition.direction),
     definition.type === 'relationships' || definition.type === 'nodes',
     definition.eager,
+    definition.description,
   )
 }
 
@@ -286,6 +287,11 @@ export function defineModel(name: string, schema: SchemaDefinition): Newable {
 
   model.setLabels(schema.labels || [name])
 
+  // Agent-facing model explanation (NTS-445) — never a property
+  if (schema.description !== undefined) {
+    model.setDescription(schema.description)
+  }
+
   // Every node carries an internal id (parity with neode Node._id / @InternalId)
   if (!Object.hasOwn(schema, '_id')) {
     mergeProperty(constructor, '_id', PropertyType.INTERNAL_ID)
@@ -295,7 +301,7 @@ export function defineModel(name: string, schema: SchemaDefinition): Newable {
   definitionsByName.set(name, schema)
 
   for (const [key, value] of Object.entries(schema)) {
-    if (key === 'labels' || value === undefined) {
+    if (key === 'labels' || key === 'description' || value === undefined) {
       continue
     }
 

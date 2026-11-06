@@ -8,6 +8,7 @@ export default function OneToMany(
   type?: string,
   direction?: Direction,
   eager?: boolean,
+  description?: string,
 ) {
   return function (_value: undefined, context: ClassFieldDecoratorContext): void {
     const propertyKey = memberName(context)
@@ -22,6 +23,7 @@ export default function OneToMany(
         direction ?? Direction.BOTH,
         true,
         eager,
+        description,
       )
     })
   }

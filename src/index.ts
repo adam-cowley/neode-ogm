@@ -131,6 +131,28 @@ export type { WipeTarget } from './testing/index.js'
 // Query builder additions (NTS-143/144/128)
 export { WhereNull, LabelPredicate } from './query/index.js'
 
+// Schema drift workflow (NTS-450)
+export { schemaDrift, formatSchemaDrift, applySchemaDrift } from './services/schema/drift.service.js'
+export type {
+  SchemaDrift,
+  SchemaDriftGroup,
+  SchemaDriftEntry,
+  ApplySchemaDiffOptions,
+} from './services/schema/drift.service.js'
+
+// Agent ontology (NTS-445)
+export { ontology, ontologyMarkdown } from './meta/ontology.js'
+export type {
+  Ontology,
+  EntityOntology,
+  PropertyOntology,
+  RelationshipOntology,
+} from './meta/ontology.js'
+
+// Factories & seeding (NTS-444)
+export { default as FactoryBuilder } from './services/factory.service.js'
+export type { FactoryWithSpec } from './services/factory.service.js'
+
 export * from './decorators/index.js'
 
 export {default} from './neode.service.js'

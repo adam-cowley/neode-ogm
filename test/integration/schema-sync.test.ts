@@ -10,16 +10,16 @@ import { openBackend, TestBackend } from './support/backend'
 @NodeEntity()
 class SchemaPerson {
   @InternalId()
-  _id: string
+  _id!: string
 
   @Uuid({ primary: true })
-  id: string
+  id!: string
 
   @String({ index: true })
-  email: string
+  email!: string
 
   @String({ exists: true })
-  title: string
+  title!: string
 }
 
 // The model registers itself via the decorators above

@@ -10,4 +10,9 @@ export default interface RelationshipConfig {
   target: () => Newable
   direction: Direction
   eager?: boolean
+  /**
+  Free-text explanation of the relationship for LLM-agent-facing ontology
+  emission (NTS-445): surfaced by `ontology()` / `ontologyMarkdown()`.
+  */
+  description?: string
 }

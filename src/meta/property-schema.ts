@@ -102,6 +102,11 @@ export default class PropertySchema {
   private alwaysSet = false
   private fulltext = false
 
+  /**
+  Free-text explanation emitted by the agent ontology (NTS-445)
+  */
+  private description: string | undefined
+
   private entity!: Newable
 
   /**
@@ -230,6 +235,13 @@ export default class PropertySchema {
   */
   private compositeIndex: string[] | undefined
 
+  /**
+  Per-property fake data generator (NTS-444): user-supplied, no faker
+  dependency. Invoked on the create path when neither an explicit value
+  nor `default` applies (precedence: explicit > default > fake).
+  */
+  private fake: (() => unknown) | undefined
+
   setCoalesce(coalesce: string | string[]) {
     this.coalesce = coalesce
   }
@@ -262,6 +274,14 @@ export default class PropertySchema {
     return this.compositeIndex
   }
 
+  setFake(fake: () => unknown) {
+    this.fake = fake
+  }
+
+  getFake() {
+    return this.fake
+  }
+
   setOnCreateSet(value = true) {
     this.onCreateSet = value
   }
@@ -292,6 +312,14 @@ export default class PropertySchema {
 
   getFulltext() {
     return this.fulltext
+  }
+
+  setDescription(description: string) {
+    this.description = description
+  }
+
+  getDescription() {
+    return this.description
   }
 
   setEntity(entity: Newable) {

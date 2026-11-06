@@ -43,6 +43,8 @@ const METAMODEL_KEYS = new Set([
   'compute',
   'coalesce',
   'typed',
+  'description',
+  'fake',
 ])
 
 export function getModels() {
@@ -171,6 +173,11 @@ export function mergeProperty(
     property.setFulltext(true)
   }
 
+  // Agent-facing property explanation (NTS-445)
+  if (typeof config?.description === 'string') {
+    property.setDescription(config.description)
+  }
+
   // Read-model projection config (NTS-135/136/137/138)
   const projection = config as Record<string, unknown>
 
@@ -207,6 +214,11 @@ export function mergeProperty(
     property.setCoalesce(projection['coalesce'] as string | string[])
   }
 
+  // Factory seeding (NTS-444): per-property fake data generator
+  if (typeof projection['fake'] === 'function') {
+    property.setFake(projection['fake'] as () => unknown)
+  }
+
   // Persist every config key the metamodel has no flag for as a validation rule
   property.setRules(
     Object.fromEntries(Object.entries(config).filter(([key]) => !METAMODEL_KEYS.has(key))),
@@ -223,6 +235,7 @@ export function mergeRelationshipProperty(
   direction: Direction,
   many: boolean,
   eager?: boolean,
+  description?: string,
 ): RelationshipPropertySchema {
   mergeModel(constructor)
 
@@ -237,6 +250,11 @@ export function mergeRelationshipProperty(
   rel.setTarget(target)
   rel.setMany(many)
   rel.setEager(eager || false)
+
+  // Agent-facing relationship explanation (NTS-445)
+  if (description !== undefined) {
+    rel.setDescription(description)
+  }
 
   return rel
 }

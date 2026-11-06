@@ -17,6 +17,11 @@ export default class EntitySchema {
   private objectConstructor!: Newable
   protected entityType: EntityType = EntityType.NodeEntity
 
+  /**
+  Free-text explanation emitted by the agent ontology (NTS-445)
+  */
+  private description: string | undefined
+
   constructor(entityType: EntityType = EntityType.NodeEntity) {
     this.entityType = entityType
   }
@@ -31,6 +36,14 @@ export default class EntitySchema {
 
   addLabel(label: string) {
     this.setLabels([...this.labels, label])
+  }
+
+  setDescription(description: string) {
+    this.description = description
+  }
+
+  getDescription() {
+    return this.description
   }
 
   addRelationship(key: string) {

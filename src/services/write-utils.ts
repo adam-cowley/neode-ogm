@@ -60,6 +60,57 @@ export function modelPropertyValues(model: object, schema: EntitySchema): Record
 }
 
 /**
+Resolve the model's `fake` generators (NTS-444) onto the model as
+explicit values, so validation and the write observe the same value.
+Create-path precedence: explicit value > `default` > `fake` — a fake
+only runs when both the model and the schema default leave the
+property unset.
+*/
+export function applyFakeValues(schema: EntitySchema, model: object): void {
+  for (const property of schema.getProperties()) {
+    // Projected read-model values (counts, DTOs, computed) are never written
+    if (isProjectedProperty(property)) {continue}
+
+    const key = property.getKey()
+
+    if (Object.hasOwn(model, key) && (model as Record<string, unknown>)[key] !== undefined) {
+      continue
+    }
+
+    if (getValueOrDefault(model, property, schema) !== undefined) {
+      continue
+    }
+
+    const fake = property.getFake()
+
+    if (typeof fake === 'function') {
+      ;(model as Record<string, unknown>)[key] = fake()
+    }
+  }
+}
+
+/**
+Explicit value, then schema default, then the property's `fake`
+generator (NTS-444) — the create-path value for nested relationship
+targets, whose fakes cannot be resolved on the root model up front
+*/
+function valueWithFake(
+  model: object,
+  property: PropertySchema,
+  schema: EntitySchema,
+): unknown {
+  const value = getValueOrDefault(model, property, schema)
+
+  if (value !== undefined) {
+    return value
+  }
+
+  const fake = property.getFake()
+
+  return typeof fake === 'function' ? fake() : undefined
+}
+
+/**
 CREATE (this:Label { ... }) RETURN elementId(this) AS __id
 
 neode parity (WriteUtils.splitProperties in create mode): every property
@@ -80,7 +131,7 @@ async function createNode(runner: Runner, schema: EntitySchema, model: object): 
       continue
     }
 
-    const value = getValueOrDefault(model, property, schema)
+    const value = valueWithFake(model, property, schema)
 
     if (value !== undefined && value !== null) {
       properties[property.getKey()] = value

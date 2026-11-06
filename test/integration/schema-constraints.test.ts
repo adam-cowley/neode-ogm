@@ -13,32 +13,32 @@ import Repository from '../../src/repository'
 @NodeEntity()
 class SyncEvent {
   @InternalId()
-  _id: string
+  _id!: string
 
   @Uuid({ primary: true })
-  id: string
+  id!: string
 
   // composite unique: the array lists the FULL composite (NTS-140)
   @Property({ type: 'string', unique: ['eventId', 'email'] })
   eventId: string
 
   @Property({ type: 'string' })
-  email: string
+  email!: string
 
   // composite index (NTS-140)
   @Property({ type: 'string', index: ['city', 'region'] })
-  city: string
+  city!: string
 
   @Property({ type: 'string' })
-  region: string
+  region!: string
 
   // property-type constraint (NTS-141)
   @Property({ type: 'string', typed: true })
-  title: string
+  title!: string
 
   // read-side coalesce (NTS-139)
   @Property({ type: 'string', coalesce: 'public' })
-  visibility: string
+  visibility!: string
 }
 
 void SyncEvent

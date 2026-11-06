@@ -1,6 +1,9 @@
 import { NodeEntity, Uuid, String, InternalId } from '../../src/decorators'
+import { getModel } from '../../src/meta'
 import { ConstraintType } from '../../src/services/schema/schema.service'
 import { openBackend, TestBackend } from './support/backend'
+
+
 
 // ---- Fixtures (per-file: decorator registry is global per module registry) --
 // A constraint and a plain index cannot co-exist on the same label/property,
@@ -9,28 +12,28 @@ import { openBackend, TestBackend } from './support/backend'
 @NodeEntity()
 class RoundtripPerson {
   @InternalId()
-  _id: string
+  _id!: string
 
   @Uuid({ primary: true })
-  id: string
+  id!: string
 
   @String({ unique: true })
-  email: string
+  email!: string
 
   @String({ index: true })
-  city: string
+  city!: string
 
   @String({ exists: true })
-  title: string
+  title!: string
 }
 
 @NodeEntity({ labels: ['RoundtripAlpha', 'RoundtripBeta'] })
 class RoundtripMultiLabel {
   @InternalId()
-  _id: string
+  _id!: string
 
   @Uuid({ primary: true })
-  id: string
+  id!: string
 }
 
 // The models register themselves via the decorators above

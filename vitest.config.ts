@@ -27,13 +27,16 @@ export default defineConfig({
             },
 
             // Tests against a real graph database:
-            // Relate (embedded, default) or Neo4j / Memgraph via Bolt (env vars)
+            // Relate (embedded, default) or Neo4j / Memgraph via Bolt (env vars).
+            // Files share one in-process engine, so they must not race each
+            // other's schema installs (wipe() drops every constraint).
             {
                 test: {
                     name: 'integration',
                     include: ['test/integration/**/*.test.ts'],
                     setupFiles: ['./test/integration/setup.ts'],
                     testTimeout: 30000,
+                    fileParallelism: false,
                     globals: true,
                 },
             },

@@ -24,6 +24,7 @@ import type { Newable } from './meta/newable.js'
 import type EntitySchema from './meta/entity/entity-schema.js'
 import type RelationshipPropertySchema from './meta/relationship-property-schema.js'
 import { defineModel, extendModel, getModelByName, unknownDefinitionError } from './meta/map-schema.js'
+import { ontology, ontologyMarkdown, type Ontology } from './meta/ontology.js'
 import type { SchemaDefinition } from './meta/schema-definition.interface.js'
 import { EventType, type NeodeEventHandler } from './common/events.js'
 import FindService from './services/query/find.service.js'
@@ -45,8 +46,16 @@ import { INTERNAL_ID } from './constants.js'
 import { elementIdOfEntity } from './utils.js'
 import Builder from './query/index.js'
 import { search, type ScoredEntity } from './services/query/search.service.js'
+import FactoryBuilder from './services/factory.service.js'
 import { knn, type KnnMode } from './services/query/knn.service.js'
 import { inspectSchema, type InspectOptions, type SchemaInspection } from './services/schema/inspect.service.js'
+import {
+  type ApplySchemaDiffOptions,
+  applySchemaDrift,
+  formatSchemaDrift,
+  type SchemaDrift,
+  schemaDrift,
+} from './services/schema/drift.service.js'
 import FulltextIndexService, { type FulltextIndexDefinition } from './services/schema/fulltext.service.js'
 import VectorIndexService, { type VectorIndexDefinition } from './services/schema/vector.service.js'
 import BulkService, { type BulkChunk, type BulkOptions } from './services/query/bulk.service.js'
@@ -846,12 +855,60 @@ export default class Neode implements INeode {
   }
 
   /**
+  Agent-readable ontology over every registered model in JSON form
+  (NTS-445) — entities with their labels, descriptions, properties and
+  relationships, for LLM consumers
+  */
+  ontology(): Ontology {
+    return ontology()
+  }
+
+  /**
+  Agent-readable ontology over every registered model, rendered as
+  prompt-ready markdown (NTS-445)
+  */
+  ontologyMarkdown(): string {
+    return ontologyMarkdown()
+  }
+
+  /**
   Read the installed database schema (SHOW CONSTRAINTS / SHOW INDEXES)
   and diff it against the declared schema of the registered models
   (NTS-142)
   */
   async inspectSchema(options: InspectOptions = {}): Promise<SchemaInspection> {
     return inspectSchema(this.connection, { enterprise: this.enterprise, ...options })
+  }
+
+  /**
+  Structured schema drift: the declared-vs-installed constraints and
+  every index kind (range/text/fulltext/vector), each entry carrying
+  the exact fix statement (NTS-450). Drift is data, not an error —
+  this never throws on drift; failing a CI run on a non-empty diff is
+  the caller's job.
+  */
+  async schemaDiff(options: InspectOptions = {}): Promise<SchemaDrift> {
+    return schemaDrift(this.connection, { enterprise: this.enterprise, ...options })
+  }
+
+  /**
+  Human-readable schema drift report, grouped by missing / stale /
+  mismatched with the fix statement per line (NTS-450)
+  */
+  formatSchemaDiff(diff: SchemaDrift): string {
+    return formatSchemaDrift(diff)
+  }
+
+  /**
+  Apply the missing objects of a schema drift idempotently; stale
+  objects are only dropped with `dropStale: true` (dropping is
+  destructive). Reports each statement like installSchema (NTS-450)
+  */
+  async applySchemaDiff(
+    diff: SchemaDrift,
+    options: ApplySchemaDiffOptions = {},
+  ): Promise<SchemaResult[]> {
+    return applySchemaDrift(this.connection, diff, options)
   }
 
   /**
@@ -1035,6 +1092,18 @@ export default class Neode implements INeode {
 
       throw error
     }
+  }
+
+  /**
+  A factory builder for seeding fake data (NTS-444): chain `.count(n)`,
+  `.with(relationshipName, { count, properties })` and
+  `.create(overrides)`. Accepts a model name (map-defined via model()
+  / with()) or a decorated model class.
+  */
+  factory<T extends object>(model: new (...arguments_: never[]) => T): FactoryBuilder<T>
+  factory(model: string | Newable): FactoryBuilder
+  factory(model: string | Newable): FactoryBuilder {
+    return new FactoryBuilder(this, model)
   }
 
   /**

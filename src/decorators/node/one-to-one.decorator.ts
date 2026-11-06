@@ -17,6 +17,7 @@ export default function OneToOne(config: RelationshipConfig) {
         config.direction,
         false,
         config.eager,
+        config.description,
       )
     })
   }
