@@ -2,6 +2,7 @@ import { GraphNode, QueryOutput, QueryRecord } from './driver/types';
 import { getModel } from './meta';
 import EntitySchema from './meta/entity/entity-schema';
 import { EagerRelationship, hydrateNode } from './utils';
+import { WithMethods } from './entity-methods';
 import Collection from './collection';
 
 export { hydrateProjection } from './projection';
@@ -46,13 +47,15 @@ export function hydrate<T>(
     constructor: new (...args: never[]) => T,
     output: QueryOutput,
     alias = DEFAULT_ALIAS
-): T[] {
+): WithMethods<T>[] {
     const schema = requireSchema(constructor);
 
     return output.records
         .filter((row) => row.has(alias) && row.get(alias) != null)
         .map((row) =>
-            hydrateNode<T>(schema, constructor, row.get(alias) as GraphNode, eagerColumns(row, alias))
+            // Hydration wires the active-record methods onto the prototype —
+            // the returned instance IS a WithMethods<T>
+            hydrateNode<T>(schema, constructor, row.get(alias) as GraphNode, eagerColumns(row, alias)) as WithMethods<T>
         );
 }
 
@@ -64,7 +67,7 @@ export function hydrateFirst<T>(
     constructor: new (...args: never[]) => T,
     output: QueryOutput,
     alias = DEFAULT_ALIAS
-): T | undefined {
+): WithMethods<T> | undefined {
     return hydrate<T>(constructor, output, alias)[ 0 ];
 }
 

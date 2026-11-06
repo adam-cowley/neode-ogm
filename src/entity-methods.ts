@@ -17,7 +17,7 @@ import type { DeleteOptions } from './services/query/delete.service';
 import type { DetachResult } from './services/query/detach.service';
 import type { GraphRelationship } from './driver/types';
 import { getModel } from './meta';
-import { PropertyType } from './meta/property-schema';
+import { elementIdOfEntity } from './utils';
 import { toJson } from './serialise';
 
 /**
@@ -51,7 +51,7 @@ function constructorOf(entity: object): new (...args: never[]) => object {
 }
 
 /**
- * The elementId of a hydrated entity (carried by its InternalId property)
+ * The elementId of a hydrated entity
  */
 function elementIdOf(entity: object): string {
     const schema = getModel(constructorOf(entity));
@@ -60,18 +60,13 @@ function elementIdOf(entity: object): string {
         throw new Error('Entity is not a registered model — cannot resolve its elementId');
     }
 
-    const idKey = schema
-        .getProperties()
-        .find((property) => property.getType() === PropertyType.INTERNAL_ID)
-        ?.getKey();
-
-    const elementId = idKey ? (entity as Record<string, unknown>)[idKey] : undefined;
+    const elementId = elementIdOfEntity(schema, entity);
 
     if (!elementId) {
         throw new Error('Entity has no elementId — save() it before changing its labels');
     }
 
-    return elementId as string;
+    return elementId;
 }
 
 /**
@@ -133,6 +128,9 @@ export interface EntityMethods {
 
     /** Remove the relationship of the given key between this entity and other */
     detachFrom<To extends object>(other: To, relationshipKey: string): Promise<DetachResult<this, To>>;
+
+    /** JSON-safe serialisation of this entity (properties, labels, elementId) */
+    toJson(): Record<string, unknown>;
 }
 
 /**
@@ -141,7 +139,7 @@ export interface EntityMethods {
  * regardless — this is only for type-checking, since declaration merging
  * onto arbitrary user classes is not possible.
  */
-export type WithMethods<T extends object> = T & EntityMethods;
+export type WithMethods<T> = T & EntityMethods;
 
 /**
  * The runtime implementations (this-typed, attached to the prototype)

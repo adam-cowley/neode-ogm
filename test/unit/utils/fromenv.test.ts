@@ -210,6 +210,28 @@ describe('configFromEnv', () => {
         expect(env.config).toEqual({});
         expect(warn).toHaveBeenCalledTimes(2);
     });
+
+    it('merges extra driver config over the env-derived config', () => {
+        const env = configFromEnv(
+            { NEO4J_MAX_CONNECTION_POOLSIZE: '11' },
+            { maxConnectionPoolSize: 99, disableLosslessIntegers: true }
+        );
+
+        expect(env.config).toEqual({ maxConnectionPoolSize: 99, disableLosslessIntegers: true });
+    });
+
+    it('skips undefined entries in the extra config so env-derived values survive', () => {
+        const env = configFromEnv(
+            { NEO4J_MAX_CONNECTION_POOLSIZE: '11' },
+            { maxConnectionPoolSize: undefined }
+        );
+
+        expect(env.config).toEqual({ maxConnectionPoolSize: 11 });
+    });
+
+    it('treats an empty extra config as no overrides', () => {
+        expect(configFromEnv({}, {}).config).toEqual({});
+    });
 });
 
 describe('fromEnv', () => {
@@ -235,5 +257,41 @@ describe('fromEnv', () => {
             database?: string;
         };
         expect(connection.database).toEqual('env-db');
+    });
+
+    it('passes arbitrary driver config through to the neo4j driver constructor', () => {
+        process.env.NEO4J_URI = 'neo4j://env-host:7688';
+
+        fromEnv({ disableLosslessIntegers: true, connectionTimeout: 1234 });
+
+        expect(neo4j.driver).toHaveBeenCalledWith(
+            'neo4j://env-host:7688',
+            undefined,
+            { disableLosslessIntegers: true, connectionTimeout: 1234 }
+        );
+    });
+
+    it('lets explicit driver config win over env-derived values', () => {
+        process.env.NEO4J_MAX_CONNECTION_POOLSIZE = '11';
+
+        fromEnv({ maxConnectionPoolSize: 99 });
+
+        expect(neo4j.driver).toHaveBeenCalledWith(
+            expect.any(String),
+            undefined,
+            { maxConnectionPoolSize: 99 }
+        );
+    });
+
+    it('keeps env-derived config the explicit driver config does not set', () => {
+        process.env.NEO4J_MAX_CONNECTION_POOLSIZE = '11';
+
+        fromEnv({ disableLosslessIntegers: true });
+
+        expect(neo4j.driver).toHaveBeenCalledWith(
+            expect.any(String),
+            undefined,
+            { maxConnectionPoolSize: 11, disableLosslessIntegers: true }
+        );
     });
 });

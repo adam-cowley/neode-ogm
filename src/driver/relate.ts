@@ -207,6 +207,21 @@ export function normalizeRelateValue(value: unknown): unknown {
     return value;
 }
 
+import { classifyError } from '../errors';
+
+/**
+ * The Relate JS client rejects with RelateError carrying the Neo4j error
+ * code — classify it into the taxonomy (NTS-129) so both backends surface
+ * typed errors
+ */
+async function classified<T>(promise: Promise<T>): Promise<T> {
+    try {
+        return await promise;
+    } catch (error) {
+        throw classifyError(error);
+    }
+}
+
 class RelateTransactionHandle implements TransactionHandle {
     private open = true;
 
@@ -220,7 +235,9 @@ class RelateTransactionHandle implements TransactionHandle {
             throw new Error('Transaction has already been closed');
         }
 
-        const result = await this.connection.queryAsync(statement, parameters);
+        const result = await classified(
+            this.connection.queryAsync(statement, parameters)
+        );
 
         return {
             records: result.rows.map(
@@ -236,7 +253,13 @@ class RelateTransactionHandle implements TransactionHandle {
         }
 
         this.open = false;
-        this.connection.commit();
+
+        try {
+            this.connection.commit();
+        } catch (error) {
+            throw classifyError(error);
+        }
+
         this.release();
     }
 
@@ -246,7 +269,13 @@ class RelateTransactionHandle implements TransactionHandle {
         }
 
         this.open = false;
-        this.connection.rollback();
+
+        try {
+            this.connection.rollback();
+        } catch (error) {
+            throw classifyError(error);
+        }
+
         this.release();
     }
 }
@@ -288,7 +317,9 @@ export class RelateConnectionProvider implements ConnectionProvider {
             );
         }
 
-        const result = await this.connection.queryAsync(statement, parameters);
+        const result = await classified(
+            this.connection.queryAsync(statement, parameters)
+        );
 
         return {
             records: result.rows.map((row) => new RelateQueryRecord(result.columns, row)),

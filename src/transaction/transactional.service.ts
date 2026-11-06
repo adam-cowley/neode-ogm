@@ -3,7 +3,7 @@ import { GraphRelationship, QueryOutput, QueryParams, Runner, TransactionHandle 
 import { EventType } from '../common/events';
 import { getModel, getModels } from '../meta';
 import EntitySchema from '../meta/entity/entity-schema';
-import { PropertyType } from '../meta/property-schema';
+import { elementIdOfEntity } from '../utils';
 import RelationshipPropertySchema from '../meta/relationship-property-schema';
 import INeode from '../neode.interface';
 import DeleteService, { DeleteOptions } from '../services/query/delete.service';
@@ -178,11 +178,7 @@ export default class TransactionalService implements INeode {
 
         await new UpdateService(this.handle).update(schema, entity as object, properties);
 
-        const idKey = schema
-            .getProperties()
-            .find((property) => property.getType() === PropertyType.INTERNAL_ID)
-            ?.getKey();
-        const elementId = idKey ? entityRecord[idKey] : undefined;
+        const elementId = elementIdOfEntity(schema, entity as object);
 
         if (!elementId) {
             return undefined;
@@ -191,7 +187,7 @@ export default class TransactionalService implements INeode {
         return new FindByIdService(this.handle).find(
             entityRecord.constructor as new (...args: never[]) => T,
             schema,
-            elementId as string
+            elementId
         ) as Promise<T | undefined>;
     }
 

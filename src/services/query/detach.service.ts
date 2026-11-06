@@ -2,9 +2,8 @@ import Builder from '../../query';
 import { getModel } from '../../meta';
 import EntitySchema from '../../meta/entity/entity-schema';
 import { Newable } from '../../meta/newable';
-import { PropertyType } from '../../meta/property-schema';
 import RelationshipPropertySchema from '../../meta/relationship-property-schema';
-import { matchCriteriaForEntity } from '../../utils';
+import { elementIdOfEntity, matchCriteriaForEntity } from '../../utils';
 import FindByIdService from './find-by-id.service';
 import QueryService from './query.service';
 
@@ -42,19 +41,11 @@ export default class DetachService extends QueryService {
 
         const builder = new Builder();
 
-        if (fromMatch.elementId) {
-            builder.match(fromAlias).whereId(fromAlias, fromMatch.elementId);
-        } else {
-            builder.match(fromAlias, schema.getLabels(), { [fromMatch.key]: fromMatch.value });
-        }
+        builder.matchEntity(fromAlias, schema, fromMatch);
 
         builder.relationship(rel.getType(), rel.getDirection(), relAlias);
 
-        if (toMatch.elementId) {
-            builder.to(toAlias).whereId(toAlias, toMatch.elementId);
-        } else {
-            builder.to(toAlias, targetSchema.getLabels(), { [toMatch.key]: toMatch.value });
-        }
+        builder.toEntity(toAlias, targetSchema, toMatch);
 
         builder.delete(relAlias);
 
@@ -69,18 +60,13 @@ export default class DetachService extends QueryService {
     }
 
     /**
-     * Re-hydrate an entity by its internal id (elementId)
+     * Re-hydrate an entity by its elementId
      */
     private async refresh<T extends object>(
         schema: EntitySchema,
         entity: T
     ): Promise<T | undefined> {
-        const idKey = schema
-            .getProperties()
-            .find((property) => property.getType() === PropertyType.INTERNAL_ID)?.getKey();
-        const elementId = idKey
-            ? (entity as Record<string, unknown>)[idKey]
-            : undefined;
+        const elementId = elementIdOfEntity(schema, entity);
 
         const constructor = (entity as Record<string, unknown>)
             .constructor as Newable | undefined;
@@ -90,6 +76,6 @@ export default class DetachService extends QueryService {
         }
 
         return new FindByIdService(this.runner)
-            .find(constructor, schema, elementId as string) as Promise<T | undefined>;
+            .find(constructor, schema, elementId) as Promise<T | undefined>;
     }
 }

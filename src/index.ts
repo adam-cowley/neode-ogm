@@ -3,9 +3,17 @@ export default Neode;
 
 export { EventType } from './common/events';
 export { fromEnv } from './utils';
+export {
+    NeodeError,
+    ConstraintViolationError,
+    TransientError,
+    classifyError,
+    isTransientError,
+} from './errors';
 export { default as Repository } from './repository';
 export { default as TransactionalService } from './transaction/transactional.service';
 export { registerRepository, getRepository, resolveRepository } from './meta';
+export { mergeRelationshipProperty } from './meta';
 export type { RepositoryConstructor } from './meta';
 export { default as Collection } from './collection';
 export { toJson, valueToJson } from './serialise';

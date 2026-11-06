@@ -24,6 +24,7 @@ import {
     QueryRecord,
     TransactionHandle,
 } from './types';
+import { classifyError } from '../errors';
 
 /**
  * Walk a driver result value and normalize driver-specific types
@@ -130,9 +131,13 @@ export class Neo4jTransactionHandle implements TransactionHandle {
     constructor(private readonly session: DriverSession, private readonly tx: DriverTransaction) {}
 
     async run(statement: string, parameters?: QueryParams): Promise<QueryOutput> {
-        const result = await this.tx.run(statement, parameters);
+        try {
+            const result = await this.tx.run(statement, parameters);
 
-        return { records: result.records.map((record) => new DriverQueryRecord(record)) };
+            return { records: result.records.map((record) => new DriverQueryRecord(record)) };
+        } catch (error) {
+            throw classifyError(error);
+        }
     }
 
     async commit(): Promise<void> {
@@ -187,16 +192,22 @@ export class Neo4jConnectionProvider implements ConnectionProvider {
                     profile: result.summary.profile,
                 },
             };
+        } catch (error) {
+            throw classifyError(error);
         } finally {
             await session.close();
         }
     }
 
     async beginTransaction(mode: AccessMode = 'WRITE', database?: string): Promise<TransactionHandle> {
-        const session = await this.session(mode, database);
-        const tx = session.beginTransaction();
+        try {
+            const session = await this.session(mode, database);
+            const tx = session.beginTransaction();
 
-        return new Neo4jTransactionHandle(session, tx);
+            return new Neo4jTransactionHandle(session, tx);
+        } catch (error) {
+            throw classifyError(error);
+        }
     }
 
     async edition(): Promise<'enterprise' | 'community' | 'unknown'> {

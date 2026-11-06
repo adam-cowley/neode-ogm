@@ -1,4 +1,5 @@
 import { QueryOutput, QueryParams } from '../driver/types';
+import NeodeError from '../errors/neode-error';
 
 export const ERROR_TRANSACTION_FAILED = 'ERROR_TRANSACTION_FAILED';
 
@@ -20,7 +21,7 @@ export interface BatchStatementError {
  *  - `results` — results of the statements that succeeded before the failure
  *  - `details` — the failed statements only ({ index, query, params, error })
  */
-export default class TransactionError extends Error {
+export default class TransactionError extends NeodeError {
     constructor(
         readonly errors: (BatchStatementError | null)[],
         readonly results: QueryOutput[],

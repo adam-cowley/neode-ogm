@@ -1,4 +1,4 @@
-import Builder from '../../query';
+import Builder, { EntityMatchCriteria } from '../../query';
 import { INTERNAL_ID, THIS_NODE } from '../../constants';
 import { matchCriteriaForEntity } from '../../utils';
 import { GraphNode, QueryOutput } from '../../driver/types';
@@ -111,15 +111,11 @@ export default class UpdateService extends QueryService {
     /** Read the node's current properties (required-property refill source) */
     private async readNode(
         schema: EntitySchema,
-        criteria: { elementId?: string; key: string; value: unknown }
+        criteria: EntityMatchCriteria
     ): Promise<GraphNode | undefined> {
         const builder = new Builder();
 
-        if (criteria.elementId) {
-            builder.match(THIS_NODE).whereId(THIS_NODE, criteria.elementId);
-        } else {
-            builder.match(THIS_NODE, schema.getLabels(), { [criteria.key]: criteria.value });
-        }
+        builder.matchEntity(THIS_NODE, schema, criteria);
 
         builder.return(THIS_NODE);
 

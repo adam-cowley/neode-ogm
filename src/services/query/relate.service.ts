@@ -59,17 +59,8 @@ export default class RelateService extends QueryService {
 
         const builder = new Builder();
 
-        if (fromMatch.elementId) {
-            builder.match(fromAlias).whereId(fromAlias, fromMatch.elementId);
-        } else {
-            builder.match(fromAlias, schema.getLabels(), { [fromMatch.key]: fromMatch.value });
-        }
-
-        if (toMatch.elementId) {
-            builder.match(toAlias).whereId(toAlias, toMatch.elementId);
-        } else {
-            builder.match(toAlias, targetSchema.getLabels(), { [toMatch.key]: toMatch.value });
-        }
+        builder.matchEntity(fromAlias, schema, fromMatch);
+        builder.matchEntity(toAlias, targetSchema, toMatch);
 
         if (forceCreate) {
             builder.create(fromAlias)

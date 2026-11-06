@@ -61,6 +61,30 @@ class Person {
     }
 }
 
+@NodeEntity()
+class NoInternalId {
+    @Uuid({ primary: true })
+    id: string;
+
+    @String()
+    @Required()
+    name: string;
+
+    @Number()
+    age: number;
+
+    static create(name: string, age?: number): NoInternalId {
+        const person = new NoInternalId();
+        person.name = name;
+
+        if (age !== undefined) {
+            person.age = age;
+        }
+
+        return person;
+    }
+}
+
 // ---------------------------------------------------------------------------
 
 describe('UpdateService', () => {
@@ -82,13 +106,14 @@ describe('UpdateService', () => {
 
     // Run the service in a write transaction, rolling back on failure
     const update = async <T extends object>(
+        targetSchema: EntitySchema,
         entity: T,
         properties: Record<string, unknown>
     ): Promise<unknown> =>
         backend.neode.inWriteTransaction(async (tx) => {
             try {
                 const result = await new UpdateService(tx.getRunner()).update(
-                    schema,
+                    targetSchema,
                     entity,
                     properties
                 );
@@ -106,7 +131,7 @@ describe('UpdateService', () => {
     it('updates the given properties', async () => {
         const saved = await backend.neode.save(Person.create('Adam', 30));
 
-        await update(saved, { name: 'Ada', age: 31 });
+        await update(schema, saved, { name: 'Ada', age: 31 });
 
         const found = await backend.neode.find(Person, saved.id);
 
@@ -117,7 +142,7 @@ describe('UpdateService', () => {
     it('leaves protected, readonly, hidden and primary key properties untouched', async () => {
         const saved = await backend.neode.save(Person.create('Adam'));
 
-        await update(saved, {
+        await update(schema, saved, {
             password: 'hacked',
             species: 'android',
             secret: 'exposed',
@@ -135,7 +160,7 @@ describe('UpdateService', () => {
     it('refills a required property provided as null from its stored value', async () => {
         const saved = await backend.neode.save(Person.create('Adam'));
 
-        await update(saved, { name: null });
+        await update(schema, saved, { name: null });
 
         const found = await backend.neode.find(Person, saved.id);
 
@@ -145,9 +170,37 @@ describe('UpdateService', () => {
     it('refills required properties that are not provided', async () => {
         const saved = await backend.neode.save(Person.create('Adam', 30));
 
-        await update(saved, { age: 31 });
+        await update(schema, saved, { age: 31 });
 
         const found = await backend.neode.find(Person, saved.id);
+
+        expect(found?.name).toBe('Adam');
+        expect(found?.age).toBe(31);
+    });
+
+    it('refills via the primary key when the entity carries no elementId', async () => {
+        const saved = await backend.neode.save(Person.create('Adam'));
+
+        // Hand-built instance: no hydrated elementId, only the primary key
+        const detached = new Person();
+        detached.id = saved.id;
+        detached.name = 'Carried';
+
+        await update(schema, detached, { name: null });
+
+        const found = await backend.neode.find(Person, saved.id);
+
+        expect(found?.name).toBe('Adam');
+    });
+
+    it('matches by elementId on a model without @InternalId', async () => {
+        const noInternalIdSchema = getModel(NoInternalId);
+
+        const saved = await backend.neode.save(NoInternalId.create('Adam', 30));
+
+        await update(noInternalIdSchema, saved, { name: null, age: 31 });
+
+        const found = await backend.neode.find(NoInternalId, saved.id);
 
         expect(found?.name).toBe('Adam');
         expect(found?.age).toBe(31);
@@ -160,7 +213,7 @@ describe('UpdateService', () => {
         ghost.id = 'no-such-id';
         ghost.name = 'Ghost';
 
-        const result = (await update(ghost, { name: 'Nobody' })) as { records: unknown[] };
+        const result = (await update(schema, ghost, { name: 'Nobody' })) as { records: unknown[] };
 
         expect(result.records).toHaveLength(0);
 
@@ -172,8 +225,8 @@ describe('UpdateService', () => {
     it('keeps the uuid primary identity stable across updates', async () => {
         const saved = await backend.neode.save(Person.create('Adam'));
 
-        await update(saved, { name: 'Ada' });
-        await update(saved, { age: 31 });
+        await update(schema, saved, { name: 'Ada' });
+        await update(schema, saved, { age: 31 });
 
         const found = await backend.neode.find(Person, saved.id);
 
@@ -185,6 +238,6 @@ describe('UpdateService', () => {
         const orphan = new Person();
         orphan.name = 'NoId';
 
-        await expect(update(orphan, { name: 'Nobody' })).rejects.toThrow(/primary key/i);
+        await expect(update(schema, orphan, { name: 'Nobody' })).rejects.toThrow(/primary key/i);
     });
 });

@@ -22,7 +22,6 @@ import { setDefaultNeode } from './entity-methods';
 import { getModel, getModels, resolveRepository } from './meta';
 import { Newable } from './meta/newable';
 import EntitySchema from './meta/entity/entity-schema';
-import { PropertyType } from './meta/property-schema';
 import RelationshipPropertySchema from './meta/relationship-property-schema';
 import {
     defineModel,
@@ -48,6 +47,7 @@ import TransactionalService from './transaction/transactional.service';
 import TransactionError, { BatchStatementError } from './transaction/errors';
 import FindByIdService from './services/query/find-by-id.service';
 import { INTERNAL_ID } from './constants';
+import { elementIdOfEntity } from './utils';
 import Builder from './query';
 import { search, ScoredEntity } from './services/query/search.service';
 import { knn, KnnMode } from './services/query/knn.service';
@@ -597,7 +597,7 @@ export default class Neode implements INeode {
      * properties, hydrating the merged node
      */
     async mergeOn<T>(
-        constructor: Newable,
+        constructor: new (...args: never[]) => T,
         match: Record<string, unknown>,
         set: Record<string, unknown> = {},
         database?: string
@@ -691,17 +691,13 @@ export default class Neode implements INeode {
         try {
             await new UpdateService(tx).update(schema, entity as object, properties);
 
-            const idKey = schema
-                .getProperties()
-                .find((property) => property.getType() === PropertyType.INTERNAL_ID)
-                ?.getKey();
-            const elementId = idKey ? entityRecord[idKey] : undefined;
+            const elementId = elementIdOfEntity(schema, entity as object);
 
             const hydrated = elementId
                 ? await new FindByIdService(tx).find(
                       entityRecord.constructor as new (...args: never[]) => T,
                       schema,
-                      elementId as string
+                      elementId
                   )
                 : undefined;
 

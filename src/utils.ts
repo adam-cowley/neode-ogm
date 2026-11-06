@@ -1,5 +1,5 @@
 import { Newable } from "./meta/newable";
-import neo4j from 'neo4j-driver';
+import neo4j, { Config } from 'neo4j-driver';
 import dotenv from 'dotenv';
 import { Neo4jConnectionProvider } from './driver/neo4j';
 import { GraphNode, GraphRelationship } from './driver/types';
@@ -38,6 +38,11 @@ function warnIgnoring(envVar: string, reason: string): void {
 /**
  * Pure process-env → connection mapping used by fromEnv().
  *
+ * `driverConfig` is merged verbatim over the env-derived config — any option
+ * neo4j.driver accepts can be passed even when no NEO4J_* variable maps to
+ * it. Explicit values win over env-derived ones; `undefined` entries are
+ * skipped so a programmatically-built config does not clobber env values.
+ *
  * Audited against the neo4j-driver 6 config surface:
  * - `encrypted` / `trust` / `trustedCertificates` still exist, but the legacy
  *   `TRUST_SIGNED_CERTIFICATES` value was dropped from `TrustStrategy`
@@ -47,7 +52,7 @@ function warnIgnoring(envVar: string, reason: string): void {
  * - `logging` must be a `{ level, logger }` object; a raw string throws
  *   "Illegal logger function" at driver construction.
  */
-export function configFromEnv(env: NodeJS.ProcessEnv): EnvConnectionConfig {
+export function configFromEnv(env: NodeJS.ProcessEnv, driverConfig: Config = {}): EnvConnectionConfig {
     const protocol = env.NEO4J_PROTOCOL || 'bolt';
     const host = env.NEO4J_HOST || 'localhost';
     const port = env.NEO4J_PORT || '7687';
@@ -125,18 +130,30 @@ export function configFromEnv(env: NodeJS.ProcessEnv): EnvConnectionConfig {
             env.NEO4J_USERNAME && env.NEO4J_PASSWORD
                 ? neo4j.auth.basic(env.NEO4J_USERNAME, env.NEO4J_PASSWORD)
                 : undefined,
-        config,
+        config: {
+            ...config,
+            ...Object.fromEntries(
+                Object.entries(driverConfig).filter(([, value]) => value !== undefined)
+            ),
+        },
         database: env.NEO4J_DATABASE || 'neo4j',
         enterprise: env.NEO4J_ENTERPRISE === 'true',
     };
 }
 
-export function fromEnv(): Neode {
+/**
+ * Load a .env file (dotenv does not clobber variables already set in
+ * process.env), map the NEO4J_* variables to a connection config and
+ * construct the neo4j driver. `driverConfig` — anything neo4j.driver
+ * accepts, e.g. `disableLosslessIntegers: true` — is forwarded verbatim,
+ * merged over the env-derived values.
+ */
+export function fromEnv(driverConfig: Config = {}): Neode {
     // Load vars from .env — dotenv does not clobber variables that are
     // already set in process.env
     dotenv.config();
 
-    const { uri, auth, config, database, enterprise } = configFromEnv(process.env);
+    const { uri, auth, config, database, enterprise } = configFromEnv(process.env, driverConfig);
 
     const driver = neo4j.driver(uri, auth, config);
 

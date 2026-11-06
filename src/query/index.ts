@@ -2,6 +2,7 @@ import Builder from './Builder';
 
 export default Builder;
 export { Builder };
+export type { EntityMatchCriteria } from './Builder';
 export { default as Statement } from './Statement';
 export { default as Match } from './Match';
 export { default as Order } from './Order';
