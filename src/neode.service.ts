@@ -12,7 +12,7 @@ import {
 } from './driver/types';
 import { Neo4jConnectionProvider } from './driver/neo4j';
 import { RelateConnectionProvider } from './driver/relate';
-import { getModel, getModels } from './meta';
+import { getModel, getModels, resolveRepository } from './meta';
 import { Newable } from './meta/newable';
 import EntitySchema from './meta/entity/entity-schema';
 import { PropertyType } from './meta/property-schema';
@@ -24,7 +24,7 @@ import {
     unknownDefinitionError,
 } from './meta/map-schema';
 import { SchemaDefinition } from './meta/schema-definition.interface';
-import { EventType } from './common/events';
+import { EventType, NeodeEventHandler } from './common/events';
 import FindService from './services/query/find.service';
 import MergeService from './services/query/merge.service';
 import CreateService from './services/query/create.service';
@@ -38,11 +38,14 @@ import WithinDistanceService from './services/query/within-distance.service';
 import SchemaService, { SchemaResult } from './services/schema/schema.service';
 import { Repository } from '.';
 import TransactionalService from './transaction/transactional.service';
+import TransactionError, { BatchStatementError } from './transaction/errors';
 import FindByIdService from './services/query/find-by-id.service';
 import { INTERNAL_ID } from './constants';
 
 export default class Neode implements INeode {
     private eventEmitter: EventEmitter = new EventEmitter();
+
+    private database?: string;
 
     constructor(
         private readonly connection: ConnectionProvider,
@@ -84,6 +87,32 @@ export default class Neode implements INeode {
         this.enterprise = enterprise;
     }
 
+    /**
+     * Set the default database for all future statements (neode parity).
+     * A per-call `database` argument wins over this default, which in turn
+     * wins over the provider's own constructor database.
+     */
+    setDatabase(database?: string): void {
+        this.database = database;
+    }
+
+    /**
+     * Subscribe to a lifecycle event — see EventType (common/events.ts).
+     * Returns this for chaining.
+     */
+    on(event: EventType, handler: NeodeEventHandler): this {
+        this.eventEmitter.on(event, handler);
+
+        return this;
+    }
+
+    /** Unsubscribe a previously registered event handler. */
+    off(event: EventType, handler: NeodeEventHandler): this {
+        this.eventEmitter.off(event, handler);
+
+        return this;
+    }
+
     private getSchema(constructor: unknown): EntitySchema {
         const found = getModel(constructor);
 
@@ -119,26 +148,26 @@ export default class Neode implements INeode {
     /**
      * Run a single statement in an implicit transaction
      */
-    readCypher(query: string, params: QueryParams = {}, _database?: string): Promise<QueryOutput> {
-        return this.connection.run(query, params, 'READ');
+    readCypher(query: string, params: QueryParams = {}, database?: string): Promise<QueryOutput> {
+        return this.connection.run(query, params, 'READ', database ?? this.database);
     }
 
-    writeCypher(query: string, params: QueryParams = {}, _database?: string): Promise<QueryOutput> {
-        return this.connection.run(query, params, 'WRITE');
+    writeCypher(query: string, params: QueryParams = {}, database?: string): Promise<QueryOutput> {
+        return this.connection.run(query, params, 'WRITE', database ?? this.database);
     }
 
     /**
      * Open an explicit READ transaction
      */
-    async readTransaction(_database?: string): Promise<TransactionHandle> {
-        return this.connection.beginTransaction('READ');
+    async readTransaction(database?: string): Promise<TransactionHandle> {
+        return this.connection.beginTransaction('READ', database ?? this.database);
     }
 
     /**
      * Open an explicit WRITE transaction
      */
-    async writeTransaction(_database?: string): Promise<TransactionHandle> {
-        return this.connection.beginTransaction('WRITE');
+    async writeTransaction(database?: string): Promise<TransactionHandle> {
+        return this.connection.beginTransaction('WRITE', database ?? this.database);
     }
 
     /**
@@ -196,6 +225,49 @@ export default class Neode implements INeode {
     }
 
     /**
+     * Run a batch of statements within ONE transaction (neode's batch()):
+     * begin, run every statement, then commit. On any failure the transaction
+     * is rolled back and a TransactionError is thrown, carrying the
+     * per-statement errors (aligned with the batch, null where a statement
+     * succeeded), the partial results and the failed statements' details.
+     */
+    async batch(
+        queries: Array<string | { query: string; params?: QueryParams }>,
+        database?: string
+    ): Promise<QueryOutput[]> {
+        const tx = await this.connection.beginTransaction('WRITE', database ?? this.database);
+
+        const results: QueryOutput[] = [];
+        const errors: (BatchStatementError | null)[] = [];
+        const details: BatchStatementError[] = [];
+
+        // Every statement is attempted, so the error report covers the batch
+        for (const [index, entry] of queries.entries()) {
+            const query = typeof entry === 'string' ? entry : entry.query;
+            const params = (typeof entry === 'string' ? {} : entry.params) ?? {};
+
+            try {
+                results.push(await tx.run(query, params));
+                errors.push(null);
+            } catch (error) {
+                const failed: BatchStatementError = { index, query, params, error };
+                errors.push(failed);
+                details.push(failed);
+            }
+        }
+
+        if (details.length) {
+            await tx.rollback().catch(() => {});
+
+            throw new TransactionError(errors, results, details);
+        }
+
+        await tx.commit();
+
+        return results;
+    }
+
+    /**
      * Run statements to create the schema
      */
     installSchema(): Promise<SchemaResult[]> {
@@ -217,17 +289,17 @@ export default class Neode implements INeode {
      * Create a Repository
      */
     getRepository<Entity>(entity: new (...args: never[]) => Entity, database?: string): Repository<Entity> {
-        return new Repository<Entity>(this, entity, database);
+        return resolveRepository(this, entity, database);
     }
 
     async find<T>(
         constructor: new (...args: never[]) => T,
         value: string,
-        _database?: string
+        database?: string
     ): Promise<T | undefined> {
         const schema = this.getSchema(constructor);
 
-        const tx = await this.readTransaction(_database);
+        const tx = await this.readTransaction(database);
 
         const service = new FindService(tx);
 
@@ -241,11 +313,11 @@ export default class Neode implements INeode {
     async findById<T>(
         constructor: new (...args: never[]) => T,
         elementId: string,
-        _database?: string
+        database?: string
     ): Promise<T | undefined> {
         const schema = this.getSchema(constructor);
 
-        const tx = await this.readTransaction(_database);
+        const tx = await this.readTransaction(database);
 
         const service = new FindByIdService(tx);
 
@@ -463,6 +535,13 @@ export default class Neode implements INeode {
             );
 
             await tx.commit();
+
+            if (result) {
+                this.eventEmitter.emit(
+                    forceCreate ? EventType.RELATIONSHIP_CREATED : EventType.RELATIONSHIP_MERGED,
+                    result
+                );
+            }
 
             return result;
         } catch (error) {

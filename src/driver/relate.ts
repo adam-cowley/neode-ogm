@@ -248,10 +248,16 @@ export class RelateConnectionProvider implements ConnectionProvider {
         this.connection = database.connect(namespace);
     }
 
+    /**
+     * The embedded engine runs in a single namespace, fixed when the provider
+     * is constructed (`namespace`): the per-call `database` override and the
+     * access mode are accepted for port parity and ignored.
+     */
     async run(
         statement: string,
         parameters?: QueryParams,
-        _mode?: AccessMode
+        _mode?: AccessMode,
+        _database?: string
     ): Promise<QueryOutput> {
         const result = await this.connection.queryAsync(statement, parameters);
 
@@ -261,7 +267,7 @@ export class RelateConnectionProvider implements ConnectionProvider {
         };
     }
 
-    async beginTransaction(_mode: AccessMode = 'WRITE'): Promise<TransactionHandle> {
+    async beginTransaction(_mode: AccessMode = 'WRITE', _database?: string): Promise<TransactionHandle> {
         this.connection.begin();
 
         return new RelateTransactionHandle(this.connection);

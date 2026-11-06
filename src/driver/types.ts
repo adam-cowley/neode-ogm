@@ -59,10 +59,16 @@ export type AccessMode = 'READ' | 'WRITE';
 /** The connection port implemented by every backend. */
 export interface ConnectionProvider {
     /** Run a single statement in an implicit transaction. */
-    run(statement: string, parameters?: QueryParams, mode?: AccessMode): Promise<QueryOutput>;
+    run(
+        statement: string,
+        parameters?: QueryParams,
+        mode?: AccessMode,
+        /** Per-call database override — backends with a single namespace ignore it */
+        database?: string
+    ): Promise<QueryOutput>;
 
     /** Open an explicit transaction. Remember to commit or rollback. */
-    beginTransaction(mode?: AccessMode): Promise<TransactionHandle>;
+    beginTransaction(mode?: AccessMode, database?: string): Promise<TransactionHandle>;
 
     /** Server edition, if reported: 'enterprise' | 'community' | 'unknown' */
     edition(): Promise<'enterprise' | 'community' | 'unknown'>;

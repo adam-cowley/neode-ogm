@@ -210,7 +210,23 @@ export default class TransactionalService implements INeode {
         const schema = this.getSchema(constructor);
         const rel = this.requireRelationship(schema, relationshipKey);
 
-        return new RelateService(this.handle).relate(schema, from, to, rel, properties, forceCreate);
+        const result = await new RelateService(this.handle).relate(
+            schema,
+            from,
+            to,
+            rel,
+            properties,
+            forceCreate
+        );
+
+        if (result) {
+            this.eventEmitter.emit(
+                forceCreate ? EventType.RELATIONSHIP_CREATED : EventType.RELATIONSHIP_MERGED,
+                result
+            );
+        }
+
+        return result;
     }
 
     /**

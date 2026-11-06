@@ -163,9 +163,10 @@ export class Neo4jConnectionProvider implements ConnectionProvider {
     async run(
         statement: string,
         parameters?: QueryParams,
-        mode: AccessMode = 'WRITE'
+        mode: AccessMode = 'WRITE',
+        database?: string
     ): Promise<QueryOutput> {
-        const session = await this.session(mode);
+        const session = await this.session(mode, database);
 
         try {
             const result = await session.run(statement, parameters);
@@ -187,8 +188,8 @@ export class Neo4jConnectionProvider implements ConnectionProvider {
         }
     }
 
-    async beginTransaction(mode: AccessMode = 'WRITE'): Promise<TransactionHandle> {
-        const session = await this.session(mode);
+    async beginTransaction(mode: AccessMode = 'WRITE', database?: string): Promise<TransactionHandle> {
+        const session = await this.session(mode, database);
         const tx = session.beginTransaction();
 
         return new Neo4jTransactionHandle(session, tx);

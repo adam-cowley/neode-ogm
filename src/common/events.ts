@@ -1,3 +1,25 @@
+/**
+ * Lifecycle events emitted by Neode (facade) and TransactionalService (work
+ * performed inside an open transaction).
+ *
+ * Subscribe with `neode.on(EventType.NODE_CREATED, handler)`, unsubscribe with
+ * `neade.off(...)`. Handlers receive the affected value as their only
+ * argument:
+ *
+ * | Event                  | Emitted by                          | Payload            |
+ * |------------------------|-------------------------------------|--------------------|
+ * | NODE_CREATED           | create(), save()                    | hydrated entity    |
+ * | NODE_MERGED            | reserved (mergeOn)                  | —                  |
+ * | NODE_UPDATED           | reserved (update)                   | —                  |
+ * | NODE_DELETED           | delete()                            | deleted entity     |
+ * | RELATIONSHIP_CREATED   | relate() with forceCreate           | GraphRelationship  |
+ * | RELATIONSHIP_MERGED    | relate() (MERGE, the default)       | GraphRelationship  |
+ * | RELATIONSHIP_UPDATED   | reserved                            | —                  |
+ * | RELATIONSHIP_DELETED   | reserved (detach)                   | —                  |
+ *
+ * Events are emitted synchronously on an EventEmitter scoped to the Neode
+ * instance.
+ */
 export enum EventType {
     NODE_CREATED = 'node:created',
     NODE_MERGED = 'node:merged',
@@ -8,3 +30,6 @@ export enum EventType {
     RELATIONSHIP_UPDATED = 'relationship:updated',
     RELATIONSHIP_DELETED = 'relationship:deleted',
 }
+
+/** Handler for a lifecycle event; the payload shape depends on the event. */
+export type NeodeEventHandler = (payload: unknown) => void;
