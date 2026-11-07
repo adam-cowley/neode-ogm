@@ -5,6 +5,8 @@
  *
  *   OGM_TEST_BACKEND=relate   (default) embedded Relate engine, in-memory,
  *                             zero setup — anything Cypher compatible
+ *   OGM_TEST_BACKEND=container Neo4j Testcontainer (NEO4J_IMAGE picks the
+ *                             version) — started by test/global-setup.ts
  *   OGM_TEST_BACKEND=neo4j    external Neo4j (Community or Enterprise) via
  *                             NEO4J_URI / NEO4J_USERNAME / NEO4J_PASSWORD
  *   OGM_TEST_BACKEND=memgraph external Memgraph — same env vars
@@ -288,12 +290,13 @@ export async function openBackend(): Promise<TestBackend> {
       return openRelateBackend()
 
     case 'neo4j':
+    case 'container':
     case 'memgraph':
       return openBoltBackend(backend)
 
     default:
       throw new Error(
-        `Unknown OGM_TEST_BACKEND "${backend}". Supported: relate (default), neo4j, memgraph`,
+        `Unknown OGM_TEST_BACKEND "${backend}". Supported: relate (default), neo4j, container, memgraph`,
       )
   }
 }
