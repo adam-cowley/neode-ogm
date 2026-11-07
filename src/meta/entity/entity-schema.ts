@@ -1,7 +1,7 @@
+import { NeodeError } from '../../errors/index.js'
 import type { Newable } from '../newable.js'
 import { PropertySchema } from '../property-schema.js'
 import { RelationshipPropertySchema } from '../relationship-property-schema.js'
-import { NeodeError } from '../../errors/index.js'
 
 export const EntityType = {
   NodeEntity: 0,
@@ -13,6 +13,13 @@ export type EntityType = (typeof EntityType)[keyof typeof EntityType]
 export class EntitySchema {
   private labels: string[] = []
   private objectConstructor!: Newable
+
+  /**
+  Undeclared default primary keys (<first label lowercased>_id), cached per
+  key so getPrimaryKey() is reference-stable without registering the
+  property on the schema
+  */
+  private readonly phantomPrimaryKeys = new Map<string, PropertySchema>()
 
   /**
   Free-text explanation emitted by the agent ontology (NTS-445)
@@ -124,7 +131,7 @@ export class EntitySchema {
       return explicit
     }
 
-    // Default Primary Key to <first label lowercased>_id (see neode Model.js)
+    // Default primary key to <first label lowercased>_id (see neode Model.js)
     const [firstLabel] = this.getLabels()
 
     if (firstLabel === undefined || firstLabel === '') {
@@ -133,15 +140,27 @@ export class EntitySchema {
 
     const key = `${firstLabel.toLowerCase()}_id`
 
-    if (!this.hasProperty(key)) {
-      this.addProperty(key)
+    if (this.hasProperty(key)) {
+      const property = this.getProperty(key)
+
+      property.setPrimaryKey()
+
+      return property
     }
 
-    const property = this.getProperty(key)
+    // Undeclared default: a phantom property, deliberately NOT added to the
+    // schema — a getter must not mutate, and a registered-but-never-written
+    // property would install a dead unique constraint and hydrate as a
+    // field. Cached per key so repeated calls return the same instance.
+    let phantom = this.phantomPrimaryKeys.get(key)
 
-    property.setPrimaryKey()
+    if (!phantom) {
+      phantom = new PropertySchema(key)
+      phantom.setPrimaryKey()
+      this.phantomPrimaryKeys.set(key, phantom)
+    }
 
-    return property
+    return phantom
   }
 
   getProperty(key: string): PropertySchema {

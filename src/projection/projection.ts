@@ -2,6 +2,7 @@ import { EAGER_ID, EAGER_LABELS, eagerPattern } from '../query/eager-utilities.j
 import { Direction } from '../query/index.js'
 import { EntitySchema } from '../meta/entity/entity-schema.js'
 import { NeodeError } from '../errors/index.js'
+import { quote } from '../query/quote.js'
 import type { PropertySchema } from '../meta/property-schema.js'
 import { PropertyType, isProjectedProperty } from '../meta/property-schema.js'
 import { RelationshipPropertySchema } from '../meta/relationship-property-schema.js'
@@ -15,13 +16,6 @@ the one read query — pattern comprehensions for related subsets, inline
 `COUNT { }` / `EXISTS { }` subqueries, label predicates and raw
 expressions — instead of chasing each relationship with its own query.
 */
-
-/**
-Backtick-quote a Cypher identifier (label / relationship type)
-*/
-function quote(identifier: string): string {
-  return '`' + identifier.replaceAll('`', '``') + '`'
-}
 
 /**
 Target node labels as a Cypher label pattern (':A:B'), or ''

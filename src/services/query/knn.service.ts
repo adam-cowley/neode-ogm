@@ -1,4 +1,5 @@
 import type { Runner } from '../../driver/types.js'
+import { quote } from '../../query/quote.js'
 import { hydrate } from '../../hydrate.js'
 import { getModel } from '../../meta/index.js'
 import { EntitySchema } from '../../meta/entity/entity-schema.js'
@@ -32,8 +33,8 @@ is inlined (backtick-escaped).
 */
 export function knnSearchClauseStatement(label: string, indexName: string): string {
   return (
-    `MATCH (n:${label}) ` +
-    `SEARCH n IN (VECTOR INDEX \`${indexName.replaceAll('`', '``')}\` FOR $vector LIMIT $k) ` +
+    `MATCH (n:${quote(label)}) ` +
+    `SEARCH n IN (VECTOR INDEX ${quote(indexName)} FOR $vector LIMIT $k) ` +
     `SCORE AS score ` +
     `RETURN n AS ${NODE_ALIAS}, score ORDER BY score DESC`
   )

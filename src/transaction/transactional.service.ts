@@ -165,7 +165,7 @@ export class TransactionalService implements INeode {
 
     const merge = new MergeService(this.handle)
 
-    const { elementId } = await merge.save(entity, schema)
+    const { elementId, created } = await merge.save(entity, schema)
 
     const constructor: unknown = entity.constructor
 
@@ -179,8 +179,8 @@ export class TransactionalService implements INeode {
       throw new NeodeError('Entity was saved but could not be found immediately afterwards')
     }
 
-    // Emit event
-    this.eventEmitter.emit(EventType.NODE_CREATED, saved)
+    // Emit the event the merge actually was: a create or an update
+    this.eventEmitter.emit(created ? EventType.NODE_CREATED : EventType.NODE_UPDATED, saved)
 
     return saved
   }

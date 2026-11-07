@@ -19,7 +19,7 @@ export function OneToMany(
         constructor,
         propertyKey,
         type ?? '',
-        entity(),
+        entity,
         direction ?? Direction.BOTH,
         true,
         isEager,

@@ -1,4 +1,5 @@
 import { Builder } from '../../query/index.js'
+import { quote } from '../../query/quote.js'
 import type { GraphRelationship } from '../../driver/types.js'
 import { getModel } from '../../meta/index.js'
 import { EntitySchema, EntityType } from '../../meta/entity/entity-schema.js'
@@ -88,14 +89,14 @@ export class RelateService extends QueryService {
         }
 
         builder.set(
-          `${relationshipAlias}.${key}`,
+          `${relationshipAlias}.${quote(key)}`,
           property === undefined ? value : convertPropertyValue(value, property),
         )
 
         continue
       }
 
-      builder.set(`${relationshipAlias}.${key}`, value)
+      builder.set(`${relationshipAlias}.${quote(key)}`, value)
     }
   }
 

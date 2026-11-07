@@ -90,7 +90,7 @@ describe('vector property metadata (NTS-447)', () => {
 
     expect(createVectorStatement(definition)).toBe(
       'CREATE VECTOR INDEX vectordoc_emb_vector IF NOT EXISTS ' +
-        'FOR (n:VectorDoc) ON (n.`emb`) ' +
+        'FOR (n:`VectorDoc`) ON (n.`emb`) ' +
         "OPTIONS { indexConfig: { `vector.dimensions`: 3, `vector.similarity_function`: 'cosine' } }",
     )
   })

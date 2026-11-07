@@ -434,13 +434,14 @@ Lower-level handles (if you want to drive the connection port yourself): `readTr
 
 Subscribe with `neode.on(event, handler)` — returns the instance for chaining; `neode.off(event, handler)` unsubscribes. Events are emitted synchronously on an emitter scoped to the instance, and also fire for work done inside transactions.
 
-| Event                                                                                   | Emitted by                      | Payload             |
-| --------------------------------------------------------------------------------------- | ------------------------------- | ------------------- |
-| `EventType.NODE_CREATED`                                                                | `create()`, `save()`            | hydrated entity     |
-| `EventType.NODE_DELETED`                                                                | `delete()`                      | deleted entity      |
-| `EventType.RELATIONSHIP_CREATED`                                                        | `relate()` with `forceCreate`   | `GraphRelationship` |
-| `EventType.RELATIONSHIP_MERGED`                                                         | `relate()` (MERGE, the default) | `GraphRelationship` |
-| `EventType.NODE_MERGED`, `NODE_UPDATED`, `RELATIONSHIP_UPDATED`, `RELATIONSHIP_DELETED` | reserved                        | —                   |
+| Event                                                                   | Emitted by                                                   | Payload             |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------- |
+| `EventType.NODE_CREATED`                                                | `create()`, `save()` when the merge created the node         | hydrated entity     |
+| `EventType.NODE_UPDATED`                                                | `save()` when the merge matched and updated an existing node | hydrated entity     |
+| `EventType.NODE_DELETED`                                                | `delete()` (not for soft deletes — the node survives)        | deleted entity      |
+| `EventType.RELATIONSHIP_CREATED`                                        | `relate()` with `forceCreate`                                | `GraphRelationship` |
+| `EventType.RELATIONSHIP_MERGED`                                         | `relate()` (MERGE, the default)                              | `GraphRelationship` |
+| `EventType.NODE_MERGED`, `RELATIONSHIP_UPDATED`, `RELATIONSHIP_DELETED` | reserved                                                     | —                   |
 
 ```typescript
 neode.on(EventType.NODE_CREATED, (entity) => console.log('created', entity))

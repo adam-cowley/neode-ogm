@@ -175,6 +175,8 @@ await neode.relate(Person, adam, rex, 'pets')
 
 `model(name, schema)`, `with(models)`, `withDirectory(path)` and `extend(name, as, schema)` are all supported — see [map-based schema definitions](docs/api-reference.md#map-based-schema-definitions).
 
+> **Model definitions are process-global.** Models registered through `model()` / `with()` / decorators live in one shared registry, so every `Neode` instance in a process sees them — two instances defining the same model name share whichever definition loaded last. One set of models per process is the intended shape; run separate processes for separate schemas.
+
 ## Validation
 
 Validation rules use neode's rule names, powered by [Zod](https://zod.dev). Every write path — `save`, `create`, `update` — is validated.

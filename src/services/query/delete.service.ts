@@ -1,11 +1,12 @@
 import { Builder } from '../../query/index.js'
+import { quote } from '../../query/quote.js'
 import { THIS_NODE } from '../../constants.js'
+import { matchCriteriaForEntity } from '../../utilities.js'
 import { getModel } from '../../meta/index.js'
 import { EntitySchema } from '../../meta/entity/entity-schema.js'
 import type { EntitySchema as EntitySchemaType } from '../../meta/entity/entity-schema.js'
 import type { RelationshipPropertySchema } from '../../meta/relationship-property-schema.js'
 import { QueryService } from './query.service.js'
-import { NeodeError } from '../../errors/index.js'
 import { isRecord } from '../type-guards.js'
 
 /**
@@ -88,23 +89,18 @@ export class DeleteService extends QueryService {
 
     const builder = new Builder()
 
-    const primaryKey = schema.getPrimaryKey()
+    // Match by the entity's identity: elementId when known, else the
+    // primary key — with a clear error when neither is available
+    // (matchCriteriaForEntity's "Did you save it first?")
+    const criteria = matchCriteriaForEntity(schema, entity)
 
-    if (primaryKey === undefined) {
-      throw new NeodeError(`Cannot delete ${schema.getLabels().join(':')}: no primary key declared`)
-    }
-
-    const primaryKeyKey = primaryKey.getKey()
-
-    const entityValue = entity[primaryKeyKey]
-
-    builder.match(THIS_NODE, schema.getLabels(), { [primaryKeyKey]: entityValue })
+    builder.matchEntity(THIS_NODE, schema, criteria)
 
     // Soft delete: SET the label instead of deleting the node
     const softLabel = options?.soft
 
-    if (softLabel !== undefined && softLabel.length > 0) {
-      builder.set(`${THIS_NODE}:${softLabel}`, undefined)
+    if (softLabel !== undefined && softLabel !== '') {
+      builder.set(`${THIS_NODE}:${quote(softLabel)}`, undefined)
 
       const { query, params } = builder.build()
 

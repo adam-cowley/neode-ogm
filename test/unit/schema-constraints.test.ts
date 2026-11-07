@@ -28,7 +28,7 @@ describe('schemaStatement (single + composite)', () => {
     expect(
       schemaStatement(ConstraintAction.CREATE, ConstraintType.UNIQUE, 'Person', ['email']),
     ).toBe(
-      'CREATE CONSTRAINT person_email_unique IF NOT EXISTS FOR (n:Person) REQUIRE n.`email` IS UNIQUE',
+      'CREATE CONSTRAINT person_email_unique IF NOT EXISTS FOR (n:`Person`) REQUIRE n.`email` IS UNIQUE',
     )
   })
 
@@ -42,7 +42,7 @@ describe('schemaStatement (single + composite)', () => {
         schemaObjectName('Person', 'eventid_email', ConstraintType.UNIQUE),
       ),
     ).toBe(
-      'CREATE CONSTRAINT person_eventid_email_unique IF NOT EXISTS FOR (n:Person) ' +
+      'CREATE CONSTRAINT person_eventid_email_unique IF NOT EXISTS FOR (n:`Person`) ' +
         'REQUIRE (n.`eventId`, n.`email`) IS UNIQUE',
     )
   })
@@ -57,7 +57,7 @@ describe('schemaStatement (single + composite)', () => {
         schemaObjectName('Person', 'eventid_email', ConstraintType.INDEX),
       ),
     ).toBe(
-      'CREATE INDEX person_eventid_email_index IF NOT EXISTS FOR (n:Person) ' +
+      'CREATE INDEX person_eventid_email_index IF NOT EXISTS FOR (n:`Person`) ' +
         'ON (n.`eventId`, n.`email`)',
     )
   })
@@ -66,7 +66,7 @@ describe('schemaStatement (single + composite)', () => {
     expect(
       schemaStatement(ConstraintAction.CREATE, ConstraintType.EXISTS, 'Person', ['email']),
     ).toBe(
-      'CREATE CONSTRAINT person_email_exists IF NOT EXISTS FOR (n:Person) REQUIRE n.`email` IS NOT NULL',
+      'CREATE CONSTRAINT person_email_exists IF NOT EXISTS FOR (n:`Person`) REQUIRE n.`email` IS NOT NULL',
     )
     expect(schemaStatement(ConstraintAction.DROP, ConstraintType.UNIQUE, 'Person', ['email'])).toBe(
       'DROP CONSTRAINT person_email_unique IF EXISTS',
@@ -83,7 +83,7 @@ describe('schemaStatement (single + composite)', () => {
 describe('propertyTypeStatement (NTS-141)', () => {
   it('renders a property-type constraint from the declared type', () => {
     expect(propertyTypeStatement(ConstraintAction.CREATE, 'Person', 'email', 'STRING')).toBe(
-      'CREATE CONSTRAINT person_email_property_type IF NOT EXISTS FOR (n:Person) REQUIRE n.`email` IS :: STRING',
+      'CREATE CONSTRAINT person_email_property_type IF NOT EXISTS FOR (n:`Person`) REQUIRE n.`email` IS :: STRING',
     )
   })
 

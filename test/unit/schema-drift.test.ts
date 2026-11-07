@@ -140,7 +140,7 @@ describe('schemaDrift (NTS-450)', () => {
     })
     expect(declaredVector?.createStatement).toBe(
       'CREATE VECTOR INDEX driftperson_emb_vector IF NOT EXISTS ' +
-        "FOR (n:DriftPerson) ON (n.`emb`) OPTIONS { indexConfig: { `vector.dimensions`: 1536, `vector.similarity_function`: 'cosine' } }",
+        "FOR (n:`DriftPerson`) ON (n.`emb`) OPTIONS { indexConfig: { `vector.dimensions`: 1536, `vector.similarity_function`: 'cosine' } }",
     )
 
     // clean: UNIQUE constraint and the RANGE spelling of the declared INDEX
@@ -166,7 +166,7 @@ describe('schemaDrift (NTS-450)', () => {
     expect(drift.indexes.mismatched).toHaveLength(1)
     expect(drift.indexes.mismatched[0]?.name).toBe('driftperson_bio_fulltext')
     expect(drift.indexes.mismatched[0]?.createStatement).toBe(
-      'CREATE FULLTEXT INDEX driftperson_bio_fulltext IF NOT EXISTS FOR (n:DriftPerson) ON EACH [n.`bio`]',
+      'CREATE FULLTEXT INDEX driftperson_bio_fulltext IF NOT EXISTS FOR (n:`DriftPerson`) ON EACH [n.`bio`]',
     )
     expect(drift.indexes.mismatched[0]?.dropStatement).toBe(
       'DROP FULLTEXT INDEX driftperson_bio_fulltext IF EXISTS',
@@ -188,7 +188,7 @@ describe('schemaDrift (NTS-450)', () => {
 
     expect(propertyType?.createStatement).toBe(
       'CREATE CONSTRAINT driftperson_email_property_type IF NOT EXISTS ' +
-        'FOR (n:DriftPerson) REQUIRE n.`email` IS :: STRING',
+        'FOR (n:`DriftPerson`) REQUIRE n.`email` IS :: STRING',
     )
   })
 
@@ -243,7 +243,7 @@ describe('schemaDrift (NTS-450)', () => {
     })
     expect(vector?.createStatement).toBe(
       'CREATE VECTOR INDEX driftdoc_emb_vector IF NOT EXISTS ' +
-        "FOR (n:DriftDoc) ON (n.`emb`) OPTIONS { indexConfig: { `vector.dimensions`: 768, `vector.similarity_function`: 'cosine' } }",
+        "FOR (n:`DriftDoc`) ON (n.`emb`) OPTIONS { indexConfig: { `vector.dimensions`: 768, `vector.similarity_function`: 'cosine' } }",
     )
   })
 })
@@ -263,7 +263,7 @@ describe('formatSchemaDiff (NTS-450)', () => {
         missing: [
           entry({
             createStatement:
-              'CREATE CONSTRAINT person_email_unique IF NOT EXISTS FOR (n:Person) REQUIRE n.`email` IS UNIQUE',
+              'CREATE CONSTRAINT person_email_unique IF NOT EXISTS FOR (n:`Person`) REQUIRE n.`email` IS UNIQUE',
           }),
         ],
         stale: [
@@ -277,7 +277,7 @@ describe('formatSchemaDiff (NTS-450)', () => {
             name: 'person_email_index',
             type: 'INDEX',
             createStatement:
-              'CREATE INDEX person_email_index IF NOT EXISTS FOR (n:Person) ON (n.`email`)',
+              'CREATE INDEX person_email_index IF NOT EXISTS FOR (n:`Person`) ON (n.`email`)',
             dropStatement: 'DROP CONSTRAINT person_email_index IF EXISTS',
           }),
         ],
@@ -290,7 +290,7 @@ describe('formatSchemaDiff (NTS-450)', () => {
             labelsOrTypes: ['Movie'],
             properties: ['emb'],
             createStatement:
-              "CREATE VECTOR INDEX movie_emb_vector IF NOT EXISTS FOR (n:Movie) ON (n.`emb`) OPTIONS { indexConfig: { `vector.dimensions`: 1536, `vector.similarity_function`: 'cosine' } }",
+              "CREATE VECTOR INDEX movie_emb_vector IF NOT EXISTS FOR (n:`Movie`) ON (n.`emb`) OPTIONS { indexConfig: { `vector.dimensions`: 1536, `vector.similarity_function`: 'cosine' } }",
           }),
         ],
         stale: [],
@@ -303,7 +303,7 @@ describe('formatSchemaDiff (NTS-450)', () => {
     expect(report).toContain('missing (2) — declared but not installed:')
     expect(report).toContain('  - UNIQUE person_email_unique on :Person (email)')
     expect(report).toContain(
-      '      fix: CREATE CONSTRAINT person_email_unique IF NOT EXISTS FOR (n:Person) REQUIRE n.`email` IS UNIQUE',
+      '      fix: CREATE CONSTRAINT person_email_unique IF NOT EXISTS FOR (n:`Person`) REQUIRE n.`email` IS UNIQUE',
     )
     expect(report).toContain('  - VECTOR movie_emb_vector on :Movie (emb)')
 
@@ -314,7 +314,7 @@ describe('formatSchemaDiff (NTS-450)', () => {
 
     expect(report).toContain('mismatched (1) — installed definition differs from the declaration:')
     expect(report).toContain(
-      '      fix: CREATE INDEX person_email_index IF NOT EXISTS FOR (n:Person) ON (n.`email`)',
+      '      fix: CREATE INDEX person_email_index IF NOT EXISTS FOR (n:`Person`) ON (n.`email`)',
     )
     expect(report).toContain('      drop first: DROP CONSTRAINT person_email_index IF EXISTS')
   })
@@ -356,7 +356,7 @@ describe('applySchemaDiff (NTS-450)', () => {
           labelsOrTypes: ['Person'],
           properties: ['email'],
           createStatement:
-            'CREATE CONSTRAINT person_email_unique IF NOT EXISTS FOR (n:Person) REQUIRE n.`email` IS UNIQUE',
+            'CREATE CONSTRAINT person_email_unique IF NOT EXISTS FOR (n:`Person`) REQUIRE n.`email` IS UNIQUE',
         },
       ],
       stale: [
@@ -375,7 +375,7 @@ describe('applySchemaDiff (NTS-450)', () => {
           labelsOrTypes: ['Person'],
           properties: ['email'],
           createStatement:
-            'CREATE INDEX person_email_index IF NOT EXISTS FOR (n:Person) ON (n.`email`)',
+            'CREATE INDEX person_email_index IF NOT EXISTS FOR (n:`Person`) ON (n.`email`)',
           dropStatement: 'DROP CONSTRAINT person_email_index IF EXISTS',
         },
       ],
@@ -388,7 +388,7 @@ describe('applySchemaDiff (NTS-450)', () => {
           labelsOrTypes: ['Movie'],
           properties: ['emb'],
           createStatement:
-            'CREATE VECTOR INDEX movie_emb_vector IF NOT EXISTS FOR (n:Movie) ON (n.`emb`)',
+            'CREATE VECTOR INDEX movie_emb_vector IF NOT EXISTS FOR (n:`Movie`) ON (n.`emb`)',
         },
       ],
       stale: [
@@ -410,8 +410,8 @@ describe('applySchemaDiff (NTS-450)', () => {
     const results = await applySchemaDrift(connection, drift())
 
     expect(statements).toEqual([
-      'CREATE CONSTRAINT person_email_unique IF NOT EXISTS FOR (n:Person) REQUIRE n.`email` IS UNIQUE',
-      'CREATE VECTOR INDEX movie_emb_vector IF NOT EXISTS FOR (n:Movie) ON (n.`emb`)',
+      'CREATE CONSTRAINT person_email_unique IF NOT EXISTS FOR (n:`Person`) REQUIRE n.`email` IS UNIQUE',
+      'CREATE VECTOR INDEX movie_emb_vector IF NOT EXISTS FOR (n:`Movie`) ON (n.`emb`)',
     ])
     expect(results.every((result) => result.success && result.action === 'CREATE')).toBe(true)
   })
@@ -425,7 +425,7 @@ describe('applySchemaDiff (NTS-450)', () => {
     expect(statements).toContain('DROP INDEX old_index IF EXISTS')
     // mismatched objects are never applied: resolving one is drop + re-create
     expect(statements).not.toContain(
-      'CREATE INDEX person_email_index IF NOT EXISTS FOR (n:Person) ON (n.`email`)',
+      'CREATE INDEX person_email_index IF NOT EXISTS FOR (n:`Person`) ON (n.`email`)',
     )
     expect(statements).not.toContain('DROP CONSTRAINT person_email_index IF EXISTS')
     expect(results.filter((result) => result.action === 'DROP')).toHaveLength(2)

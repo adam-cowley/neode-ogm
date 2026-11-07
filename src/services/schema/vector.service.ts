@@ -1,4 +1,5 @@
 import type { ConnectionProvider } from '../../driver/types.js'
+import { quote } from '../../query/quote.js'
 import {
   ConstraintAction,
   ConstraintType,
@@ -54,7 +55,7 @@ export function createVectorStatement(definition: VectorIndexDefinition): string
 
   return (
     `CREATE VECTOR INDEX ${vectorIndexName(definition)} IF NOT EXISTS ` +
-    `FOR (n:${definition.label}) ON (n.\`${definition.property.replaceAll('`', '``')}\`) ` +
+    `FOR (n:${quote(definition.label)}) ON (n.${quote(definition.property)}) ` +
     `OPTIONS { indexConfig: { \`vector.dimensions\`: ${String(dimensions)}, \`vector.similarity_function\`: '${similarity}' } }`
   )
 }

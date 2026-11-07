@@ -8,7 +8,8 @@ argument:
 
 | Event                  | Emitted by                          | Payload            |
 |------------------------|-------------------------------------|--------------------|
-| NODE_CREATED           | create(), save()                    | hydrated entity    |
+| NODE_CREATED           | create(), save() when the merge created the node | hydrated entity |
+| NODE_UPDATED           | save() when the merge matched an existing node   | hydrated entity |
 | NODE_MERGED            | reserved (mergeOn)                  | —                  |
 | NODE_UPDATED           | reserved (update)                   | —                  |
 | NODE_DELETED           | delete()                            | deleted entity     |

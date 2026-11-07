@@ -83,7 +83,7 @@ describe('knn hydration (NTS-447)', () => {
     await knn<HydratedDoc>({ run }, Doc, 'doc_emb_vector', [1, 0.1, 0], 2, 'search-clause')
 
     expect(run.mock.calls[0][0]).toBe(
-      'MATCH (n:KnnUnitDoc) ' +
+      'MATCH (n:`KnnUnitDoc`) ' +
         'SEARCH n IN (VECTOR INDEX `doc_emb_vector` FOR $vector LIMIT $k) ' +
         'SCORE AS score RETURN n AS node, score ORDER BY score DESC',
     )

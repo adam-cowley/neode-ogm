@@ -188,14 +188,16 @@ describe('vector write path (NTS-449)', () => {
     expect(Object.values(calls[0].params)).toContainEqual([1, 2, 3])
   })
 
-  it('renders the procedure call on save (merge) with plain SET siblings', async () => {
+  it('renders the procedure call on save (no identity: CREATE path) with inline scalar siblings', async () => {
     const { runner, calls } = mockRunner()
 
     await new MergeService(runner).save({ title: 'Matrix', emb: [1, 2, 3] }, schema())
 
     expect(calls).toHaveLength(1)
     expect(calls[0].query).toContain('CALL db.create.setNodeVectorProperty(this, "emb", $')
-    expect(calls[0].query).toContain('this.title = $')
+    // save() without a pk/unique property CREATEs (never a bare MERGE over
+    // an arbitrary node) — the scalar sibling rides the inline pattern
+    expect(calls[0].query).toContain('CREATE (this:VectorMovie { title: $this_title })')
   })
 
   it('splits vector properties out of the += map on update', async () => {

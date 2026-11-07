@@ -4,6 +4,7 @@ Leaf declarations shared by the schema services. Kept free of local
 without creating cycles.
 */
 import { PropertyType } from '../../meta/property-schema.js'
+import { quote } from '../../query/quote.js'
 
 export const ConstraintAction = {
   CREATE: 'CREATE',
@@ -54,11 +55,6 @@ export const compositeSchemaObjectName = (
   schemaObjectName(label, properties.map((property) => property.toLowerCase()).join('_'), type)
 
 /**
-Backtick-escape a Cypher identifier
-*/
-const quote = (identifier: string): string => `\`${identifier.replaceAll('`', '``')}\``
-
-/**
 CREATE/DROP statement for a single- or composite-property UNIQUE, EXISTS or
 INDEX schema object. Composite uniques use the parenthesised property list —
 the only spelling the Relate engine parses.
@@ -103,7 +99,7 @@ export function schemaStatement(
     target = `REQUIRE ${firstQuoted} IS NOT NULL`
   }
 
-  return `CREATE ${kind} ${name} IF NOT EXISTS FOR (n:${label}) ${target}`
+  return `CREATE ${kind} ${name} IF NOT EXISTS FOR (n:${quote(label)}) ${target}`
 }
 
 /**
@@ -118,7 +114,7 @@ export function propertyTypeStatement(
 ): string {
   return action === ConstraintAction.DROP
     ? `DROP CONSTRAINT ${name} IF EXISTS`
-    : `CREATE CONSTRAINT ${name} IF NOT EXISTS FOR (n:${label}) REQUIRE n.${quote(property)} IS :: ${cypherType}`
+    : `CREATE CONSTRAINT ${name} IF NOT EXISTS FOR (n:${quote(label)}) REQUIRE n.${quote(property)} IS :: ${cypherType}`
 }
 
 /**

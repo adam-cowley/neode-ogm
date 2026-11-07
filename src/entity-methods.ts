@@ -21,6 +21,7 @@ import { toJson } from './serialise.js'
 import type { DeleteOptions } from './services/query/delete.service.js'
 import type { DetachResult } from './services/query/detach.service.js'
 import { constructorOf as constructorOfInstance } from './services/type-guards.js'
+import { quote } from './query/quote.js'
 
 /**
 The Neode instance that entity instance methods operate against, held in
@@ -93,7 +94,7 @@ async function changeLabel(entity: object, label: string, verb: 'SET' | 'REMOVE'
   const neode = requireNeode()
   const elementId = elementIdOf(entity)
 
-  await neode.writeCypher(`MATCH (n) WHERE elementId(n) = $elementId ${verb} n:${label}`, {
+  await neode.writeCypher(`MATCH (n) WHERE elementId(n) = $elementId ${verb} n:${quote(label)}`, {
     elementId,
   })
 

@@ -1,5 +1,6 @@
 import type { ConnectionProvider } from '../../driver/types.js'
 import { NeodeError } from '../../errors/neode-error.js'
+import { quote } from '../../query/quote.js'
 import {
   ConstraintAction,
   ConstraintType,
@@ -37,11 +38,9 @@ export function createFulltextStatement(definition: FulltextIndexDefinition): st
     )
   }
 
-  const properties = definition.properties
-    .map((property) => `n.\`${property.replaceAll('`', '``')}\``)
-    .join(', ')
+  const properties = definition.properties.map((property) => `n.${quote(property)}`).join(', ')
 
-  return `CREATE FULLTEXT INDEX ${fulltextIndexName(definition)} IF NOT EXISTS FOR (n:${definition.label}) ON EACH [${properties}]`
+  return `CREATE FULLTEXT INDEX ${fulltextIndexName(definition)} IF NOT EXISTS FOR (n:${quote(definition.label)}) ON EACH [${properties}]`
 }
 
 export function dropFulltextStatement(name: string): string {

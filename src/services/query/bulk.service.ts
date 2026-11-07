@@ -1,4 +1,5 @@
 import type { ConnectionProvider, QueryOutput, Runner } from '../../driver/types.js'
+import { rollbackAfterFailure } from '../../transaction/rollback.js'
 import { THIS_NODE } from '../../constants.js'
 import { hydrate } from '../../hydrate.js'
 import type { EntitySchema } from '../../meta/entity/entity-schema.js'
@@ -286,14 +287,7 @@ async function inWriteTransaction(
 
     return output
   } catch (error) {
-    // A failing rollback must not mask the original error
-    try {
-      await tx.rollback()
-    } catch {
-      // ignored: the original error below is what the caller needs
-    }
-
-    throw error
+    return await rollbackAfterFailure(tx, error)
   }
 }
 

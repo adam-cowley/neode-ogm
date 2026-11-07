@@ -1,3 +1,4 @@
+import { NeodeError } from '../errors/index.js'
 import type { Newable } from '../meta/newable.js'
 // Import Direction from its leaf module: the query barrel pulls the eager
 // utilities, which pull the metamodel back in (dependency cycle)
@@ -14,7 +15,14 @@ export class RelationshipPropertySchema {
   private readonly key: string
   private type!: string
   private direction!: Direction
-  private target!: Newable
+  private target: Newable | undefined
+
+  /**
+  A target provider for forward-referenced classes: the arrow thunk the
+  user wrote, resolved on first getTarget() — the target class may be
+  declared later in the file, inside its temporal dead zone at registration
+  */
+  private targetProvider: (() => Newable) | undefined
   private many!: boolean
   private eager = false
 
@@ -47,11 +55,31 @@ export class RelationshipPropertySchema {
     return this.direction
   }
 
-  setTarget(target: Newable): void {
-    this.target = target
+  setTarget(target: Newable | (() => Newable)): void {
+    // An arrow thunk has no prototype — store it for deferred resolution
+    // instead of calling it during registration (the target class may be
+    // declared later in the file, inside its temporal dead zone)
+    if (isClassConstructor(target)) {
+      this.target = target
+    } else {
+      this.targetProvider = target
+    }
   }
 
   getTarget(): Newable {
+    if (this.targetProvider) {
+      const provider = this.targetProvider
+
+      this.targetProvider = undefined
+      this.target = provider()
+    }
+
+    if (this.target === undefined) {
+      throw new NeodeError(
+        `Relationship "${this.key}" has no target — declare its target class or factory before use`,
+      )
+    }
+
     return this.target
   }
 
@@ -82,4 +110,12 @@ export class RelationshipPropertySchema {
   toString(relationshipAlias = ''): string {
     return `${this.direction === Direction.INCOMING ? '<' : ''}-[${relationshipAlias}:${this.type}]-${this.direction === Direction.OUTGOING ? '>' : ''}`
   }
+}
+
+/**
+True for a class constructor rather than an arrow thunk: constructors carry
+a prototype, arrow functions do not
+*/
+function isClassConstructor(value: Newable | (() => Newable)): value is Newable {
+  return 'prototype' in value
 }

@@ -242,6 +242,18 @@ describe('Neode#factory (NTS-444)', () => {
       expect(pool).toEqual([]) // the fake was never invoked
       expect(creates(provider)[0]?.params).toMatchObject({ email: 'fixed@example.com' })
     })
+
+    it('seeds the used set with an override: later rows fake distinct values around it', async () => {
+      const pool = ['fixed@example.com', 'free@example.com']
+      emailFake = () => pool.shift() as string
+
+      await neode.factory(SeedPerson).count(2).create({ email: 'fixed@example.com' })
+
+      const emails = creates(provider).map((create) => create.params['email'])
+
+      // Row 1 takes the override; row 2's fake retries past the taken value
+      expect(emails).toEqual(['fixed@example.com', 'free@example.com'])
+    })
   })
 
   describe('with()', () => {

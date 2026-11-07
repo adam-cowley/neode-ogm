@@ -85,7 +85,12 @@ export interface CursorPage<T> {
 
   /**
   Cursor of the NEXT page in the walk direction (pass it back as
-  `after` or `before`); undefined when the walk is exhausted
+  `after` or `before`); undefined when the walk is exhausted.
+
+  Opaque: a composite of the boundary property value and the boundary
+  node's elementId, so rows sharing a property value (bulk writes land
+  in the same millisecond) are never skipped between pages. Plain
+  scalar values stay accepted as cursors.
   */
   nextCursor: string | number | undefined
 
@@ -269,18 +274,34 @@ export class PaginateService extends QueryService {
     }
 
     if (cursor !== undefined) {
-      parameters['cursor'] = toCursorValue(cursor, property)
+      // Composite cursors tie-break on elementId, so keyset pages never
+      // skip rows sharing the boundary value; scalar cursors (and raw
+      // property values) compare on the property alone
+      const { value, id } = parseCursor(cursor)
 
       const comparison = isForward ? '>' : '<'
-      const value = cast === undefined ? '$cursor' : `${cast}($cursor)`
 
-      conditions.push(`${THIS_NODE}.${key} ${comparison} ${value}`)
+      const casted = cast === undefined ? '$cursor' : `${cast}($cursor)`
+
+      parameters['cursor'] = value
+
+      conditions.push(
+        id === undefined
+          ? `${THIS_NODE}.${key} ${comparison} ${casted}`
+          : `(${THIS_NODE}.${key} ${comparison} ${casted} OR (${THIS_NODE}.${key} = ${casted} AND elementId(${THIS_NODE}) ${comparison} $cursorId))`,
+      )
+
+      if (id !== undefined) {
+        parameters['cursorId'] = id
+      }
     }
 
+    // A total order (property, elementId) — equal property values keep a
+    // stable walk order
     const query = [
       `MATCH (${THIS_NODE}${labelPattern(schema.getLabels())})`,
       conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '',
-      `ORDER BY ${THIS_NODE}.${key} ${isForward ? 'ASC' : 'DESC'}`,
+      `ORDER BY ${THIS_NODE}.${key} ${isForward ? 'ASC' : 'DESC'}, elementId(${THIS_NODE}) ${isForward ? 'ASC' : 'DESC'}`,
       // One row over the page size answers hasMore
       `LIMIT ${String(limit + 1)}`,
       `RETURN ${THIS_NODE}`,
@@ -310,11 +331,14 @@ export class PaginateService extends QueryService {
     // backward, the oldest (the first row of the ascending items)
     const boundary = ordered[isForward ? ordered.length - 1 : 0]
 
-    const boundaryNode = boundary === undefined ? undefined : boundary.get(THIS_NODE)
+    const boundaryNode: unknown = boundary === undefined ? undefined : boundary.get(THIS_NODE)
 
     const nextCursor =
       hasMore && isGraphNode(boundaryNode)
-        ? toCursorValue(boundaryNode.properties[key], property)
+        ? JSON.stringify([
+            toCursorValue(boundaryNode.properties[key], property),
+            boundaryNode.elementId,
+          ])
         : undefined
 
     return { items, nextCursor, hasMore }
@@ -338,4 +362,30 @@ export class PaginateService extends QueryService {
 
     return this.cursorPage<T>(constructor, schema, filter, options, limit)
   }
+}
+
+/**
+Split a cursor into its compared value and tie-break elementId: a
+composite cursor is the JSON array `[value, elementId]`; anything else is
+the scalar value itself (raw property values stay accepted).
+*/
+function parseCursor(cursor: string | number): { value: string | number; id?: string } {
+  if (typeof cursor === 'string' && cursor.startsWith('[')) {
+    try {
+      const parsed: unknown = JSON.parse(cursor)
+
+      if (
+        Array.isArray(parsed) &&
+        parsed.length === 2 &&
+        (typeof parsed[0] === 'string' || typeof parsed[0] === 'number') &&
+        typeof parsed[1] === 'string'
+      ) {
+        return { value: parsed[0], id: parsed[1] }
+      }
+    } catch {
+      // Not a composite cursor — fall through and compare as a scalar
+    }
+  }
+
+  return { value: cursor }
 }

@@ -10,7 +10,9 @@ import type { RelationshipPropertySchema } from '../../meta/relationship-propert
 import { getValueOrDefault, getValuesAsRecord, setPropertyInBuilder } from '../../utilities.js'
 import {
   applyEmbeddings,
+  applyFakeValues,
   applyInTransforms,
+  createNodeAndRelationships,
   getOtherProperty,
   modelPropertyValues,
   setRelationshipEntityProperties,
@@ -152,7 +154,10 @@ export class MergeService extends QueryService {
     return this.runner.run(query, params)
   }
 
-  async save(model: object, schema: EntitySchema): Promise<{ elementId: string }> {
+  async save(
+    model: object,
+    schema: EntitySchema,
+  ): Promise<{ elementId: string; created: boolean }> {
     if (!isRecord(model)) {
       throw new TypeError('save requires a model object')
     }
@@ -188,6 +193,19 @@ export class MergeService extends QueryService {
       schema,
     )
 
+    if (Object.keys(mergeOn).length === 0) {
+      // Nothing to merge on: the entity carries no identity, so save() is
+      // a CREATE. (A bare MERGE (this:Label) would match an arbitrary
+      // existing node of the label and overwrite it.)
+      applyFakeValues(schema, model)
+
+      validate(modelPropertyValues(model, schema), schema)
+
+      const elementId = await createNodeAndRelationships(this.runner, schema, model)
+
+      return { elementId, created: true }
+    }
+
     builder.merge(THIS_NODE, schema.getLabels(), mergeOn)
 
     // Set Properties
@@ -212,6 +230,14 @@ export class MergeService extends QueryService {
 
     // Run it!
     const result = await this.runner.run(query, params)
+
+    // Was the merge a create or a match? The root statement's summary
+    // counters say — the nested relationship writes below also create
+    // nodes, so this must be read from the root merge, not at the end.
+    // Neo4j names the counter nodesCreated, the Relate engine nodes_created.
+    const counters = result.summary?.counters ?? {}
+
+    const wasCreated = (counters['nodesCreated'] ?? counters['nodes_created'] ?? 0) > 0
 
     // Get element ID
     const firstRecord = result.records[0]
@@ -301,6 +327,6 @@ export class MergeService extends QueryService {
       }),
     )
 
-    return { elementId: thisId }
+    return { elementId: thisId, created: wasCreated }
   }
 }

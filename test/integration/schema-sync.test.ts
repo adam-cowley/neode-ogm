@@ -79,7 +79,7 @@ describe('Schema sync (constraints + indexes)', () => {
         label: 'SchemaPerson',
         property: 'id',
         success: true,
-        statement: `CREATE CONSTRAINT ${UNIQUE_CONSTRAINT} IF NOT EXISTS FOR (n:SchemaPerson) REQUIRE n.\`id\` IS UNIQUE`,
+        statement: `CREATE CONSTRAINT ${UNIQUE_CONSTRAINT} IF NOT EXISTS FOR (n:\`SchemaPerson\`) REQUIRE n.\`id\` IS UNIQUE`,
       })
 
       expect(index).toMatchObject({
@@ -88,7 +88,7 @@ describe('Schema sync (constraints + indexes)', () => {
         label: 'SchemaPerson',
         property: 'email',
         success: true,
-        statement: `CREATE INDEX ${EMAIL_INDEX} IF NOT EXISTS FOR (n:SchemaPerson) ON (n.\`email\`)`,
+        statement: `CREATE INDEX ${EMAIL_INDEX} IF NOT EXISTS FOR (n:\`SchemaPerson\`) ON (n.\`email\`)`,
       })
 
       expect(await constraintNames(backend)).toContain(UNIQUE_CONSTRAINT)
@@ -168,7 +168,7 @@ describe('Schema sync (constraints + indexes)', () => {
         label: 'SchemaPerson',
         property: 'title',
         success: true,
-        statement: `CREATE CONSTRAINT ${TITLE_EXISTS} IF NOT EXISTS FOR (n:SchemaPerson) REQUIRE n.\`title\` IS NOT NULL`,
+        statement: `CREATE CONSTRAINT ${TITLE_EXISTS} IF NOT EXISTS FOR (n:\`SchemaPerson\`) REQUIRE n.\`title\` IS NOT NULL`,
       })
       expect(await constraintNames(backend)).toContain(TITLE_EXISTS)
 

@@ -5,25 +5,12 @@ import { getModel } from '../meta/index.js'
 import type { PropertySchema } from '../meta/property-schema.js'
 import type { INeode } from '../neode.interface.js'
 import { Builder, eagerNode } from '../query/index.js'
+import { quote } from '../query/quote.js'
+import { applyOrder, type OrderSpec } from '../query/order-spec.js'
 import type { ScoredEntity } from '../services/query/search.service.js'
 import { fulltextIndexName } from '../services/schema/fulltext.service.js'
 import { isGraphNode, isRecord } from '../services/type-guards.js'
 import { hydrateNode } from '../utilities.js'
-
-/**
-Ordering spec, matching neode's all() forms:
-
-- `'name'` - order by one property ascending
-- `['name', 'age']` - order by several properties
-- `{ name: 'DESC' }` - property -> direction map
-- `[{ name: 'DESC' }, { age: 'ASC' }]` - list of property -> direction maps
-- `{ field: 'name', order: 'DESC' }` - two-arg (key, direction) descriptor
-*/
-export type OrderSpec =
-  | string
-  | (string | Record<string, string>)[]
-  | Record<string, string>
-  | { field: string; order?: string }
 
 export interface FindOptions {
   order?: OrderSpec
@@ -97,22 +84,6 @@ export class Repository<Entity> {
     )
   }
 
-  private applyOrder(builder: Builder, order: OrderSpec): void {
-    if (typeof order === 'string') {
-      builder.orderBy(`${THIS_NODE}.${order}`)
-    } else if (Array.isArray(order)) {
-      for (const entry of order) {
-        this.applyOrder(builder, entry)
-      }
-    } else if ('field' in order && typeof order.field === 'string') {
-      builder.orderBy({ field: `${THIS_NODE}.${order.field}`, order: order.order })
-    } else {
-      for (const [key, direction] of Object.entries(order)) {
-        builder.orderBy(`${THIS_NODE}.${key}`, direction)
-      }
-    }
-  }
-
   private async read(builder: Builder): Promise<QueryOutput> {
     const { query, params } = builder.build()
 
@@ -153,7 +124,7 @@ export class Repository<Entity> {
     const builder = this.matchAll(parameters)
 
     if (options.order !== undefined) {
-      this.applyOrder(builder, options.order)
+      applyOrder(builder, options.order)
     }
 
     this.returnNodes(builder)
@@ -307,13 +278,13 @@ export class Repository<Entity> {
 
     // The step is a validated finite number, so inlining it into the raw
     // set is injection-safe; the Builder's raw set has no parameter channel
-    const key = declared.getKey().replaceAll('`', '``')
+    const key = quote(declared.getKey())
     const primaryKey = this.getPrimaryKey().getKey()
     const id = isRecord(target) ? target[primaryKey] : target
 
     const builder = new Builder().match(THIS_NODE, this.schema.getLabels(), { [primaryKey]: id })
-    builder.set(`${THIS_NODE}.\`${key}\` = coalesce(${THIS_NODE}.\`${key}\`, 0) + (${String(by)})`)
-    builder.return(`${THIS_NODE}.\`${key}\` AS value`)
+    builder.set(`${THIS_NODE}.${key} = coalesce(${THIS_NODE}.${key}, 0) + (${String(by)})`)
+    builder.return(`${THIS_NODE}.${key} AS value`)
 
     const { query, params } = builder.build()
     const output = await this.neode.writeCypher(query, params, this.database)

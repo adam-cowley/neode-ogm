@@ -61,7 +61,9 @@ relationship logic all apply.
 Precedence on create: explicit value > `default` > `fake`. Unique
 properties with a `fake` generator are retried until the values are
 distinct within one batch (app-level check) — across runs the user's
-fake fn must be DB-safe (e.g. random UUIDs).
+fake fn must be DB-safe (e.g. random UUIDs). An override on a unique
+property applies to the first row; later rows fake distinct values
+around it.
 */
 export class FactoryBuilder<T extends object = Record<string, unknown>> {
   private readonly neode: Neode
@@ -102,7 +104,15 @@ export class FactoryBuilder<T extends object = Record<string, unknown>> {
       const key = property.getKey()
       const fake = property.getFake()
 
-      if (typeof fake !== 'function' || properties[key] !== undefined) {
+      if (typeof fake !== 'function') {
+        continue
+      }
+
+      // The override applies to the first row only — consume it so later
+      // rows fake distinct values around the seeded used set
+      if (properties[key] !== undefined) {
+        overrides[key] = undefined
+
         continue
       }
 
@@ -226,12 +236,22 @@ export class FactoryBuilder<T extends object = Record<string, unknown>> {
       .getProperties()
       .filter((property) => property.isUnique() && typeof property.getFake() === 'function')
 
-    const used = new Map<string, Set<unknown>>()
+    // An override on a unique property occupies its value before row 1
+    const used = new Map<string, Set<unknown>>(
+      uniques
+        .filter((property) => overrides[property.getKey()] !== undefined)
+        .map((property) => [property.getKey(), new Set([overrides[property.getKey()]])]),
+    )
+
+    // Unique+fake overrides apply to the FIRST row; later rows fake
+    // distinct values around the used set. The copy keeps the caller's
+    // object untouched while createOne consumes overrides row by row.
+    const rowOverrides: Record<string, unknown> = { ...overrides }
 
     const instances: T[] = []
 
     for (let index = 0; index < total; index++) {
-      instances.push(await this.createOne(overrides, uniques, used))
+      instances.push(await this.createOne(rowOverrides, uniques, used))
     }
 
     for (const instance of instances) {
