@@ -19,12 +19,13 @@
     "dist/decorators/relationship/other-node.decorator.js"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsdown",
     "prepublishOnly": "npm run build && npm run test:unit",
     "watch": "tsc --watch",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
+    "test:package": "vitest run --project package",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
     "docs:agents": "jiti scripts/generate-agent-docs.ts",

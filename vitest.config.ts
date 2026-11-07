@@ -26,6 +26,15 @@ export default defineConfig({
         },
       },
 
+      // Built-output tests: import dist/ (ESM + CJS) — run after `build`
+      {
+        test: {
+          name: 'package',
+          include: ['test/package/**/*.test.ts'],
+          globals: true,
+        },
+      },
+
       // Tests against a real graph database:
       // Relate (embedded, default) or Neo4j / Memgraph via Bolt (env vars).
       // Files share one in-process engine, so they must not race each
