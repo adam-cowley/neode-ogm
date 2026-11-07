@@ -16,7 +16,7 @@ Example:
 course: { title: string; status: string };
 ```
 */
-export default function RelatedOne(config: RelatedConfig) {
+export function RelatedOne(config: RelatedConfig): (value: undefined, context: ClassFieldDecoratorContext) => void {
   return function (_value: undefined, context: ClassFieldDecoratorContext): void {
     const propertyKey = memberName(context)
 

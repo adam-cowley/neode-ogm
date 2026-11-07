@@ -1,6 +1,6 @@
 import neo4j from 'neo4j-driver'
 import { getModel } from '../meta/index.js'
-import type EntitySchema from '../meta/entity/entity-schema.js'
+import type { EntitySchema } from '../meta/entity/entity-schema.js'
 import type { Newable } from '../meta/newable.js'
 import { PropertyType } from '../meta/property-schema.js'
 import { hydrateNode } from '../utils.js'

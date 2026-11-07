@@ -1,4 +1,4 @@
-import type EntitySchema from '../../meta/entity/entity-schema.js'
+import type { EntitySchema } from '../../meta/entity/entity-schema.js'
 import { applyFakeValues, createNodeAndRelationships, modelPropertyValues } from '../write-utils.js'
 import { validate } from '../../validation/index.js'
 import QueryService from './query.service.js'

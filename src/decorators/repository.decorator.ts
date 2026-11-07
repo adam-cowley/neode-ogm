@@ -10,7 +10,7 @@ Register a custom Repository subclass for an entity (TypeORM parity):
 The constructor is stored and instances are created with
 (neode, entity, database?) when the repository is resolved.
 */
-export default function EntityRepository(entity: Newable) {
+export function EntityRepository(entity: Newable): (repository: RepositoryConstructor, context: ClassDecoratorContext) => void {
   if (!entity) {
     throw new Error('@EntityRepository requires an entity class to link the repository to')
   }

@@ -1,6 +1,6 @@
 import type { GraphNode, QueryOutput, QueryRecord } from './driver/types.js'
 import { getModel } from './meta/index.js'
-import type EntitySchema from './meta/entity/entity-schema.js'
+import type { EntitySchema } from './meta/entity/entity-schema.js'
 import { type EagerRelationship, hydrateNode } from './utils.js'
 import type { WithMethods } from './entity-methods.js'
 import Collection from './collection.js'

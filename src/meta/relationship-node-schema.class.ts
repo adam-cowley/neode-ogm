@@ -6,7 +6,7 @@ export const NodePosition = {
 
 export type NodePosition = (typeof NodePosition)[keyof typeof NodePosition]
 
-export default class RelationshipNodeSchema {
+export class RelationshipNodeSchema {
   private readonly target: object
   private readonly position: NodePosition
 
@@ -15,11 +15,11 @@ export default class RelationshipNodeSchema {
     this.position = position
   }
 
-  getTarget() {
+  getTarget(): object {
     return this.target
   }
 
-  getPosition() {
+  getPosition(): NodePosition {
     return this.position
   }
 }

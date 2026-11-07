@@ -1,5 +1,5 @@
 import type { Newable } from '../meta/newable.js'
-import type EntitySchema from './entity/entity-schema.js'
+import type { EntitySchema } from './entity/entity-schema.js'
 
 export const PropertyType = {
   ANY: 0,
@@ -82,9 +82,9 @@ export const TemporalTypes: PropertyType[] = [
 
 export const RelationshipTypes: PropertyType[] = [PropertyType.ONE_TO_ONE, PropertyType.ONE_TO_ONE]
 
-export type DefaultValue = (model: object, schema: EntitySchema) => any   | undefined
+export type DefaultValue = (model: object, schema: EntitySchema) => any | undefined
 
-export default class PropertySchema {
+export class PropertySchema {
   private type: PropertyType = PropertyType.ANY
   private defaultValue!: DefaultValue
 
@@ -124,7 +124,7 @@ export default class PropertySchema {
     return this.key
   }
 
-  setType(type: PropertyType) {
+  setType(type: PropertyType): void {
     this.type = type
   }
 
@@ -132,84 +132,84 @@ export default class PropertySchema {
     return this.type
   }
 
-  setArray(value = true) {
+  setArray(value = true): void {
     this.array = value
   }
 
-  isArray() {
+  isArray(): boolean {
     return this.array
   }
 
-  setDefaultValue(value: DefaultValue) {
+  setDefaultValue(value: DefaultValue): void {
     this.defaultValue = value
   }
 
-  getDefaultValue() {
+  getDefaultValue(): DefaultValue {
     return this.defaultValue
   }
 
-  setPrimaryKey(value = true) {
+  setPrimaryKey(value = true): void {
     this.primaryKey = value
     this.unique = value
   }
 
-  isPrimaryKey() {
+  isPrimaryKey(): boolean {
     return this.primaryKey
   }
 
-  setUnique(value = true) {
+  setUnique(value = true): void {
     this.unique = value
   }
 
-  isUnique() {
+  isUnique(): boolean {
     return this.unique
   }
 
-  setRequired(value = true) {
+  setRequired(value = true): void {
     this.required = value
   }
 
-  isRequired() {
+  isRequired(): boolean {
     return this.required
   }
 
-  setHidden(value = true) {
+  setHidden(value = true): void {
     this.hidden = value
   }
 
-  isHidden() {
+  isHidden(): boolean {
     return this.hidden
   }
 
-  setProtected(value = true) {
+  setProtected(value = true): void {
     this.protectedOption = value
   }
 
-  isProtected() {
+  isProtected(): boolean {
     return this.protectedOption
   }
 
-  setReadonly(value = true) {
+  setReadonly(value = true): void {
     this.readOnly = value
   }
 
-  isReadonly() {
+  isReadonly(): boolean {
     return this.readOnly
   }
 
-  setIndex(value = true) {
+  setIndex(value = true): void {
     this.index = value
   }
 
-  isIndex() {
+  isIndex(): boolean {
     return this.index
   }
 
-  setExists(value = true) {
+  setExists(value = true): void {
     this.exists = value
   }
 
-  isExists() {
+  isExists(): boolean {
     return this.exists
   }
 
@@ -242,102 +242,102 @@ export default class PropertySchema {
   */
   private fake: (() => unknown) | undefined
 
-  setCoalesce(coalesce: string | string[]) {
+  setCoalesce(coalesce: string | string[]): void {
     this.coalesce = coalesce
   }
 
-  getCoalesce() {
+  getCoalesce(): string | string[] | undefined {
     return this.coalesce
   }
 
-  setTyped(value = true) {
+  setTyped(value = true): void {
     this.typed = value
   }
 
-  isTyped() {
+  isTyped(): boolean {
     return this.typed
   }
 
-  setCompositeUnique(properties: string[]) {
+  setCompositeUnique(properties: string[]): void {
     this.compositeUnique = properties
   }
 
-  getCompositeUnique() {
+  getCompositeUnique(): string[] | undefined {
     return this.compositeUnique
   }
 
-  setCompositeIndex(properties: string[]) {
+  setCompositeIndex(properties: string[]): void {
     this.compositeIndex = properties
   }
 
-  getCompositeIndex() {
+  getCompositeIndex(): string[] | undefined {
     return this.compositeIndex
   }
 
-  setFake(fake: () => unknown) {
+  setFake(fake: () => unknown): void {
     this.fake = fake
   }
 
-  getFake() {
+  getFake(): (() => unknown) | undefined {
     return this.fake
   }
 
-  setOnCreateSet(value = true) {
+  setOnCreateSet(value = true): void {
     this.onCreateSet = value
   }
 
-  getOnCreateSet() {
+  getOnCreateSet(): boolean {
     return this.onCreateSet
   }
 
-  setOnMatchSet(value = true) {
+  setOnMatchSet(value = true): void {
     this.onMatchSet = value
   }
 
-  getOnMatchSet() {
+  getOnMatchSet(): boolean {
     return this.onMatchSet
   }
 
-  setAlwaysSet(value = true) {
+  setAlwaysSet(value = true): void {
     this.alwaysSet = value
   }
 
-  getAlwaysSet() {
+  getAlwaysSet(): boolean {
     return this.alwaysSet
   }
 
-  setFulltext(value = true) {
+  setFulltext(value = true): void {
     this.fulltext = value
   }
 
-  getFulltext() {
+  getFulltext(): boolean {
     return this.fulltext
   }
 
-  setDescription(description: string) {
+  setDescription(description: string): void {
     this.description = description
   }
 
-  getDescription() {
+  getDescription(): string | undefined {
     return this.description
   }
 
-  setEntity(entity: Newable) {
+  setEntity(entity: Newable): void {
     this.entity = entity
   }
 
-  getEntity() {
+  getEntity(): Newable {
     return this.entity
   }
 
   /**
   Merge the given rules over any previously stored ones
   */
-  setRules(rules: Record<string, unknown>) {
+  setRules(rules: Record<string, unknown>): void {
     this.rules = { ...this.rules, ...rules }
   }
 
-  getRules() {
+  getRules(): Record<string, unknown> {
     return this.rules
   }
 
@@ -384,23 +384,23 @@ export default class PropertySchema {
   */
   private compute: ((entity: any) => unknown) | undefined
 
-  setRelationshipType(relationshipType: string) {
+  setRelationshipType(relationshipType: string): void {
     this.relationshipType = relationshipType
   }
 
-  getRelationshipType() {
+  getRelationshipType(): string | undefined {
     return this.relationshipType
   }
 
-  setFields(fields: string[]) {
+  setFields(fields: string[]): void {
     this.fields = fields
   }
 
-  getFields() {
+  getFields(): string[] | undefined {
     return this.fields
   }
 
-  setDirection(direction: import('../query/index.js').Direction) {
+  setDirection(direction: import('../query/index.js').Direction): void {
     this.projectionDirection = direction
   }
 
@@ -408,51 +408,51 @@ export default class PropertySchema {
     return this.projectionDirection
   }
 
-  setWhere(where: string) {
+  setWhere(where: string): void {
     this.where = where
   }
 
-  getWhere() {
+  getWhere(): string | undefined {
     return this.where
   }
 
-  setMinHops(minHops: number) {
+  setMinHops(minHops: number): void {
     this.minHops = minHops
   }
 
-  getMinHops() {
+  getMinHops(): number | undefined {
     return this.minHops
   }
 
-  setMaxHops(maxHops: number) {
+  setMaxHops(maxHops: number): void {
     this.maxHops = maxHops
   }
 
-  getMaxHops() {
+  getMaxHops(): number | undefined {
     return this.maxHops
   }
 
-  setLabel(label: string) {
+  setLabel(label: string): void {
     this.label = label
   }
 
-  getLabel() {
+  getLabel(): string | undefined {
     return this.label
   }
 
-  setExpression(expression: string) {
+  setExpression(expression: string): void {
     this.expression = expression
   }
 
-  getExpression() {
+  getExpression(): string | undefined {
     return this.expression
   }
 
-  setCompute(compute: (entity: any) => unknown) {
+  setCompute(compute: (entity: any) => unknown): void {
     this.compute = compute
   }
 
-  getCompute() {
+  getCompute(): ((entity: any) => unknown) | undefined {
     return this.compute
   }
 }

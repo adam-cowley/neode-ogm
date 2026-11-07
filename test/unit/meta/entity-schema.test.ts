@@ -1,5 +1,5 @@
-import EntitySchema from '../../../src/meta/entity/entity-schema'
-import PropertySchema from '../../../src/meta/property-schema'
+import { EntitySchema } from '../../../src/meta/entity/entity-schema'
+import { PropertySchema } from '../../../src/meta/property-schema'
 
 describe('EntitySchema', () => {
   describe('labels', () => {

@@ -18,7 +18,7 @@ Example:
 completedLessons: string[];
 ```
 */
-export default function RelatedMany(config: RelatedConfig) {
+export function RelatedMany(config: RelatedConfig): (value: undefined, context: ClassFieldDecoratorContext) => void {
   return function (_value: undefined, context: ClassFieldDecoratorContext): void {
     const propertyKey = memberName(context)
 

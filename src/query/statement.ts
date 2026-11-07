@@ -1,11 +1,11 @@
-import type Match from './Match.js'
-import type Order from './Order.js'
-import Property from './Property.js'
-import type Relationship from './Relationship.js'
+import type { Match } from './match.js'
+import type { Order } from './order.js'
+import { Property } from './property.js'
+import type { Relationship } from './relationship.js'
 
 export type SetClause = Property | string
 
-export default class Statement {
+export class Statement {
   private readonly prefix: string = 'MATCH'
   private readonly pattern: (Match | Relationship)[] = []
   private readonly whereClauses: string[] = []

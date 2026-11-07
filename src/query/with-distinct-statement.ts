@@ -1,4 +1,4 @@
-export default class WithDistinctStatement {
+export class WithDistinctStatement {
   private readonly variables: string[]
 
   constructor(variables: string[]) {

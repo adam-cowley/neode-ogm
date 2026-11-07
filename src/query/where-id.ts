@@ -1,4 +1,4 @@
-export default class WhereId {
+export class WhereId {
   private negative = false
   private readonly alias: string
   private readonly param: string

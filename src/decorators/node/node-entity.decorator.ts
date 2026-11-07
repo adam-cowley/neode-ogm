@@ -1,9 +1,9 @@
 import type { Newable } from '../../meta/newable.js'
 import { mergeModel } from '../../meta/index.js'
-import type NodeConfig from '../node-config.interface.js'
+import type { NodeConfig } from '../node-config.interface.js'
 import { getRegistrations } from '../registrations.js'
 
-export default function NodeEntity(config: NodeConfig = {}) {
+export function NodeEntity(config: NodeConfig = {}): (constructor: Newable, context: ClassDecoratorContext) => void {
   return function (constructor: Newable, context: ClassDecoratorContext): void {
     // Replay field registrations queued by property/relationship decorators.
     // Read the metadata object from the decorator context: esbuild attaches

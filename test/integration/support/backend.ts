@@ -14,7 +14,7 @@
 import { resolve } from 'path'
 import { existsSync } from 'fs'
 import { ConnectionProvider } from '../../../src/driver/types'
-import { Neo4jConnectionProvider } from '../../../src/driver/neo4j'
+import { Neo4jConnectionProvider } from '../../../src/driver/neo4j-connection-provider.js'
 import { RelateConnectionProvider, requireRelateClient } from '../../../src/driver/relate'
 import Neode from '../../../src/neode.service'
 

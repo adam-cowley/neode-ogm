@@ -12,7 +12,9 @@ Example:
 fullName: string;
 ```
 */
-export default function Computed(compute: (entity: any) => unknown) {
+export function Computed(
+  compute: (entity: any) => unknown,
+): (value: undefined, context: ClassFieldDecoratorContext) => void {
   return function (_value: undefined, context: ClassFieldDecoratorContext): void {
     const propertyKey = memberName(context)
 

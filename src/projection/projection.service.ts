@@ -1,10 +1,10 @@
-import Builder, { Direction } from '../query/index.js'
+import { Builder,  Direction  } from '../query/index.js'
 import { THIS_NODE } from '../constants.js'
 import type { Runner } from '../driver/types.js'
-import type EntitySchema from '../meta/entity/entity-schema.js'
+import type { EntitySchema } from '../meta/entity/entity-schema.js'
 import { getModel } from '../meta/index.js'
 import type { Newable } from '../meta/newable.js'
-import type PropertySchema from '../meta/property-schema.js';
+import type { PropertySchema } from '../meta/property-schema.js';
 import { PropertyType } from '../meta/property-schema.js'
 import type { OrderSpec } from '../services/query/get.service.js'
 import { projectionNode } from './projection.js'

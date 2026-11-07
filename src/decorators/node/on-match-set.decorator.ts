@@ -6,7 +6,7 @@ import { addRegistration, memberName } from '../registrations.js'
 Mark the property as set on match.
 Merges onto the existing property, so it can be stacked with a type decorator.
 */
-export default function OnMatchSet() {
+export function OnMatchSet(): (value: undefined, context: ClassFieldDecoratorContext) => void {
   return function (_value: undefined, context: ClassFieldDecoratorContext): void {
     const propertyKey = memberName(context)
 

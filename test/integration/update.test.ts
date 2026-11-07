@@ -10,7 +10,7 @@ import {
   Hidden,
 } from '../../src/decorators'
 import { getModel } from '../../src/meta'
-import EntitySchema from '../../src/meta/entity/entity-schema'
+import { EntitySchema } from '../../src/meta/entity/entity-schema'
 // Import the backend before the service: it initialises the module chain
 // (neode.service → query.service) that query.service's own imports loop
 // back into, so the service's direct import resolves a completed module

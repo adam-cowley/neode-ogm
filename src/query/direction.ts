@@ -17,8 +17,8 @@ Normalise a direction given in any supported spelling to a Direction.
 Unknown values fall back to BOTH (the most permissive direction),
 matching neode's behaviour of never throwing on a bad direction.
 */
-export function toDirection(value: string | Direction | undefined | null): Direction {
-  if (!value) {
+export function toDirection(value: string | undefined | null): Direction {
+  if (value === undefined || value === null || value === '') {
     return Direction.BOTH
   }
 

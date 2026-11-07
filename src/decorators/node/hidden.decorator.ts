@@ -6,7 +6,7 @@ import { addRegistration, memberName } from '../registrations.js'
 Hide the property from the returned model.
 Merges onto the existing property, so it can be stacked with a type decorator.
 */
-export default function Hidden() {
+export function Hidden(): (value: undefined, context: ClassFieldDecoratorContext) => void {
   return function (_value: undefined, context: ClassFieldDecoratorContext): void {
     const propertyKey = memberName(context)
 

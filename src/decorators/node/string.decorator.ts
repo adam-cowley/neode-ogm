@@ -1,6 +1,6 @@
 import { mergeProperty } from '../../meta/index.js'
 import { PropertyType } from '../../meta/property-schema.js'
-import type PropertyConfig from '../property-config.interface.js'
+import type { PropertyConfig } from '../property-config.interface.js'
 import { addRegistration, memberName } from '../registrations.js'
 
 /**
@@ -8,7 +8,7 @@ Register a string property.
 
 @deprecated Use `@Property({ type: 'string' })` instead — `@String` shadows the global `String` type.
 */
-export default function String(config?: PropertyConfig) {
+export function String(config?: PropertyConfig): (value: undefined, context: ClassFieldDecoratorContext) => void {
   return function (_value: undefined, context: ClassFieldDecoratorContext): void {
     const propertyKey = memberName(context)
 

@@ -3,15 +3,15 @@ A label predicate: `alias:Label` (several labels require all of them),
 shared by `whereLabel` (`WHERE n:Completed`) and `orderByLabel`
 (`ORDER BY n:Completed DESC`).
 */
-export default class LabelPredicate {
+export class LabelPredicate {
   private negative = false
   private readonly alias: string
   private readonly labels: string | string[]
 
-  constructor(alias: string, labels: string | string[], negative = false) {
+  constructor(alias: string, labels: string | string[], isNegative = false) {
     this.alias = alias
     this.labels = labels
-    this.negative = negative
+    this.negative = isNegative
   }
 
   setNegative(): void {

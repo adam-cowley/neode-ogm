@@ -3,13 +3,13 @@ import { Direction } from '../../query/index.js'
 import { mergeRelationshipProperty } from '../../meta/index.js'
 import { addRegistration, memberName } from '../registrations.js'
 
-export default function OneToMany(
+export function OneToMany(
   entity: () => Newable,
   type?: string,
   direction?: Direction,
   eager?: boolean,
   description?: string,
-) {
+): (value: undefined, context: ClassFieldDecoratorContext) => void {
   return function (_value: undefined, context: ClassFieldDecoratorContext): void {
     const propertyKey = memberName(context)
 

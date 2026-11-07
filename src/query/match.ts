@@ -1,6 +1,6 @@
-import type Property from './Property.js'
+import type { Property } from './property.js'
 
-export default class Match {
+export class Match {
   private readonly alias: string | undefined
   private readonly labels: string | string[] | false = false
   private readonly properties: Property[] = []
@@ -16,7 +16,7 @@ export default class Match {
   }
 
   toString(): string {
-    const alias = this.alias || ''
+    const alias = this.alias ?? ''
 
     let label = ''
 

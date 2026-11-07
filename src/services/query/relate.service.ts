@@ -1,10 +1,10 @@
-import Builder from '../../query/index.js'
+import { Builder } from '../../query/index.js'
 import type { GraphRelationship } from '../../driver/types.js'
 import { getModel } from '../../meta/index.js'
-import type EntitySchema from '../../meta/entity/entity-schema.js';
+import type { EntitySchema } from '../../meta/entity/entity-schema.js';
 import { EntityType } from '../../meta/entity/entity-schema.js'
 import { PropertyType } from '../../meta/property-schema.js'
-import type RelationshipPropertySchema from '../../meta/relationship-property-schema.js'
+import type { RelationshipPropertySchema } from '../../meta/relationship-property-schema.js'
 import { convertPropertyValue, matchCriteriaForEntity } from '../../utils.js'
 import QueryService from './query.service.js'
 

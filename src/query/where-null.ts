@@ -1,4 +1,4 @@
-export default class WhereNull {
+export class WhereNull {
   private negative = false
   private readonly property: string
 

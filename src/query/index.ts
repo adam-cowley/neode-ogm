@@ -1,19 +1,19 @@
-export type { EntityMatchCriteria } from './Builder.js'
-export { default as Statement } from './Statement.js'
-export { default as Match } from './Match.js'
-export { default as Order } from './Order.js'
-export { default as Property } from './Property.js'
-export { default as Relationship } from './Relationship.js'
-export { default as Where } from './Where.js'
-export { default as WhereBetween } from './WhereBetween.js'
-export { default as WhereId } from './WhereId.js'
-export { default as WhereNull } from './WhereNull.js'
-export { default as WhereRaw } from './WhereRaw.js'
-export { default as WhereStatement } from './WhereStatement.js'
-export { default as LabelPredicate } from './LabelPredicate.js'
-export { default as WithStatement } from './WithStatement.js'
-export { default as WithDistinctStatement } from './WithDistinctStatement.js'
-export { Direction, toDirection } from './Direction.js'
+export type { EntityMatchCriteria } from './builder.js'
+export { Statement } from './statement.js'
+export { Match } from './match.js'
+export { Order } from './order.js'
+export { Property } from './property.js'
+export { Relationship } from './relationship.js'
+export { Where } from './where.js'
+export { WhereBetween } from './where-between.js'
+export { WhereId } from './where-id.js'
+export { WhereNull } from './where-null.js'
+export { WhereRaw } from './where-raw.js'
+export { WhereStatement } from './where-statement.js'
+export { LabelPredicate } from './label-predicate.js'
+export { WithStatement } from './with-statement.js'
+export { WithDistinctStatement } from './with-distinct-statement.js'
+export { Direction, toDirection } from './direction.js'
 export {
   EAGER_ID,
   EAGER_LABELS,
@@ -22,6 +22,6 @@ export {
   eagerNode,
   eagerPattern,
   eagerRelationship,
-} from './eager-utils.js'
+} from './eager-utilities.js'
 
-export {default, default as Builder} from './Builder.js'
+export { Builder } from './builder.js'

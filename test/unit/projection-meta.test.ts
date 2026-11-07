@@ -11,7 +11,7 @@ import {
   RelationshipExists,
 } from '../../src/decorators'
 import { getModel } from '../../src/meta'
-import EntitySchema from '../../src/meta/entity/entity-schema'
+import { EntitySchema } from '../../src/meta/entity/entity-schema'
 import { defineModel } from '../../src/meta/map-schema'
 import { Newable } from '../../src/meta/newable'
 import { PropertyType } from '../../src/meta/property-schema'

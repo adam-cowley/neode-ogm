@@ -1,5 +1,9 @@
-import type { ConnectionProvider } from '../../driver/types.js'
+// Every schema service imports the model registry, whose transitive
+// imports (repository → utils) close a cycle back through
+// neode.service — inspect.service.ts sits in the same reported cycle
+// eslint-disable-next-line import-x/no-cycle -- structural to the schema services
 import { getModels } from '../../meta/index.js'
+import type { ConnectionProvider } from '../../driver/types.js'
 import {
   ConstraintAction,
   ConstraintType,
@@ -89,18 +93,17 @@ function declaredFulltextDefinitions(): FulltextIndexDefinition[] {
 
   for (const model of getModels().values()) {
     for (const label of model.getLabels()) {
-      const properties = model
-        .getProperties()
-        .filter((property) => property.getFulltext())
-        .map((property) => property.getKey())
-
-      if (properties.length > 0) {
-        definitions.push({ label, properties })
-      }
+      definitions.push({
+        label,
+        properties: model
+          .getProperties()
+          .filter((property) => property.getFulltext())
+          .map((property) => property.getKey()),
+      })
     }
   }
 
-  return definitions
+  return definitions.filter((definition) => definition.properties.length > 0)
 }
 
 /**
@@ -114,15 +117,17 @@ function declaredPropertyTypes(): Map<string, string> {
   for (const model of getModels().values()) {
     for (const label of model.getLabels()) {
       for (const property of model.getProperties()) {
-        if (property.isTyped()) {
-          const cypherType = cypherPropertyType(property.getType())
+        if (!property.isTyped()) {
+          continue
+        }
 
-          if (cypherType) {
-            types.set(
-              schemaObjectName(label, property.getKey(), ConstraintType.PROPERTY_TYPE),
-              cypherType,
-            )
-          }
+        const cypherType = cypherPropertyType(property.getType())
+
+        if (cypherType !== undefined) {
+          types.set(
+            schemaObjectName(label, property.getKey(), ConstraintType.PROPERTY_TYPE),
+            cypherType,
+          )
         }
       }
     }
@@ -142,74 +147,76 @@ function createStatement(
 ): string | undefined {
   const label = object.labelsOrTypes[0] ?? ''
 
-  if (object.type === ConstraintType.VECTOR) {
-    const definition = vectors.get(object.name)
+  switch (object.type) {
+    case ConstraintType.VECTOR: {
+      const definition = vectors.get(object.name)
 
-    return definition ? createVectorStatement(definition) : undefined
+      return definition === undefined ? undefined : createVectorStatement(definition)
+    }
+    case ConstraintType.FULLTEXT: {
+      return createFulltextStatement({ label, properties: object.properties, name: object.name })
+    }
+    case ConstraintType.PROPERTY_TYPE: {
+      const cypherType = types.get(object.name)
+
+      return cypherType === undefined
+        ? undefined
+        : propertyTypeStatement(
+            ConstraintAction.CREATE,
+            label,
+            object.properties[0] ?? '',
+            cypherType,
+            object.name,
+          )
+    }
+    case ConstraintType.UNIQUE:
+    case ConstraintType.EXISTS:
+    case ConstraintType.INDEX: {
+      return schemaStatement(
+        ConstraintAction.CREATE,
+        object.type,
+        label,
+        object.properties,
+        object.name,
+      )
+    }
+    default: {
+      return undefined
+    }
   }
-
-  if (object.type === ConstraintType.FULLTEXT) {
-    return createFulltextStatement({ label, properties: object.properties, name: object.name })
-  }
-
-  if (object.type === ConstraintType.PROPERTY_TYPE) {
-    const cypherType = types.get(object.name)
-
-    return cypherType
-      ? propertyTypeStatement(
-          ConstraintAction.CREATE,
-          label,
-          object.properties[0] ?? '',
-          cypherType,
-          object.name,
-        )
-      : undefined
-  }
-
-  return schemaStatement(
-    ConstraintAction.CREATE,
-    object.type as ConstraintType,
-    label,
-    object.properties,
-    object.name,
-  )
 }
-
-/**
-Constraint-like types as SHOW reports them: dropped with DROP CONSTRAINT
-rather than DROP INDEX
-*/
-const isConstraintType = (type: string): boolean => /UNIQUE|EXIST|PROPERTY|KEY/i.test(type)
 
 /**
 DROP statement for an installed object, built by the same statement
 builders the drop paths use (NTS-450)
 */
 function dropStatement(object: SchemaObject): string {
-  if (object.type === ConstraintType.VECTOR) {
-    return dropVectorStatement(object.name)
-  }
+  const label = object.labelsOrTypes[0] ?? ''
+  // SHOW's spellings (EXISTENCE, RANGE) normalise onto the declared
+  // vocabulary before dispatch
+  const type = normaliseType(object.type)
 
-  if (object.type === ConstraintType.FULLTEXT) {
-    return dropFulltextStatement(object.name)
+  switch (type) {
+    case ConstraintType.VECTOR: {
+      return dropVectorStatement(object.name)
+    }
+    case ConstraintType.FULLTEXT: {
+      return dropFulltextStatement(object.name)
+    }
+    case ConstraintType.UNIQUE:
+    case ConstraintType.EXISTS:
+    case ConstraintType.PROPERTY_TYPE: {
+      return object.properties.length > 0
+        ? schemaStatement(ConstraintAction.DROP, type, label, object.properties, object.name)
+        : `DROP CONSTRAINT ${object.name} IF EXISTS`
+    }
+    default: {
+      // shortcut: no builder exists for range/text/point index drops,
+      // and they all share the plain DROP INDEX spelling — add one per
+      // kind if their syntax ever diverges
+      return `DROP INDEX ${object.name} IF EXISTS`
+    }
   }
-
-  if (isConstraintType(object.type)) {
-    return object.properties.length > 0
-      ? schemaStatement(
-          ConstraintAction.DROP,
-          object.type as ConstraintType,
-          object.labelsOrTypes[0] ?? '',
-          object.properties,
-          object.name,
-        )
-      : `DROP CONSTRAINT ${object.name} IF EXISTS`
-  }
-
-  // shortcut: no builder exists for range/text/point index drops, and
-  // they all share the plain DROP INDEX spelling — add one per kind if
-  // their syntax ever diverges
-  return `DROP INDEX ${object.name} IF EXISTS`
 }
 
 /**
@@ -231,11 +238,13 @@ const normaliseType = (type: string): string => {
   return upper
 }
 
-const sameDefinition = (declared: SchemaObject, installed: SchemaObject): boolean =>
+const hasSameValues = (left: string[], right: string[]): boolean =>
+  left.length === right.length && left.every((value) => right.includes(value))
+
+const isSameDefinition = (declared: SchemaObject, installed: SchemaObject): boolean =>
   normaliseType(declared.type) === normaliseType(installed.type) &&
-  [...declared.labelsOrTypes].sort().join(',') ===
-    [...installed.labelsOrTypes].sort().join(',') &&
-  [...declared.properties].sort().join(',') === [...installed.properties].sort().join(',')
+  hasSameValues(declared.labelsOrTypes, installed.labelsOrTypes) &&
+  hasSameValues(declared.properties, installed.properties)
 
 function driftGroup(
   group: SchemaDiff,
@@ -267,23 +276,19 @@ function driftGroup(
     }))
 
   const mismatched = group.declared
-    .filter((object) => {
-      const installed = installedByName.get(object.name)
-
-      return installed !== undefined && !sameDefinition(object, installed)
-    })
-    .map((object): SchemaDriftEntry => {
-      const installed = installedByName.get(object.name) as SchemaObject
-
-      return {
-        name: object.name,
-        type: object.type,
-        labelsOrTypes: object.labelsOrTypes,
-        properties: object.properties,
-        createStatement: createStatement(object, vectors, types),
-        dropStatement: dropStatement(installed),
-      }
-    })
+    .map((object) => ({ declared: object, installed: installedByName.get(object.name) }))
+    .filter(
+      (pair): pair is { declared: SchemaObject, installed: SchemaObject } =>
+        pair.installed !== undefined && !isSameDefinition(pair.declared, pair.installed),
+    )
+    .map((pair): SchemaDriftEntry => ({
+      name: pair.declared.name,
+      type: pair.declared.type,
+      labelsOrTypes: pair.declared.labelsOrTypes,
+      properties: pair.declared.properties,
+      createStatement: createStatement(pair.declared, vectors, types),
+      dropStatement: dropStatement(pair.installed),
+    }))
 
   return { missing, stale, mismatched }
 }
@@ -335,26 +340,28 @@ export function formatSchemaDrift(drift: SchemaDrift): string {
   const lines: string[] = []
 
   for (const [action, entries, note] of groups) {
-    if (entries.length > 0) {
-      lines.push(`${action} (${entries.length}) — ${note}:`)
+    if (entries.length === 0) {
+      continue
+    }
 
-      for (const entry of entries) {
-        const where = entry.labelsOrTypes.map((label) => `:${label}`).join('')
-        lines.push(`  - ${entry.type} ${entry.name} on ${where} (${entry.properties.join(', ')})`)
+    lines.push(`${action} (${String(entries.length)}) — ${note}:`)
 
-        if (entry.createStatement) {
-          lines.push(`      fix: ${entry.createStatement}`)
-        }
+    for (const entry of entries) {
+      const where = entry.labelsOrTypes.map((label) => `:${label}`).join('')
+      lines.push(`  - ${entry.type} ${entry.name} on ${where} (${entry.properties.join(', ')})`)
 
-        if (entry.dropStatement) {
-          // mismatched entries need both statements; stale ones are
-          // only applied with the explicit dropStale flag
-          lines.push(
-            entry.createStatement
-              ? `      drop first: ${entry.dropStatement}`
-              : `      fix (requires dropStale: true): ${entry.dropStatement}`,
-          )
-        }
+      if (entry.createStatement !== undefined) {
+        lines.push(`      fix: ${entry.createStatement}`)
+      }
+
+      if (entry.dropStatement !== undefined) {
+        // mismatched entries need both statements; stale ones are
+        // only applied with the explicit dropStale flag
+        lines.push(
+          entry.createStatement === undefined
+            ? `      fix (requires dropStale: true): ${entry.dropStatement}`
+            : `      drop first: ${entry.dropStatement}`,
+        )
       }
     }
   }
@@ -380,14 +387,14 @@ export async function applySchemaDrift(
 
   for (const group of [drift.constraints, drift.indexes]) {
     for (const entry of group.missing) {
-      if (entry.createStatement) {
+      if (entry.createStatement !== undefined) {
         targets.push({ action: ConstraintAction.CREATE, entry, statement: entry.createStatement })
       }
     }
 
-    if (options.dropStale) {
+    if (options.dropStale === true) {
       for (const entry of group.stale) {
-        if (entry.dropStatement) {
+        if (entry.dropStatement !== undefined) {
           targets.push({ action: ConstraintAction.DROP, entry, statement: entry.dropStatement })
         }
       }
@@ -398,8 +405,9 @@ export async function applySchemaDrift(
     targets.map(async ({ action, entry, statement }) => {
       const result: SchemaResult = {
         action,
-        // stale objects may carry a SHOW-only type (RANGE, TEXT, …)
-        // that has no declared equivalent
+        // stale objects report the type SHOW gave them (RANGE, TEXT,
+        // …), which has no declared equivalent to name instead
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- reporting-only field
         type: entry.type as ConstraintType,
         label: entry.labelsOrTypes[0] ?? '',
         property: entry.properties[0] ?? '',
@@ -416,7 +424,7 @@ export async function applySchemaDrift(
 
         result.success = true
       } catch (error) {
-        result.error = error as Error
+        result.error = error instanceof Error ? error : new Error(String(error))
       }
 
       return result

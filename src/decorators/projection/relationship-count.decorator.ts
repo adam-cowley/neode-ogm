@@ -15,7 +15,7 @@ Example:
 requiredLessonsCount: number;
 ```
 */
-export default function RelationshipCount(config: RelationshipCountConfig) {
+export function RelationshipCount(config: RelationshipCountConfig): (value: undefined, context: ClassFieldDecoratorContext) => void {
   return function (_value: undefined, context: ClassFieldDecoratorContext): void {
     const propertyKey = memberName(context)
 

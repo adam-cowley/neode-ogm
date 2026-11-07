@@ -1,16 +1,16 @@
 import type { Newable } from './meta/newable.js'
 import neo4j, { type Config } from 'neo4j-driver'
 import dotenv from 'dotenv'
-import { Neo4jConnectionProvider as Neo4indexConnectionProvider } from './driver/neo4j.js'
+import { Neo4jConnectionProvider } from './driver/neo4j-connection-provider.js'
 import type { GraphNode, GraphRelationship } from './driver/types.js'
 import { getModel } from './meta/index.js'
-import type EntitySchema from './meta/entity/entity-schema.js';
+import type { EntitySchema } from './meta/entity/entity-schema.js';
 import { EntityType } from './meta/entity/entity-schema.js'
-import type RelationshipPropertySchema from './meta/relationship-property-schema.js'
-import type PropertySchema from './meta/property-schema.js';
+import type { RelationshipPropertySchema } from './meta/relationship-property-schema.js'
+import type { PropertySchema } from './meta/property-schema.js';
 import { PropertyType, isProjectedProperty } from './meta/property-schema.js'
 import Neode from './neode.service.js'
-import { EAGER_ID, EAGER_LABELS, EAGER_TYPE } from './query/eager-utils.js'
+import { EAGER_ID, EAGER_LABELS, EAGER_TYPE } from './query/eager-utilities.js'
 import { ELEMENT_ID } from './constants.js'
 import { Direction } from './query/index.js'
 import { applyEntityMethods } from './entity-methods.js'
@@ -159,7 +159,7 @@ export function fromEnv(driverConfig: Config = {}): Neode {
 
   const driver = neo4j.driver(uri, auth, config)
 
-  return new Neode(new Neo4indexConnectionProvider(driver, database), enterprise)
+  return new Neode(new Neo4jConnectionProvider(driver, database), enterprise)
 }
 
 export interface EagerNode {
@@ -493,11 +493,11 @@ export function hydrateRelationship<T>(
 }
 
 export function setPropertyInBuilder(
-  builder: import('./query/index.js').default,
+  builder: import('./query/index.js').Builder,
   alias: string,
   property: PropertySchema,
   value: unknown,
-): import('./query/index.js').default {
+): import('./query/index.js').Builder {
   if (value === undefined || value === null) {
     return builder.delete(`${alias}.${property.getKey()}`)
   }

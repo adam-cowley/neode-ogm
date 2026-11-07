@@ -11,7 +11,7 @@ import {
 } from '../../src/services/schema/vector.service'
 import { declaredSchemaObjects } from '../../src/services/schema/inspect.service'
 import { mergeModel } from '../../src/meta'
-import EntitySchema from '../../src/meta/entity/entity-schema'
+import { EntitySchema } from '../../src/meta/entity/entity-schema'
 
 describe('fulltext index statements', () => {
   const def = { label: 'Movie', properties: ['title', 'plot'] }

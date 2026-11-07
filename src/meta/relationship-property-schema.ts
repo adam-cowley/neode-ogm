@@ -1,13 +1,13 @@
 import type { Newable } from '../meta/newable.js'
 import { Direction } from '../query/index.js'
-import type {PropertyType} from './property-schema.js';
-import type PropertySchema from './property-schema.js'
+import type { PropertyType } from './property-schema.js'
+import type { PropertySchema } from './property-schema.js'
 
 export type RelationshipType =
   | (typeof PropertyType)['ONE_TO_ONE']
   | (typeof PropertyType)['ONE_TO_MANY']
 
-export default class RelationshipPropertySchema {
+export class RelationshipPropertySchema {
   private readonly key: string
   private type!: string
   private direction!: Direction
@@ -30,59 +30,59 @@ export default class RelationshipPropertySchema {
     return cloned
   }
 
-  getKey() {
+  getKey(): string {
     return this.key
   }
 
-  setType(type: string) {
+  setType(type: string): void {
     this.type = type
   }
 
-  getType() {
+  getType(): string {
     return this.type
   }
 
-  setDirection(direction: Direction) {
+  setDirection(direction: Direction): void {
     this.direction = direction
   }
 
-  getDirection() {
+  getDirection(): Direction {
     return this.direction
   }
 
-  setTarget(target: Newable) {
+  setTarget(target: Newable): void {
     this.target = target
   }
 
-  getTarget() {
+  getTarget(): Newable {
     return this.target
   }
 
-  setMany(many: boolean) {
+  setMany(many: boolean): void {
     this.many = many
   }
 
-  getMany() {
+  getMany(): boolean {
     return this.many
   }
 
-  setEager(eager: boolean) {
+  setEager(eager: boolean): void {
     this.eager = eager
   }
 
-  getEager() {
+  getEager(): boolean {
     return this.eager
   }
 
-  setDescription(description: string) {
+  setDescription(description: string): void {
     this.description = description
   }
 
-  getDescription() {
+  getDescription(): string | undefined {
     return this.description
   }
 
-  toString(relAlias = '') {
+  toString(relAlias = ''): string {
     return `${this.direction === Direction.INCOMING ? '<' : ''}-[${relAlias}:${this.type}]-${this.direction === Direction.OUTGOING ? '>' : ''}`
   }
 }

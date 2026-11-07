@@ -2,7 +2,7 @@
 // query.service -> utils -> neode.service module cycle before the
 // query services below are evaluated
 import { openBackend, TestBackend } from './support/backend'
-import Builder from '../../src/query'
+import { Builder } from '../../src/query'
 
 describe('Query builder predicates (live engine)', () => {
   let backend: TestBackend

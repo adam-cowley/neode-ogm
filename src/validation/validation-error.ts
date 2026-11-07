@@ -17,7 +17,7 @@ export interface ValidationDetail {
   type: string
 }
 
-export default class ValidationError extends Error {
+export class ValidationError extends Error {
   readonly details: ValidationDetail[]
   readonly input: Record<string, unknown>
 

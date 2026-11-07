@@ -59,7 +59,9 @@ export interface PropertyDefinition {
   Opt in to a property-type constraint generated from the declared type (NTS-141): `REQUIRE n.prop IS :: STRING`.
   */
   typed?: boolean
-  /** Declare a full-text index over the property (NTS-123/436). */
+  /**
+  Declare a full-text index over the property (NTS-123/436).
+  */
   fulltext?: boolean
   /**
   Read-side fallbacks applied at hydration when the stored/projected
@@ -212,5 +214,8 @@ export interface SchemaDefinition {
   emission (NTS-445): surfaced by `ontology()` / `ontologyMarkdown()`.
   */
   description?: string
+  // The `string` arm admits the entity-level `description` key (NTS-445);
+  // it subsumes PropertyTypeName, hence the redundancy suppression
+  // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents -- string subsumes PropertyTypeName by design, so `description?: string` can coexist with the index signature
   [key: string]: SchemaDefinitionEntry | string[] | string | undefined
 }

@@ -1,7 +1,7 @@
 import type { Newable } from '../../meta/newable.js'
-import Builder from '../../query/index.js'
+import { Builder } from '../../query/index.js'
 import { THIS_NODE } from '../../constants.js'
-import type EntitySchema from '../../meta/entity/entity-schema.js'
+import type { EntitySchema } from '../../meta/entity/entity-schema.js'
 import QueryService from './query.service.js'
 
 /**

@@ -2,7 +2,7 @@
 A property in a SET clause: `property operator $param`
 or, inline in a pattern, `property: $param`.
 */
-export default class Property {
+export class Property {
   private readonly key: string
   private readonly param: string
   private readonly operator: string = '='

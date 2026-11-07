@@ -1,6 +1,6 @@
 import neo4j from 'neo4j-driver'
 
-import PropertySchema, { PropertyType } from '../../../src/meta/property-schema'
+import { PropertySchema, PropertyType  } from '../../../src/meta/property-schema'
 import { buildPropertySchema } from '../../../src/validation/rule-table'
 
 function prop(type: PropertyType, key = 'name'): PropertySchema {

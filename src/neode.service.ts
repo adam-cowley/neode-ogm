@@ -13,7 +13,7 @@ import type {
   Runner,
   TransactionHandle,
 } from './driver/types.js'
-import { Neo4jConnectionProvider as Neo4indexConnectionProvider } from './driver/neo4j.js'
+import { Neo4jConnectionProvider as Neo4indexConnectionProvider } from './driver/neo4j-connection-provider.js'
 import { RelateConnectionProvider } from './driver/relate.js'
 import { instrumentConnectionProvider } from './driver/instrumented.js'
 import { jsonSafeRecord } from './driver/json-safe.js'
@@ -21,9 +21,14 @@ import { hydrate } from './hydrate.js'
 import { setDefaultNeode } from './entity-methods.js'
 import { getModel, getModels, resolveRepository } from './meta/index.js'
 import type { Newable } from './meta/newable.js'
-import type EntitySchema from './meta/entity/entity-schema.js'
-import type RelationshipPropertySchema from './meta/relationship-property-schema.js'
-import { defineModel, extendModel, getModelByName, unknownDefinitionError } from './meta/map-schema.js'
+import type { EntitySchema } from './meta/entity/entity-schema.js'
+import type { RelationshipPropertySchema } from './meta/relationship-property-schema.js'
+import {
+  defineModel,
+  extendModel,
+  getModelByName,
+  unknownDefinitionError,
+} from './meta/map-schema.js'
 import { ontology, ontologyMarkdown, type Ontology } from './meta/ontology.js'
 import type { SchemaDefinition } from './meta/schema-definition.interface.js'
 import { EventType, type NeodeEventHandler } from './common/events.js'
@@ -44,11 +49,15 @@ import TransactionError, { type BatchStatementError } from './transaction/errors
 import FindByIdService from './services/query/find-by-id.service.js'
 import { INTERNAL_ID } from './constants.js'
 import { elementIdOfEntity } from './utils.js'
-import Builder from './query/index.js'
+import { Builder } from './query/index.js'
 import { search, type ScoredEntity } from './services/query/search.service.js'
 import FactoryBuilder from './services/factory.service.js'
 import { knn, type KnnMode } from './services/query/knn.service.js'
-import { inspectSchema, type InspectOptions, type SchemaInspection } from './services/schema/inspect.service.js'
+import {
+  inspectSchema,
+  type InspectOptions,
+  type SchemaInspection,
+} from './services/schema/inspect.service.js'
 import {
   type ApplySchemaDiffOptions,
   applySchemaDrift,
@@ -56,7 +65,9 @@ import {
   type SchemaDrift,
   schemaDrift,
 } from './services/schema/drift.service.js'
-import FulltextIndexService, { type FulltextIndexDefinition } from './services/schema/fulltext.service.js'
+import FulltextIndexService, {
+  type FulltextIndexDefinition,
+} from './services/schema/fulltext.service.js'
 import VectorIndexService, { type VectorIndexDefinition } from './services/schema/vector.service.js'
 import BulkService, { type BulkChunk, type BulkOptions } from './services/query/bulk.service.js'
 import PaginateService, {
@@ -80,11 +91,7 @@ export default class Neode implements INeode {
 
   private enterprise = false
 
-  constructor(
-    connection: ConnectionProvider,
-    enterprise = false,
-    options: ConnectionOptions = {},
-  ) {
+  constructor(connection: ConnectionProvider, enterprise = false, options: ConnectionOptions = {}) {
     this.enterprise = enterprise
 
     // Every statement — raw and service queries, inside and outside
@@ -230,11 +237,19 @@ export default class Neode implements INeode {
   /**
   Run a single statement in an implicit transaction
   */
-  async readCypher(query: string, parameters: QueryParameters = {}, database?: string): Promise<QueryOutput> {
+  async readCypher(
+    query: string,
+    parameters: QueryParameters = {},
+    database?: string,
+  ): Promise<QueryOutput> {
     return this.connection.run(query, parameters, 'READ', database ?? this.database)
   }
 
-  async writeCypher(query: string, parameters: QueryParameters = {}, database?: string): Promise<QueryOutput> {
+  async writeCypher(
+    query: string,
+    parameters: QueryParameters = {},
+    database?: string,
+  ): Promise<QueryOutput> {
     return this.connection.run(query, parameters, 'WRITE', database ?? this.database)
   }
 
@@ -280,7 +295,7 @@ export default class Neode implements INeode {
       summary: output.summary,
     }
 
-    return options.hydrate ? hydrate(options.hydrate, rows, options.alias) : rows;
+    return options.hydrate ? hydrate(options.hydrate, rows, options.alias) : rows
   }
 
   /**
@@ -682,9 +697,11 @@ export default class Neode implements INeode {
     // instance, ID property or Object containing match parameters
     // is passed")
     const hasRelationshipValues = schema.getRelationships().some((rel) => {
-      const value = (properties)[rel.getKey()]
+      const value = properties[rel.getKey()]
 
-      if (value === undefined || value === null) {return false}
+      if (value === undefined || value === null) {
+        return false
+      }
 
       return Array.isArray(value) ? value.length > 0 : typeof value === 'object'
     })
@@ -1128,7 +1145,9 @@ export default class Neode implements INeode {
   Define multiple models at once: { Name: schemaDefinition }
   */
   with(models: Record<string, SchemaDefinition>): this {
-    for (const [name, schema] of Object.entries(models)) {this.model(name, schema)}
+    for (const [name, schema] of Object.entries(models)) {
+      this.model(name, schema)
+    }
 
     return this
   }
@@ -1140,15 +1159,16 @@ export default class Neode implements INeode {
   withDirectory(directory: string): this {
     const requireModule = createRequire(__filename)
 
-    for (const file of readdirSync(directory)
-      .filter((file) => ['.js', '.ts'].includes(extname(file).toLowerCase()))) {
-        const name = basename(file, extname(file))
-        const loaded = requireModule(resolve(directory, file)) as {
-          default?: SchemaDefinition
-        }
-
-        this.model(name, loaded.default ?? (loaded as SchemaDefinition))
+    for (const file of readdirSync(directory).filter((file) =>
+      ['.js', '.ts'].includes(extname(file).toLowerCase()),
+    )) {
+      const name = basename(file, extname(file))
+      const loaded = requireModule(resolve(directory, file)) as {
+        default?: SchemaDefinition
       }
+
+      this.model(name, loaded.default ?? (loaded as SchemaDefinition))
+    }
 
     return this
   }
@@ -1199,7 +1219,9 @@ export default class Neode implements INeode {
 
     const builder = new Builder().match('n', schema.getLabels())
 
-    for (const [key, value] of Object.entries(parameters_)) {builder.where(`n.${key}`, value)}
+    for (const [key, value] of Object.entries(parameters_)) {
+      builder.where(`n.${key}`, value)
+    }
 
     const { query, params: parameters } = builder
       .detachDelete('n')

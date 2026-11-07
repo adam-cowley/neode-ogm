@@ -1,7 +1,7 @@
-import type EntitySchema from '../meta/entity/entity-schema.js'
+import type { EntitySchema } from '../meta/entity/entity-schema.js'
 import { PropertyType } from '../meta/property-schema.js'
 import { buildPropertySchema } from './rule-table.js'
-import ValidationError, { type ValidationDetail } from './validation-error.js'
+import { ValidationError, type ValidationDetail } from './validation-error.js'
 
 /**
 Property types that reference entities or internals — never validated as values
@@ -67,6 +67,6 @@ export function validate(properties: Record<string, unknown>, schema: EntitySche
 }
 
 
-export { default as ValidationError, ERROR_VALIDATION } from './validation-error.js'
+export { ValidationError, ERROR_VALIDATION  } from './validation-error.js'
 
 export {buildPropertySchema} from './rule-table.js'

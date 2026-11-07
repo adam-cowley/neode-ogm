@@ -1,7 +1,7 @@
 import type { Newable } from '../meta/newable.js'
 import type { Direction } from '../query/index.js'
 
-export default interface RelationshipConfig {
+export interface RelationshipConfig {
   type: string
   /**
   Factory returning the related entity class. Required: standard (TC39)

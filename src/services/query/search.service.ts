@@ -1,7 +1,7 @@
 import type { Runner } from '../../driver/types.js'
 import type { WithMethods } from '../../entity-methods.js'
 import { hydrate } from '../../hydrate.js'
-import EntitySchema from '../../meta/entity/entity-schema.js'
+import { EntitySchema } from '../../meta/entity/entity-schema.js'
 import type { Newable } from '../../meta/newable.js'
 
 /**

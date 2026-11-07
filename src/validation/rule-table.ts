@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import neo4j from 'neo4j-driver'
 
-import type PropertySchema from '../meta/property-schema.js';
+import type { PropertySchema } from '../meta/property-schema.js';
 import { PropertyType } from '../meta/property-schema.js'
 import {
   anySchema,

@@ -2,14 +2,14 @@ import { NodeEntity, Uuid, String, InternalId } from '../../src/decorators'
 import { getModel } from '../../src/meta'
 import { defineModel } from '../../src/meta/map-schema'
 import { validate } from '../../src/validation'
-import ValidationError from '../../src/validation/validation-error'
+import { ValidationError } from '../../src/validation/validation-error'
 // Import the backend before the service: it initialises the module chain
 // (neode.service → query.service) that query.service's own imports loop
 // back into, so the service's direct import resolves a completed module
 import { openBackend, TestBackend } from './support/backend'
 import UpdateService from '../../src/services/query/update.service'
 import MergeService from '../../src/services/query/merge.service'
-import EntitySchema from '../../src/meta/entity/entity-schema'
+import { EntitySchema } from '../../src/meta/entity/entity-schema'
 
 // ---- Fixtures (per-file: decorator registry is global per module registry) --
 

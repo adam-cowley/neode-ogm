@@ -1,14 +1,14 @@
 import type { Newable } from '../meta/newable.js'
 import type { Direction } from '../query/index.js'
 import type INeode from '../neode.interface.js'
-export type { DefaultValue } from './property-schema.js';
-import type PropertySchema from './property-schema.js';
+export type { DefaultValue } from './property-schema.js'
+import type { PropertySchema } from './property-schema.js'
 import { PropertyType } from './property-schema.js'
 
-import type RelationshipPropertySchema from './relationship-property-schema.js'
+import type { RelationshipPropertySchema } from './relationship-property-schema.js'
 
-import EntitySchema, { EntityType } from './entity/entity-schema.js'
-import type PropertyConfig from '../decorators/property-config.interface.js'
+import { EntitySchema, EntityType } from './entity/entity-schema.js'
+import type { PropertyConfig } from '../decorators/property-config.interface.js'
 import type { PropertyDefinition } from './schema-definition.interface.js'
 import { replayRegistrations } from '../decorators/registrations.js'
 import Repository from '../repository/index.js'

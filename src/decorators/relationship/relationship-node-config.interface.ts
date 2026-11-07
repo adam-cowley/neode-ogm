@@ -1,4 +1,4 @@
 import type { Newable } from '../../meta/newable.js'
-export default interface RelationshipNodeConfig {
+export interface RelationshipNodeConfig {
   entity: Newable
 }
