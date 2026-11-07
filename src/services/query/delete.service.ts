@@ -1,5 +1,6 @@
-import Builder from '../../query/index.js'
+import Builder, { quote } from '../../query/index.js'
 import { THIS_NODE } from '../../constants.js'
+import { matchCriteriaForEntity } from '../../utils.js'
 import { getModel } from '../../meta/index.js'
 import type EntitySchema from '../../meta/entity/entity-schema.js'
 import type RelationshipPropertySchema from '../../meta/relationship-property-schema.js'
@@ -49,14 +50,16 @@ export default class DeleteService extends QueryService {
   ): Promise<void> {
     const builder = new Builder()
 
-    const primaryKey = schema.getPrimaryKey()!.getKey()
-    const value = (entity as Record<string, unknown>)[primaryKey]
+    // Match by the entity's identity: elementId when known, else the
+    // primary key — with a clear error when neither is available
+    // (matchCriteriaForEntity's "Did you save it first?")
+    const criteria = matchCriteriaForEntity(schema, entity)
 
-    builder.match(THIS_NODE, schema.getLabels(), { [primaryKey]: value })
+    builder.matchEntity(THIS_NODE, schema, criteria)
 
     // Soft delete: SET the label instead of deleting the node
     if (options?.soft) {
-      builder.set(`${THIS_NODE}:${options.soft}`, undefined)
+      builder.set(`${THIS_NODE}:${quote(options.soft)}`, undefined)
 
       const { query, params } = builder.build()
 
@@ -84,9 +87,9 @@ export default class DeleteService extends QueryService {
     } else if (isCascade) {
       // Recursively match and delete related nodes, bounded by depth
       // (neode DeleteNode.js addCascadeDeleteNode)
-      for (const rel of schema
-        .getRelationships()) {this.addCascadeDelete(builder, THIS_NODE, rel, 1, options?.depth ?? MAX_CASCADE_DEPTH)}
-        
+      for (const rel of schema.getRelationships()) {
+        this.addCascadeDelete(builder, THIS_NODE, rel, 1, options?.depth ?? MAX_CASCADE_DEPTH)
+      }
 
       builder.detachDelete(THIS_NODE)
     } else {
@@ -123,9 +126,9 @@ export default class DeleteService extends QueryService {
       .to(nodeAlias, targetSchema?.getLabels() ?? false)
 
     if (targetSchema) {
-      for (const targetRel of targetSchema
-        .getRelationships()) {this.addCascadeDelete(builder, nodeAlias, targetRel, depth + 1, maxDepth)}
-        
+      for (const targetRel of targetSchema.getRelationships()) {
+        this.addCascadeDelete(builder, nodeAlias, targetRel, depth + 1, maxDepth)
+      }
     }
 
     builder.detachDelete(nodeAlias)

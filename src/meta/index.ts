@@ -1,8 +1,8 @@
 import type { Newable } from '../meta/newable.js'
 import type { Direction } from '../query/index.js'
 import type INeode from '../neode.interface.js'
-export type { DefaultValue } from './property-schema.js';
-import type PropertySchema from './property-schema.js';
+export type { DefaultValue } from './property-schema.js'
+import type PropertySchema from './property-schema.js'
 import { PropertyType } from './property-schema.js'
 
 import type RelationshipPropertySchema from './relationship-property-schema.js'
@@ -14,6 +14,12 @@ import { replayRegistrations } from '../decorators/registrations.js'
 import Repository from '../repository/index.js'
 
 const models = new Map<Newable, EntitySchema>()
+
+// shortcut: the model registry is process-global — every Neode instance in
+// the process shares one set of models, because hydration resolves schemas
+// without an instance (last-constructed instance also answers entity
+// instance methods). Upgrade by threading the instance through hydration
+// if per-instance models are ever needed.
 
 /**
 Config keys consumed by the metamodel; anything else is a validation rule
@@ -231,7 +237,7 @@ export function mergeRelationshipProperty(
   constructor: any,
   key: string,
   type: string,
-  target: Newable,
+  target: Newable | (() => Newable),
   direction: Direction,
   many: boolean,
   eager?: boolean,

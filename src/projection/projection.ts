@@ -1,7 +1,7 @@
 import { EAGER_ID, EAGER_LABELS, eagerPattern } from '../query/eager-utils.js'
-import { Direction } from '../query/index.js'
+import { Direction, quote } from '../query/index.js'
 import type EntitySchema from '../meta/entity/entity-schema.js'
-import type PropertySchema from '../meta/property-schema.js';
+import type PropertySchema from '../meta/property-schema.js'
 import { PropertyType, isProjectedProperty } from '../meta/property-schema.js'
 import RelationshipPropertySchema from '../meta/relationship-property-schema.js'
 import { getModel } from '../meta/index.js'
@@ -14,13 +14,6 @@ the one read query — pattern comprehensions for related subsets, inline
 `COUNT { }` / `EXISTS { }` subqueries, label predicates and raw
 expressions — instead of chasing each relationship with its own query.
 */
-
-/**
-Backtick-quote a Cypher identifier (label / relationship type)
-*/
-function quote(identifier: string): string {
-  return '`' + identifier.replaceAll('`', '``') + '`'
-}
 
 /**
 Target node labels as a Cypher label pattern (':A:B'), or ''
@@ -176,16 +169,18 @@ export function projectionNode(alias: string, schema: EntitySchema): string {
   ]
 
   // Full-entity eager relationships (existing eager machinery)
-  for (const rel of schema
-    .getRelationships()
-    .filter((rel) => rel.getEager())) {parts.push(eagerPattern(1, alias, rel))}
+  for (const rel of schema.getRelationships().filter((rel) => rel.getEager())) {
+    parts.push(eagerPattern(1, alias, rel))
+  }
 
   // Projected read-model properties
   for (const property of schema
     .getProperties()
     .filter(
       (property) => isProjectedProperty(property) && property.getType() !== PropertyType.COMPUTED,
-    )) {parts.push(projectedProperty(alias, property))}
+    )) {
+    parts.push(projectedProperty(alias, property))
+  }
 
   return `${alias} { ${parts.join(', ')} }`
 }

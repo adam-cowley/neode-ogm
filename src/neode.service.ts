@@ -23,7 +23,12 @@ import { getModel, getModels, resolveRepository } from './meta/index.js'
 import type { Newable } from './meta/newable.js'
 import type EntitySchema from './meta/entity/entity-schema.js'
 import type RelationshipPropertySchema from './meta/relationship-property-schema.js'
-import { defineModel, extendModel, getModelByName, unknownDefinitionError } from './meta/map-schema.js'
+import {
+  defineModel,
+  extendModel,
+  getModelByName,
+  unknownDefinitionError,
+} from './meta/map-schema.js'
 import { ontology, ontologyMarkdown, type Ontology } from './meta/ontology.js'
 import type { SchemaDefinition } from './meta/schema-definition.interface.js'
 import { EventType, type NeodeEventHandler } from './common/events.js'
@@ -40,15 +45,20 @@ import WithinDistanceService from './services/query/within-distance.service.js'
 import SchemaService, { type SchemaResult } from './services/schema/schema.service.js'
 import type Repository from './repository/index.js'
 import TransactionalService from './transaction/transactional.service.js'
+import { rollbackAfterFailure } from './transaction/rollback.js'
 import TransactionError, { type BatchStatementError } from './transaction/errors.js'
 import FindByIdService from './services/query/find-by-id.service.js'
 import { INTERNAL_ID } from './constants.js'
 import { elementIdOfEntity } from './utils.js'
-import Builder from './query/index.js'
+import Builder, { quote } from './query/index.js'
 import { search, type ScoredEntity } from './services/query/search.service.js'
 import FactoryBuilder from './services/factory.service.js'
 import { knn, type KnnMode } from './services/query/knn.service.js'
-import { inspectSchema, type InspectOptions, type SchemaInspection } from './services/schema/inspect.service.js'
+import {
+  inspectSchema,
+  type InspectOptions,
+  type SchemaInspection,
+} from './services/schema/inspect.service.js'
 import {
   type ApplySchemaDiffOptions,
   applySchemaDrift,
@@ -56,7 +66,9 @@ import {
   type SchemaDrift,
   schemaDrift,
 } from './services/schema/drift.service.js'
-import FulltextIndexService, { type FulltextIndexDefinition } from './services/schema/fulltext.service.js'
+import FulltextIndexService, {
+  type FulltextIndexDefinition,
+} from './services/schema/fulltext.service.js'
 import VectorIndexService, { type VectorIndexDefinition } from './services/schema/vector.service.js'
 import BulkService, { type BulkChunk, type BulkOptions } from './services/query/bulk.service.js'
 import PaginateService, {
@@ -80,11 +92,7 @@ export default class Neode implements INeode {
 
   private enterprise = false
 
-  constructor(
-    connection: ConnectionProvider,
-    enterprise = false,
-    options: ConnectionOptions = {},
-  ) {
+  constructor(connection: ConnectionProvider, enterprise = false, options: ConnectionOptions = {}) {
     this.enterprise = enterprise
 
     // Every statement — raw and service queries, inside and outside
@@ -230,11 +238,19 @@ export default class Neode implements INeode {
   /**
   Run a single statement in an implicit transaction
   */
-  async readCypher(query: string, parameters: QueryParameters = {}, database?: string): Promise<QueryOutput> {
+  async readCypher(
+    query: string,
+    parameters: QueryParameters = {},
+    database?: string,
+  ): Promise<QueryOutput> {
     return this.connection.run(query, parameters, 'READ', database ?? this.database)
   }
 
-  async writeCypher(query: string, parameters: QueryParameters = {}, database?: string): Promise<QueryOutput> {
+  async writeCypher(
+    query: string,
+    parameters: QueryParameters = {},
+    database?: string,
+  ): Promise<QueryOutput> {
     return this.connection.run(query, parameters, 'WRITE', database ?? this.database)
   }
 
@@ -280,7 +296,7 @@ export default class Neode implements INeode {
       summary: output.summary,
     }
 
-    return options.hydrate ? hydrate(options.hydrate, rows, options.alias) : rows;
+    return options.hydrate ? hydrate(options.hydrate, rows, options.alias) : rows
   }
 
   /**
@@ -370,8 +386,7 @@ export default class Neode implements INeode {
     try {
       return await work(tx)
     } catch (error) {
-      await tx.rollback().catch(() => {})
-      throw error
+      return await rollbackAfterFailure(tx.getTransaction(), error)
     }
   }
 
@@ -387,8 +402,7 @@ export default class Neode implements INeode {
     try {
       return await work(tx)
     } catch (error) {
-      await tx.rollback().catch(() => {})
-      throw error
+      return await rollbackAfterFailure(tx.getTransaction(), error)
     }
   }
 
@@ -425,9 +439,7 @@ export default class Neode implements INeode {
     }
 
     if (details.length > 0) {
-      await tx.rollback().catch(() => {})
-
-      throw new TransactionError(errors, results, details)
+      return await rollbackAfterFailure(tx, new TransactionError(errors, results, details))
     }
 
     await tx.commit()
@@ -472,13 +484,17 @@ export default class Neode implements INeode {
 
     const tx = await this.readTransaction(database)
 
-    const output = hasProjectedProperties(schema)
-      ? await new ProjectionService(tx).find<T>(constructor, schema, value)
-      : await new FindService(tx).find(constructor, schema, value)
+    try {
+      const output = hasProjectedProperties(schema)
+        ? await new ProjectionService(tx).find<T>(constructor, schema, value)
+        : await new FindService(tx).find(constructor, schema, value)
 
-    await tx.commit()
+      await tx.commit()
 
-    return output as T | undefined
+      return output as T | undefined
+    } catch (error) {
+      return await rollbackAfterFailure(tx, error)
+    }
   }
 
   async findById<T>(
@@ -490,13 +506,17 @@ export default class Neode implements INeode {
 
     const tx = await this.readTransaction(database)
 
-    const output = hasProjectedProperties(schema)
-      ? await new ProjectionService(tx).findById<T>(constructor, schema, elementId)
-      : await new FindByIdService(tx).find(constructor, schema, elementId)
+    try {
+      const output = hasProjectedProperties(schema)
+        ? await new ProjectionService(tx).findById<T>(constructor, schema, elementId)
+        : await new FindByIdService(tx).find(constructor, schema, elementId)
 
-    await tx.commit()
+      await tx.commit()
 
-    return output as T | undefined
+      return output as T | undefined
+    } catch (error) {
+      return await rollbackAfterFailure(tx, error)
+    }
   }
 
   async get<T>(
@@ -510,13 +530,17 @@ export default class Neode implements INeode {
 
     const tx = await this.readTransaction(database)
 
-    const results = hasProjectedProperties(schema)
-      ? await new ProjectionService(tx).get<T>(constructor, schema, parameters, limit, skip)
-      : await new GetService(tx).get<T>(constructor, schema, parameters, limit, skip)
+    try {
+      const results = hasProjectedProperties(schema)
+        ? await new ProjectionService(tx).get<T>(constructor, schema, parameters, limit, skip)
+        : await new GetService(tx).get<T>(constructor, schema, parameters, limit, skip)
 
-    await tx.commit()
+      await tx.commit()
 
-    return results
+      return results
+    } catch (error) {
+      return await rollbackAfterFailure(tx, error)
+    }
   }
 
   async getFirst<T>(
@@ -551,7 +575,7 @@ export default class Neode implements INeode {
     const res = await this.inWriteTransaction(async (tx) => {
       const mergeService = new MergeService(tx.getRunner())
 
-      const { elementId } = await mergeService.save(entity as object, schema)
+      const { elementId, created } = await mergeService.save(entity as object, schema)
 
       const findService = new FindByIdService(tx.getRunner())
 
@@ -565,13 +589,17 @@ export default class Neode implements INeode {
 
       await tx.commit()
 
-      return hydrated as T
+      return { hydrated: hydrated as T, created }
     }, database)
 
-    // Emit event
-    this.eventEmitter.emit(EventType.NODE_CREATED, res)
+    // Emit the lifecycle event the save actually was: a merge either created
+    // the node or matched and updated an existing one
+    this.eventEmitter.emit(
+      res.created ? EventType.NODE_CREATED : EventType.NODE_UPDATED,
+      res.hydrated,
+    )
 
-    return res
+    return res.hydrated
   }
 
   /**
@@ -611,9 +639,7 @@ export default class Neode implements INeode {
 
       return hydrated as T
     } catch (error) {
-      await tx.rollback()
-
-      throw error
+      return await rollbackAfterFailure(tx, error)
     }
   }
 
@@ -656,9 +682,7 @@ export default class Neode implements INeode {
 
       return hydrated as T | undefined
     } catch (error) {
-      await tx.rollback()
-
-      throw error
+      return await rollbackAfterFailure(tx, error)
     }
   }
 
@@ -682,9 +706,11 @@ export default class Neode implements INeode {
     // instance, ID property or Object containing match parameters
     // is passed")
     const hasRelationshipValues = schema.getRelationships().some((rel) => {
-      const value = (properties)[rel.getKey()]
+      const value = properties[rel.getKey()]
 
-      if (value === undefined || value === null) {return false}
+      if (value === undefined || value === null) {
+        return false
+      }
 
       return Array.isArray(value) ? value.length > 0 : typeof value === 'object'
     })
@@ -740,9 +766,7 @@ export default class Neode implements INeode {
 
       return hydrated as T | undefined
     } catch (error) {
-      await tx.rollback()
-
-      throw error
+      return await rollbackAfterFailure(tx, error)
     }
   }
 
@@ -786,9 +810,7 @@ export default class Neode implements INeode {
 
       return result
     } catch (error) {
-      await tx.rollback()
-
-      throw error
+      return await rollbackAfterFailure(tx, error)
     }
   }
 
@@ -815,9 +837,7 @@ export default class Neode implements INeode {
 
       return result
     } catch (error) {
-      await tx.rollback()
-
-      throw error
+      return await rollbackAfterFailure(tx, error)
     }
   }
 
@@ -1045,9 +1065,7 @@ export default class Neode implements INeode {
 
       return results
     } catch (error) {
-      await tx.rollback()
-
-      throw error
+      return await rollbackAfterFailure(tx, error)
     }
   }
 
@@ -1088,9 +1106,7 @@ export default class Neode implements INeode {
 
       return results
     } catch (error) {
-      await tx.rollback()
-
-      throw error
+      return await rollbackAfterFailure(tx, error)
     }
   }
 
@@ -1128,7 +1144,9 @@ export default class Neode implements INeode {
   Define multiple models at once: { Name: schemaDefinition }
   */
   with(models: Record<string, SchemaDefinition>): this {
-    for (const [name, schema] of Object.entries(models)) {this.model(name, schema)}
+    for (const [name, schema] of Object.entries(models)) {
+      this.model(name, schema)
+    }
 
     return this
   }
@@ -1140,15 +1158,16 @@ export default class Neode implements INeode {
   withDirectory(directory: string): this {
     const requireModule = createRequire(__filename)
 
-    for (const file of readdirSync(directory)
-      .filter((file) => ['.js', '.ts'].includes(extname(file).toLowerCase()))) {
-        const name = basename(file, extname(file))
-        const loaded = requireModule(resolve(directory, file)) as {
-          default?: SchemaDefinition
-        }
-
-        this.model(name, loaded.default ?? (loaded as SchemaDefinition))
+    for (const file of readdirSync(directory).filter((file) =>
+      ['.js', '.ts'].includes(extname(file).toLowerCase()),
+    )) {
+      const name = basename(file, extname(file))
+      const loaded = requireModule(resolve(directory, file)) as {
+        default?: SchemaDefinition
       }
+
+      this.model(name, loaded.default ?? (loaded as SchemaDefinition))
+    }
 
     return this
   }
@@ -1169,20 +1188,24 @@ export default class Neode implements INeode {
   async delete<T>(entity: T, options?: DeleteOptions | string, database?: string): Promise<void> {
     const schema = this.getSchema((entity as unknown as Record<string, unknown>).constructor)
 
+    // A soft delete only SETs a label — the node stays, so it is not a
+    // deletion and must not fire NODE_DELETED
+    const deleteOptions = typeof options === 'string' ? undefined : options
+
     const tx = await this.writeTransaction(typeof options === 'string' ? options : database)
 
-    const service = new DeleteService(tx)
+    try {
+      await new DeleteService(tx).delete(schema, entity as object, deleteOptions)
 
-    await service.delete(
-      schema,
-      entity as object,
-      typeof options === 'string' ? undefined : options,
-    )
+      await tx.commit()
+    } catch (error) {
+      return await rollbackAfterFailure(tx, error)
+    }
 
-    await tx.commit()
-
-    // Emit event
-    this.eventEmitter.emit(EventType.NODE_DELETED, entity)
+    if (!deleteOptions?.soft) {
+      // Emit event
+      this.eventEmitter.emit(EventType.NODE_DELETED, entity)
+    }
   }
 
   /**
@@ -1199,7 +1222,15 @@ export default class Neode implements INeode {
 
     const builder = new Builder().match('n', schema.getLabels())
 
-    for (const [key, value] of Object.entries(parameters_)) {builder.where(`n.${key}`, value)}
+    // Schema-declared keys only (get() parity): anything else would be raw
+    // interpolation into the statement, so unknown keys are ignored
+    for (const property of schema.getProperties()) {
+      const key = property.getKey()
+
+      if (Object.hasOwn(parameters_, key)) {
+        builder.where(`n.${quote(key)}`, parameters_[key])
+      }
+    }
 
     const { query, params: parameters } = builder
       .detachDelete('n')

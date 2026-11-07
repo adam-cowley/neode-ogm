@@ -56,7 +56,9 @@ relationship logic all apply.
 Precedence on create: explicit value > `default` > `fake`. Unique
 properties with a `fake` generator are retried until the values are
 distinct within one batch (app-level check) — across runs the user's
-fake fn must be DB-safe (e.g. random UUIDs).
+fake fn must be DB-safe (e.g. random UUIDs). An override on a unique
+property applies to the first row; later rows fake distinct values
+around it.
 */
 export default class FactoryBuilder<T extends object = any> {
   private readonly neode: Neode
@@ -135,13 +137,18 @@ export default class FactoryBuilder<T extends object = any> {
         .map((property) => [property.getKey(), new Set([overrides[property.getKey()]])]),
     )
 
+    // Unique+fake overrides apply to the FIRST row; later rows fake
+    // distinct values around the used set. The copy keeps the caller's
+    // object untouched while createOne consumes overrides row by row.
+    const rowOverrides: Record<string, unknown> = { ...overrides }
+
     const instances: T[] = []
 
     for (let index = 0; index < total; index++) {
-      instances.push(await this.createOne(overrides, uniques, used))
+      instances.push(await this.createOne(rowOverrides, uniques, used))
     }
 
-    for (const [index, instance] of instances.entries()) {
+    for (const instance of instances) {
       for (const { relationshipName, spec } of this.withs) {
         await this.seedRelationships(instance, relationshipName, spec)
       }
@@ -161,7 +168,11 @@ export default class FactoryBuilder<T extends object = any> {
       const key = property.getKey()
       const fake = property.getFake()!
 
+      // An override on a unique property applies to this row only —
+      // consume it so later rows fake distinct values around the used set
       if (properties[key] !== undefined) {
+        delete overrides[key]
+
         continue
       }
 
@@ -212,12 +223,16 @@ export default class FactoryBuilder<T extends object = any> {
         typeof spec.properties === 'function' ? spec.properties(n) : spec.properties
 
       const related = await this.neode.create(
-        target as new (...arguments_: never[]) => any,
+        target as new (
+          ...arguments_: never[]
+        ) => any,
         properties,
       )
 
       await this.neode.relate(
-        this.newable as new (...arguments_: never[]) => T,
+        this.newable as new (
+          ...arguments_: never[]
+        ) => T,
         instance,
         related,
         relationshipName,

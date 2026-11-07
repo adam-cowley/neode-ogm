@@ -18,6 +18,13 @@ export default class EntitySchema {
   protected entityType: EntityType = EntityType.NodeEntity
 
   /**
+  Undeclared default primary keys (<first label lowercased>_id), cached per
+  key so getPrimaryKey() is reference-stable without registering the
+  property on the schema
+  */
+  private phantomPrimaryKeys = new Map<string, PropertySchema>()
+
+  /**
   Free-text explanation emitted by the agent ontology (NTS-445)
   */
   private description: string | undefined
@@ -90,7 +97,7 @@ export default class EntitySchema {
       return explicit
     }
 
-    // Default Primary Key to <first label lowercased>_id (see neode Model.js)
+    // Default primary key to <first label lowercased>_id (see neode Model.js)
     const [firstLabel] = this.getLabels()
 
     if (!firstLabel) {
@@ -99,15 +106,27 @@ export default class EntitySchema {
 
     const key = `${firstLabel.toLowerCase()}_id`
 
-    if (!this.hasProperty(key)) {
-      this.addProperty(key)
+    if (this.hasProperty(key)) {
+      const property = this.getProperty(key)
+
+      property.setPrimaryKey()
+
+      return property
     }
 
-    const property = this.getProperty(key)
+    // Undeclared default: a phantom property, deliberately NOT added to the
+    // schema — a getter must not mutate, and a registered-but-never-written
+    // property would install a dead unique constraint and hydrate as a
+    // field. Cached per key so repeated calls return the same instance.
+    let phantom = this.phantomPrimaryKeys.get(key)
 
-    property.setPrimaryKey()
+    if (!phantom) {
+      phantom = new PropertySchema(key)
+      phantom.setPrimaryKey()
+      this.phantomPrimaryKeys.set(key, phantom)
+    }
 
-    return property
+    return phantom
   }
 
   getProperty(key: string) {

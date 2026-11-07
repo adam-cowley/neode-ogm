@@ -46,6 +46,12 @@ function record(get: (key: string) => unknown, keys: string[]): QueryRecord {
 class FakeProvider implements ConnectionProvider {
   readonly statements: string[] = []
 
+  /**
+  What the next merge "did": 1 = created a node, 0 = matched an existing
+  one (drives the NODE_CREATED / NODE_UPDATED event split)
+  */
+  mergeCreates = 1
+
   async run(
     statement: string,
     _parameters?: QueryParams,
@@ -72,8 +78,11 @@ class FakeProvider implements ConnectionProvider {
     }
 
     if (statement.includes('MERGE')) {
-      // save(): elementId of the merged node
-      return { records: [record((key) => (key === '__id' ? ELEMENT_ID : undefined), ['__id'])] }
+      // save(): elementId of the merged node + honest write counters
+      return {
+        records: [record((key) => (key === '__id' ? ELEMENT_ID : undefined), ['__id'])],
+        summary: { counters: { nodesCreated: this.mergeCreates } },
+      }
     }
 
     // findById after save: the hydrated node
@@ -142,6 +151,26 @@ describe('Neode events', () => {
     expect(saved).toBeInstanceOf(Movie)
 
     neode.off(EventType.NODE_CREATED, handler)
+  })
+
+  it('save() of an existing node emits NODE_UPDATED, not NODE_CREATED', async () => {
+    const { provider, neode } = makeNeode()
+
+    provider.mergeCreates = 0 // the merge matched: the node already existed
+
+    const created = vi.fn()
+    const updated = vi.fn()
+    neode.on(EventType.NODE_CREATED, created)
+    neode.on(EventType.NODE_UPDATED, updated)
+
+    const saved = await neode.save(makeMovie())
+
+    expect(created).not.toHaveBeenCalled()
+    expect(updated).toHaveBeenCalledTimes(1)
+    expect(updated.mock.calls[0][0]).toBeInstanceOf(Movie)
+    expect(saved).toBeInstanceOf(Movie)
+
+    neode.off(EventType.NODE_UPDATED, updated)
   })
 
   it('off() stops the handler from firing', async () => {

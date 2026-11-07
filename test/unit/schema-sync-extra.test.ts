@@ -24,7 +24,7 @@ describe('fulltext index statements', () => {
   it('renders a CREATE FULLTEXT INDEX statement with an IF NOT EXISTS guard', () => {
     expect(createFulltextStatement(def)).toBe(
       'CREATE FULLTEXT INDEX movie_title_plot_fulltext IF NOT EXISTS ' +
-        'FOR (n:Movie) ON EACH [n.`title`, n.`plot`]',
+        'FOR (n:`Movie`) ON EACH [n.`title`, n.`plot`]',
     )
   })
 
@@ -50,7 +50,7 @@ describe('vector index statements', () => {
   it('defaults the similarity function to cosine', () => {
     expect(createVectorStatement(def)).toBe(
       'CREATE VECTOR INDEX movie_emb_vector IF NOT EXISTS ' +
-        "FOR (n:Movie) ON (n.`emb`) OPTIONS { indexConfig: { `vector.dimensions`: 1536, `vector.similarity_function`: 'cosine' } }",
+        "FOR (n:`Movie`) ON (n.`emb`) OPTIONS { indexConfig: { `vector.dimensions`: 1536, `vector.similarity_function`: 'cosine' } }",
     )
   })
 

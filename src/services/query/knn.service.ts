@@ -1,4 +1,5 @@
 import type { Runner } from '../../driver/types.js'
+import { quote } from '../../query/quote.js'
 import type { WithMethods } from '../../entity-methods.js'
 import { hydrate } from '../../hydrate.js'
 import { getModel } from '../../meta/index.js'
@@ -31,8 +32,8 @@ is inlined (backtick-escaped).
 */
 export function knnSearchClauseStatement(label: string, indexName: string): string {
   return (
-    `MATCH (n:${label}) ` +
-    `SEARCH n IN (VECTOR INDEX \`${indexName.replaceAll('`', '``')}\` FOR $vector LIMIT $k) ` +
+    `MATCH (n:${quote(label)}) ` +
+    `SEARCH n IN (VECTOR INDEX ${quote(indexName)} FOR $vector LIMIT $k) ` +
     `SCORE AS score ` +
     `RETURN n AS ${NODE_ALIAS}, score ORDER BY score DESC`
   )
@@ -103,7 +104,13 @@ export async function knn<T>(
     const output = await runner.run(statement, parameters)
 
     // hydrate() keeps only records carrying a node under the alias, in order
-    const entities = hydrate<T>(constructor as new (...arguments_: never[]) => T, output, NODE_ALIAS)
+    const entities = hydrate<T>(
+      constructor as new (
+        ...arguments_: never[]
+      ) => T,
+      output,
+      NODE_ALIAS,
+    )
 
     return output.records
       .filter((row) => row.has(NODE_ALIAS) && row.get(NODE_ALIAS) != null)
@@ -111,7 +118,9 @@ export async function knn<T>(
         entity: entities[index],
         score: row.get('score') as number,
       }))
-      .filter((item): item is { entity: WithMethods<T>; score: number } => item.entity !== undefined)
+      .filter(
+        (item): item is { entity: WithMethods<T>; score: number } => item.entity !== undefined,
+      )
   }
 
   if (mode === 'procedure') {

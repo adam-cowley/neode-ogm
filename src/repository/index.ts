@@ -1,4 +1,4 @@
-import Builder, { eagerNode } from '../query/index.js'
+import Builder, { eagerNode, quote } from '../query/index.js'
 import { THIS_NODE } from '../constants.js'
 import { getModel } from '../meta/index.js'
 import type { Newable } from '../meta/newable.js'
@@ -6,28 +6,14 @@ import type EntitySchema from '../meta/entity/entity-schema.js'
 import type PropertySchema from '../meta/property-schema.js'
 import type INeode from '../neode.interface.js'
 import type { GraphNode, QueryOutput } from '../driver/types.js'
-import { hydrateNode } from '../utils.js'
+import { hydrateNode } from '../hydrate.js'
+import { applyOrder, type OrderSpec } from '../query/order-spec.js'
 import { fulltextIndexName } from '../services/schema/fulltext.service.js'
 import type { ScoredEntity } from '../services/query/search.service.js'
 
 export interface SearchOptions {
   limit?: number
 }
-
-/**
-Ordering spec, matching neode's all() forms:
-
-- `'name'` - order by one property ascending
-- `['name', 'age']` - order by several properties
-- `{ name: 'DESC' }` - property -> direction map
-- `[{ name: 'DESC' }, { age: 'ASC' }]` - list of property -> direction maps
-- `{ field: 'name', order: 'DESC' }` - two-arg (key, direction) descriptor
-*/
-export type OrderSpec =
-  | string
-  | (string | Record<string, string>)[]
-  | Record<string, string>
-  | { field: string; order?: string }
 
 export interface FindOptions {
   order?: OrderSpec
@@ -39,14 +25,12 @@ export default class Repository<Entity> {
   protected schema: EntitySchema
 
   protected readonly neode: INeode
-  protected readonly entity: new (...arguments_: never[]) => Entity
+  protected readonly entity: new (
+    ...arguments_: never[]
+  ) => Entity
   protected readonly database: string | undefined
 
-  constructor(
-    neode: INeode,
-    entity: new (...arguments_: never[]) => Entity,
-    database?: string,
-  ) {
+  constructor(neode: INeode, entity: new (...arguments_: never[]) => Entity, database?: string) {
     this.neode = neode
     this.entity = entity
     this.database = database
@@ -75,13 +59,17 @@ export default class Repository<Entity> {
     const builder = this.matchAll(parameters)
 
     if (options.order) {
-      this.applyOrder(builder, options.order)
+      applyOrder(builder, options.order)
     }
 
     this.returnNodes(builder)
 
-    if (options.skip) {builder.skip(options.skip)}
-    if (options.limit) {builder.limit(options.limit)}
+    if (options.skip) {
+      builder.skip(options.skip)
+    }
+    if (options.limit) {
+      builder.limit(options.limit)
+    }
 
     const output = await this.read(builder)
 
@@ -202,7 +190,9 @@ export default class Repository<Entity> {
     property: keyof Entity & string,
     by = 1,
   ): Promise<number> {
-    const declared = this.schema.getProperties().find((schemaProperty) => schemaProperty.getKey() === property)
+    const declared = this.schema
+      .getProperties()
+      .find((schemaProperty) => schemaProperty.getKey() === property)
 
     if (declared === undefined) {
       throw new Error(
@@ -216,7 +206,7 @@ export default class Repository<Entity> {
 
     // The step is a validated finite number, so inlining it into the raw
     // set is injection-safe; the Builder's raw set has no parameter channel
-    const key = declared.getKey().replaceAll('`', '``')
+    const key = quote(declared.getKey())
     const primaryKey = this.getPrimaryKey().getKey()
     const id =
       target !== null && typeof target === 'object'
@@ -224,8 +214,8 @@ export default class Repository<Entity> {
         : target
 
     const builder = new Builder().match(THIS_NODE, this.schema.getLabels(), { [primaryKey]: id })
-    builder.set(`${THIS_NODE}.\`${key}\` = coalesce(${THIS_NODE}.\`${key}\`, 0) + (${by})`)
-    builder.return(`${THIS_NODE}.\`${key}\` AS value`)
+    builder.set(`${THIS_NODE}.${key} = coalesce(${THIS_NODE}.${key}, 0) + (${by})`)
+    builder.return(`${THIS_NODE}.${key} AS value`)
 
     const { query, params } = builder.build()
     const output = await this.neode.writeCypher(query, params, this.database)
@@ -304,19 +294,6 @@ export default class Repository<Entity> {
     }
   }
 
-  private applyOrder(builder: Builder, order: OrderSpec): void {
-    if (typeof order === 'string') {
-      builder.orderBy(`${THIS_NODE}.${order}`)
-    } else if (Array.isArray(order)) {
-      for (const entry of order) {this.applyOrder(builder, entry)}
-    } else if ('field' in order && typeof order.field === 'string') {
-      builder.orderBy({ field: `${THIS_NODE}.${order.field}`, order: order.order })
-    } else {
-      for (const [key, direction] of Object.entries(order)) {builder.orderBy(`${THIS_NODE}.${key}`, direction)}
-      
-    }
-  }
-
   private async read(builder: Builder): Promise<QueryOutput> {
     const { query, params } = builder.build()
 
@@ -329,6 +306,8 @@ export default class Repository<Entity> {
   private static toCount(value: unknown): number {
     return typeof value === 'object' &&
       value !== null &&
-      typeof (value as { toNumber?: unknown }).toNumber === 'function' ? (value as { toNumber(): number }).toNumber() : Number(value);
+      typeof (value as { toNumber?: unknown }).toNumber === 'function'
+      ? (value as { toNumber(): number }).toNumber()
+      : Number(value)
   }
 }

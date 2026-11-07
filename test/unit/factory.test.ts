@@ -26,7 +26,7 @@ class SeedPerson {
   @Uuid({ primary: true })
   id: string
 
-  @String({ unique: true, fake: () => emailValue })
+  @String({ unique: true, fake: () => emailPool.shift() ?? emailValue })
   email: string
 
   @String({ default: 'Springfield', fake: () => 'Shelbyville' })
@@ -58,13 +58,21 @@ let elementIds = 0
 function elementIdRecord(): QueryRecord {
   const id = `4:unit:${++elementIds}`
 
-  return { get: (key: string) => (key === '__id' ? id : undefined), has: () => true, keys: ['__id'] }
+  return {
+    get: (key: string) => (key === '__id' ? id : undefined),
+    has: () => true,
+    keys: ['__id'],
+  }
 }
 
 function nodeRecord(properties: Record<string, unknown>): QueryRecord {
   const node = { elementId: `4:unit:node-${properties['id']}`, labels: ['SeedPerson'], properties }
 
-  return { get: (key: string) => (key === 'this' ? node : undefined), has: () => true, keys: ['this'] }
+  return {
+    get: (key: string) => (key === 'this' ? node : undefined),
+    has: () => true,
+    keys: ['this'],
+  }
 }
 
 interface CapturedCall {
@@ -116,7 +124,10 @@ function creates(provider: FactoryProvider): CapturedCall[] {
 
 /** The relate statements (MERGE of the relationship) captured by the provider. */
 function relates(provider: FactoryProvider, type: string): CapturedCall[] {
-  return provider.txCalls.filter((call) => call.statement.includes('MERGE') && call.statement.includes(`:${type}`))
+  // The builder renders relationship types backtick-quoted: -[:`WROTE`]->
+  return provider.txCalls.filter(
+    (call) => call.statement.includes('MERGE') && call.statement.includes(`:\`${type}\``),
+  )
 }
 
 // -----------------------------------------------------------------------------
@@ -138,20 +149,23 @@ describe('Neode#factory (NTS-444)', () => {
     it('applies the fake generator when no explicit value or default is given', async () => {
       await neode.factory(SeedPerson).create()
 
-      expect(creates(provider)[0]?.params).toMatchObject({ nickname: 'nick' })
+      expect(creates(provider)[0]?.params).toMatchObject({ this_nickname: 'nick' })
     })
 
     it('prefers the schema default over fake', async () => {
       await neode.factory(SeedPerson).create()
 
-      expect(creates(provider)[0]?.params).toMatchObject({ city: 'Springfield' })
-      expect(creates(provider)[0]?.params).not.toHaveProperty('city', 'Shelbyville')
+      expect(creates(provider)[0]?.params).toMatchObject({ this_city: 'Springfield' })
+      expect(creates(provider)[0]?.params).not.toHaveProperty('this_city', 'Shelbyville')
     })
 
     it('gives explicit overrides precedence over fake and defaults', async () => {
       await neode.factory(SeedPerson).create({ city: 'Capital', nickname: 'override' })
 
-      expect(creates(provider)[0]?.params).toMatchObject({ city: 'Capital', nickname: 'override' })
+      expect(creates(provider)[0]?.params).toMatchObject({
+        this_city: 'Capital',
+        this_nickname: 'override',
+      })
     })
 
     it('applies fake values from the map-based definition path', async () => {
@@ -161,7 +175,7 @@ describe('Neode#factory (NTS-444)', () => {
 
       await neode.factory('FactoryMapUser').create()
 
-      expect(creates(provider)[0]?.params).toMatchObject({ email: 'map@example.com' })
+      expect(creates(provider)[0]?.params).toMatchObject({ this_email: 'map@example.com' })
     })
   })
 
@@ -174,6 +188,8 @@ describe('Neode#factory (NTS-444)', () => {
     })
 
     it('inserts n instances with count(n) and resolves to an array', async () => {
+      emailPool = ['one@example.com', 'two@example.com', 'three@example.com']
+
       const created = await neode.factory(SeedPerson).count(3).create()
 
       expect(Array.isArray(created)).toBe(true)
@@ -193,7 +209,7 @@ describe('Neode#factory (NTS-444)', () => {
 
       await neode.factory(SeedPerson).count(2).create()
 
-      const emails = creates(provider).map((call) => call.params?.['email'])
+      const emails = creates(provider).map((call) => call.params?.['this_email'])
 
       expect(emails).toEqual(['dup@example.com', 'other@example.com'])
     })
@@ -201,9 +217,7 @@ describe('Neode#factory (NTS-444)', () => {
     it('throws when the fake never produces a distinct value', async () => {
       emailValue = 'same@example.com'
 
-      await expect(neode.factory(SeedPerson).count(2).create()).rejects.toThrow(
-        /distinct value/,
-      )
+      await expect(neode.factory(SeedPerson).count(2).create()).rejects.toThrow(/distinct value/)
     })
 
     it('seeds the used set with overridden unique values', async () => {
@@ -211,7 +225,7 @@ describe('Neode#factory (NTS-444)', () => {
 
       await neode.factory(SeedPerson).count(2).create({ email: 'fixed@example.com' })
 
-      const emails = creates(provider).map((call) => call.params?.['email'])
+      const emails = creates(provider).map((call) => call.params?.['this_email'])
 
       expect(emails).toEqual(['fixed@example.com', 'free@example.com'])
     })
@@ -235,15 +249,19 @@ describe('Neode#factory (NTS-444)', () => {
 
       const titles = creates(provider)
         .filter((call) => call.statement.includes(':SeedPost'))
-        .map((call) => call.params?.['title'])
+        .map((call) => call.params?.['this_title'])
 
       expect(titles).toEqual(['Post 0', 'Post 1'])
     })
 
     it('seeds relationships for every created instance', async () => {
+      emailPool = ['seed-a@example.com', 'seed-b@example.com']
+
       await neode.factory(SeedPerson).count(2).with('posts', { count: 3 }).create()
 
-      expect(creates(provider).filter((call) => call.statement.includes(':SeedPost'))).toHaveLength(6)
+      expect(creates(provider).filter((call) => call.statement.includes(':SeedPost'))).toHaveLength(
+        6,
+      )
       expect(relates(provider, 'WROTE')).toHaveLength(6)
     })
 

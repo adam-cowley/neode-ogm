@@ -112,14 +112,17 @@ describe('EntitySchema', () => {
       expect(primaryKey?.getKey()).toEqual('employee_id')
     })
 
-    it('should register the fallback primary key as a property', () => {
+    it('should NOT register the fallback primary key as a schema property', () => {
       const schema = new EntitySchema()
       schema.setLabels(['Person'])
 
       const primaryKey = schema.getPrimaryKey()
 
-      expect(schema.hasProperty('person_id')).toEqual(true)
-      expect(schema.getProperty('person_id')).toBe(primaryKey)
+      // The undeclared default is a phantom: it matches by name but is
+      // never written, so it must not join getProperties() (a dead unique
+      // constraint and a phantom hydrated field would otherwise follow)
+      expect(schema.hasProperty('person_id')).toEqual(false)
+      expect(primaryKey?.getKey()).toEqual('person_id')
     })
 
     it('should mark the fallback primary key as unique', () => {

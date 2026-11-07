@@ -14,6 +14,8 @@ export { default as LabelPredicate } from './LabelPredicate.js'
 export { default as WithStatement } from './WithStatement.js'
 export { default as WithDistinctStatement } from './WithDistinctStatement.js'
 export { Direction, toDirection } from './Direction.js'
+export { quote } from './quote.js'
+export { applyOrder, type OrderSpec } from './order-spec.js'
 export {
   EAGER_ID,
   EAGER_LABELS,
@@ -24,4 +26,4 @@ export {
   eagerRelationship,
 } from './eager-utils.js'
 
-export {default, default as Builder} from './Builder.js'
+export { default, default as Builder } from './Builder.js'

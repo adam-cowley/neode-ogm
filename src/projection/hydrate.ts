@@ -3,7 +3,7 @@ import { getModel } from '../meta/index.js'
 import type EntitySchema from '../meta/entity/entity-schema.js'
 import type { Newable } from '../meta/newable.js'
 import { PropertyType } from '../meta/property-schema.js'
-import { hydrateNode } from '../utils.js'
+import { hydrateNode } from '../hydrate.js'
 
 /**
 Hydrate one row of a projection read (NTS-135/136/137/138).
@@ -35,17 +35,23 @@ export function hydrateProjection<T>(
       case PropertyType.RELATED_ONE:
       case PropertyType.RELATED_MANY: {
         // Field subsets are already plain DTOs — nothing to hydrate
-        if (property.getFields()?.length) {break}
+        if (property.getFields()?.length) {
+          break
+        }
 
         const raw = entity[property.getKey()]
 
-        if (raw === undefined || raw === null) {break}
+        if (raw === undefined || raw === null) {
+          break
+        }
 
         const targetEntity = property.getEntity()
         const targetSchema = targetEntity ? getModel(targetEntity) : undefined
 
         // Unregistered target: leave the raw projection in place
-        if (!targetSchema) {break}
+        if (!targetSchema) {
+          break
+        }
 
         entity[property.getKey()] = Array.isArray(raw)
           ? raw.map((item) =>

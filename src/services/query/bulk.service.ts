@@ -1,4 +1,5 @@
 import type { ConnectionProvider, QueryOutput, Runner } from '../../driver/types.js'
+import { rollbackAfterFailure } from '../../transaction/rollback.js'
 import { THIS_NODE } from '../../constants.js'
 import { hydrate } from '../../hydrate.js'
 import type EntitySchema from '../../meta/entity/entity-schema.js'
@@ -101,7 +102,9 @@ export function processCreateRow(
   const values: Record<string, unknown> = {}
 
   for (const property of schema.getProperties()) {
-    if (NON_WRITABLE_TYPES.has(property.getType()) || isProjectedProperty(property)) {continue}
+    if (NON_WRITABLE_TYPES.has(property.getType()) || isProjectedProperty(property)) {
+      continue
+    }
 
     const value = getValueOrDefault(row, property, schema)
 
@@ -151,11 +154,15 @@ export function processMergeRow(
   const set: Record<string, unknown> = {}
 
   for (const property of schema.getProperties()) {
-    if (NON_WRITABLE_TYPES.has(property.getType()) || isProjectedProperty(property)) {continue}
+    if (NON_WRITABLE_TYPES.has(property.getType()) || isProjectedProperty(property)) {
+      continue
+    }
 
     // Match keys ride in the match map; they must never be
     // default-resolved into the set map
-    if (mergeKeys.has(property.getKey())) {continue}
+    if (mergeKeys.has(property.getKey())) {
+      continue
+    }
 
     const value = getValueOrDefault(row, property, schema)
 
@@ -230,9 +237,7 @@ async function inWriteTransaction(
 
     return output
   } catch (error) {
-    await tx.rollback().catch(() => {})
-
-    throw error
+    return await rollbackAfterFailure(tx, error)
   }
 }
 

@@ -1,7 +1,8 @@
 import type { ConnectionProvider } from '../../driver/types.js'
+import { quote } from '../../query/quote.js'
 import { getModels } from '../../meta/index.js'
 import type EntitySchema from '../../meta/entity/entity-schema.js'
-import type PropertySchema from '../../meta/property-schema.js';
+import type PropertySchema from '../../meta/property-schema.js'
 import { PropertyType } from '../../meta/property-schema.js'
 import FulltextIndexService from './fulltext.service.js'
 
@@ -52,11 +53,6 @@ export const compositeSchemaObjectName = (
   type: string,
 ): string =>
   schemaObjectName(label, properties.map((property) => property.toLowerCase()).join('_'), type)
-
-/**
-Backtick-escape a Cypher identifier
-*/
-const quote = (identifier: string): string => `\`${identifier.replaceAll('`', '``')}\``
 
 /**
 Cypher property-type name for a declared property type, or undefined when
@@ -137,7 +133,7 @@ export function schemaStatement(
           : `REQUIRE ${quoted[0]} IS UNIQUE`
         : `REQUIRE ${quoted[0]} IS NOT NULL`
 
-  return `CREATE ${kind} ${name} IF NOT EXISTS FOR (n:${label}) ${target}`
+  return `CREATE ${kind} ${name} IF NOT EXISTS FOR (n:${quote(label)}) ${target}`
 }
 
 /**
@@ -150,7 +146,9 @@ export function propertyTypeStatement(
   cypherType: string,
   name: string = schemaObjectName(label, property, ConstraintType.PROPERTY_TYPE),
 ): string {
-  return action === ConstraintAction.DROP ? `DROP CONSTRAINT ${name} IF EXISTS` : `CREATE CONSTRAINT ${name} IF NOT EXISTS FOR (n:${label}) REQUIRE n.${quote(property)} IS :: ${cypherType}`;
+  return action === ConstraintAction.DROP
+    ? `DROP CONSTRAINT ${name} IF EXISTS`
+    : `CREATE CONSTRAINT ${name} IF NOT EXISTS FOR (n:${quote(label)}) REQUIRE n.${quote(property)} IS :: ${cypherType}`
 }
 
 export default class SchemaService {
@@ -185,7 +183,9 @@ export default class SchemaService {
     model: EntitySchema,
   ): Promise<SchemaResult[]> {
     const output = await Promise.all(
-      model.getLabels().map(async (label) => this.runSchemaStatementsForLabel(action, model, label)),
+      model
+        .getLabels()
+        .map(async (label) => this.runSchemaStatementsForLabel(action, model, label)),
     )
 
     return output.flat()
@@ -242,7 +242,13 @@ export default class SchemaService {
       )
     }
 
-    return uniques.concat(...indexes, ...compositeUniques, ...compositeIndexes, ...propertyTypes, ...fulltext)
+    return uniques.concat(
+      ...indexes,
+      ...compositeUniques,
+      ...compositeIndexes,
+      ...propertyTypes,
+      ...fulltext,
+    )
   }
 
   private runFulltextStatementsForLabel(
@@ -400,7 +406,7 @@ export default class SchemaService {
       type,
       label,
       property,
-      ...((properties.length > 1) && { properties }),
+      ...(properties.length > 1 && { properties }),
       statement,
       success: false,
     }

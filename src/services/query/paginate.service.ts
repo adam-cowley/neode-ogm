@@ -5,7 +5,7 @@ import type { GraphNode, QueryParams as QueryParameters } from '../../driver/typ
 import { hydrate } from '../../hydrate.js'
 import { valueToJson } from '../../serialise.js'
 import type EntitySchema from '../../meta/entity/entity-schema.js'
-import type PropertySchema from '../../meta/property-schema.js';
+import type PropertySchema from '../../meta/property-schema.js'
 import { PropertyType } from '../../meta/property-schema.js'
 import QueryService from './query.service.js'
 import { type OrderSpec, applyOrder } from './get.service.js'
@@ -84,7 +84,12 @@ export interface CursorPage<T> {
 
   /**
   Cursor of the NEXT page in the walk direction (pass it back as
-  `after` or `before`); undefined when the walk is exhausted
+  `after` or `before`); undefined when the walk is exhausted.
+
+  Opaque: a composite of the boundary property value and the boundary
+  node's elementId, so rows sharing a property value (bulk writes land
+  in the same millisecond) are never skipped between pages. Plain
+  scalar values stay accepted as cursors.
   */
   nextCursor: string | number | undefined
 
@@ -199,13 +204,7 @@ export default class PaginateService extends QueryService {
         throw new Error('paginate accepts either page or after/before, not both')
       }
 
-      return this.offsetPage<T>(
-        constructor,
-        schema,
-        filter,
-        options,
-        limit,
-      )
+      return this.offsetPage<T>(constructor, schema, filter, options, limit)
     }
 
     return this.cursorPage<T>(constructor, schema, filter, options, limit)
@@ -305,18 +304,33 @@ export default class PaginateService extends QueryService {
     }
 
     if (cursor !== undefined) {
-      parameters['cursor'] = toCursorValue(cursor, property)
+      // Composite cursors tie-break on elementId, so keyset pages never
+      // skip rows sharing the boundary value; scalar cursors (and raw
+      // property values) compare on the property alone
+      const { value, id } = parseCursor(cursor)
 
       const comparison = isForward ? '>' : '<'
-      const value = cast ? `${cast}($cursor)` : '$cursor'
+      const casted = cast ? `${cast}($cursor)` : '$cursor'
 
-      conds.push(`${THIS_NODE}.${key} ${comparison} ${value}`)
+      parameters['cursor'] = value
+
+      conds.push(
+        id === undefined
+          ? `${THIS_NODE}.${key} ${comparison} ${casted}`
+          : `(${THIS_NODE}.${key} ${comparison} ${casted} OR (${THIS_NODE}.${key} = ${casted} AND elementId(${THIS_NODE}) ${comparison} $cursorId))`,
+      )
+
+      if (id !== undefined) {
+        parameters['cursorId'] = id
+      }
     }
 
+    // A total order (property, elementId) — equal property values keep a
+    // stable walk order
     const query = [
       `MATCH (${THIS_NODE}${labelPattern(schema.getLabels())})`,
       conds.length > 0 ? `WHERE ${conds.join(' AND ')}` : '',
-      `ORDER BY ${THIS_NODE}.${key} ${isForward ? 'ASC' : 'DESC'}`,
+      `ORDER BY ${THIS_NODE}.${key} ${isForward ? 'ASC' : 'DESC'}, elementId(${THIS_NODE}) ${isForward ? 'ASC' : 'DESC'}`,
       // One row over the page size answers hasMore
       `LIMIT ${limit + 1}`,
       `RETURN ${THIS_NODE}`,
@@ -344,12 +358,42 @@ export default class PaginateService extends QueryService {
     // The boundary item of the walk: forward, the newest row fetched;
     // backward, the oldest (the first row of the ascending items)
     const boundary = ordered[isForward ? ordered.length - 1 : 0]
+    const boundaryNode = boundary?.get(THIS_NODE) as GraphNode | undefined
+    const boundaryValue = boundaryNode
+      ? toCursorValue(boundaryNode.properties[key], property)
+      : undefined
 
     const nextCursor =
-      hasMore && boundary
-        ? toCursorValue((boundary.get(THIS_NODE) as GraphNode).properties[key], property)
+      hasMore && boundaryNode && boundaryValue !== undefined
+        ? JSON.stringify([boundaryValue, boundaryNode.elementId])
         : undefined
 
     return { items, nextCursor, hasMore }
   }
+}
+
+/**
+Split a cursor into its compared value and tie-break elementId: a
+composite cursor is the JSON array `[value, elementId]`; anything else is
+the scalar value itself (raw property values stay accepted).
+*/
+function parseCursor(cursor: string | number): { value: string | number; id?: string } {
+  if (typeof cursor === 'string' && cursor.startsWith('[')) {
+    try {
+      const parsed: unknown = JSON.parse(cursor)
+
+      if (
+        Array.isArray(parsed) &&
+        parsed.length === 2 &&
+        (typeof parsed[0] === 'string' || typeof parsed[0] === 'number') &&
+        typeof parsed[1] === 'string'
+      ) {
+        return { value: parsed[0], id: parsed[1] }
+      }
+    } catch {
+      // Not a composite cursor — fall through and compare as a scalar
+    }
+  }
+
+  return { value: cursor }
 }

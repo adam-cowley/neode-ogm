@@ -1,7 +1,6 @@
-;
 
 export { EventType } from './common/events.js'
-export { fromEnv } from './utils.js'
+export { fromEnv } from './env.js'
 export {
   NeodeError,
   ConstraintViolationError,
@@ -132,7 +131,11 @@ export type { WipeTarget } from './testing/index.js'
 export { WhereNull, LabelPredicate } from './query/index.js'
 
 // Schema drift workflow (NTS-450)
-export { schemaDrift, formatSchemaDrift, applySchemaDrift } from './services/schema/drift.service.js'
+export {
+  schemaDrift,
+  formatSchemaDrift,
+  applySchemaDrift,
+} from './services/schema/drift.service.js'
 export type {
   SchemaDrift,
   SchemaDriftGroup,
@@ -155,4 +158,4 @@ export type { FactoryWithSpec } from './services/factory.service.js'
 
 export * from './decorators/index.js'
 
-export {default} from './neode.service.js'
+export { default } from './neode.service.js'

@@ -9,7 +9,7 @@ import {
 } from 'neo4j-driver'
 
 import PropertySchema, { PropertyType } from '../../../src/meta/property-schema'
-import { convertPropertyValue } from '../../../src/utils'
+import { convertPropertyValue } from '../../../src/values'
 
 function property(type: PropertyType, array: boolean = false): PropertySchema {
   const schema = new PropertySchema('value')

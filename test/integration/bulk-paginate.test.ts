@@ -362,6 +362,52 @@ describe('paginate', () => {
       expect(new Set(seen.map((person) => person.name)).size).toBe(6)
     })
 
+    it('walks pages with no loss when every cursor value ties', async () => {
+      // Six rows stamped with the SAME createdAt (bulk writes land in the
+      // same millisecond): the tie-break on elementId must keep every row
+      // in the walk
+      await new BulkService(backend.connection).createMany(
+        BulkPerson,
+        schema(),
+        Array.from({ length: 6 }, (_, i) => ({ name: `Tied ${i}`, visits: i })),
+      )
+
+      await backend.connection.run(
+        "MATCH (p:BulkPerson) WHERE p.name STARTS WITH 'Tied ' " +
+          'SET p.createdAt = datetime("2026-02-03T04:05:06Z")',
+      )
+
+      const seen: BulkPerson[] = []
+      let after: string | number | undefined
+      let hasMore = true
+      let turns = 0
+
+      while (hasMore) {
+        const page = await paginate.paginate(
+          BulkPerson,
+          schema(),
+          {},
+          { limit: 2, orderBy: 'createdAt', after },
+        )
+
+        // Pages must not overlap: every visit count appears exactly once
+        for (const person of page.items as BulkPerson[]) {
+          expect(seen.some((s) => s.visits === person.visits)).toBe(false)
+        }
+
+        seen.push(...(page.items as BulkPerson[]))
+        hasMore = page.hasMore
+        after = page.nextCursor
+        turns++
+
+        expect(turns).toBeLessThanOrEqual(4)
+      }
+
+      expect(turns).toBe(3)
+      expect(seen).toHaveLength(6)
+      expect(seen.map((person) => person.visits).sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 5])
+    })
+
     it('reports hasMore=false with no nextCursor on the last page', async () => {
       await seedTimeline(4)
 

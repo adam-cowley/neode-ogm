@@ -1,11 +1,12 @@
-import Builder from '../../query/index.js'
+import Builder, { quote } from '../../query/index.js'
 import type { GraphRelationship } from '../../driver/types.js'
 import { getModel } from '../../meta/index.js'
-import type EntitySchema from '../../meta/entity/entity-schema.js';
+import type EntitySchema from '../../meta/entity/entity-schema.js'
 import { EntityType } from '../../meta/entity/entity-schema.js'
 import { PropertyType } from '../../meta/property-schema.js'
 import type RelationshipPropertySchema from '../../meta/relationship-property-schema.js'
-import { convertPropertyValue, matchCriteriaForEntity } from '../../utils.js'
+import { matchCriteriaForEntity } from '../../utils.js'
+import { convertPropertyValue } from '../../values.js'
 import QueryService from './query.service.js'
 
 /**
@@ -105,7 +106,7 @@ export default class RelateService extends QueryService {
       }
 
       if (!isRelationshipEntity) {
-        builder.set(`${relAlias}.${key}`, value)
+        builder.set(`${relAlias}.${quote(key)}`, value)
 
         continue
       }
@@ -118,7 +119,10 @@ export default class RelateService extends QueryService {
         continue
       }
 
-      builder.set(`${relAlias}.${key}`, property ? convertPropertyValue(value, property) : value)
+      builder.set(
+        `${relAlias}.${quote(key)}`,
+        property ? convertPropertyValue(value, property) : value,
+      )
     }
   }
 }

@@ -1,5 +1,11 @@
 import type { ConnectionProvider } from '../../driver/types.js'
-import { ConstraintAction, ConstraintType, type SchemaResult, schemaObjectName } from './schema.service.js'
+import { quote } from '../../query/quote.js'
+import {
+  ConstraintAction,
+  ConstraintType,
+  type SchemaResult,
+  schemaObjectName,
+} from './schema.service.js'
 
 const SIMILARITY_FUNCTIONS = ['cosine', 'euclidean'] as const
 
@@ -47,7 +53,7 @@ export function createVectorStatement(definition: VectorIndexDefinition): string
 
   return (
     `CREATE VECTOR INDEX ${vectorIndexName(definition)} IF NOT EXISTS ` +
-    `FOR (n:${definition.label}) ON (n.\`${definition.property.replaceAll('`', '``')}\`) ` +
+    `FOR (n:${quote(definition.label)}) ON (n.${quote(definition.property)}) ` +
     `OPTIONS { indexConfig: { \`vector.dimensions\`: ${dimensions}, \`vector.similarity_function\`: '${similarity}' } }`
   )
 }

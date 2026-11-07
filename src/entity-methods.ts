@@ -18,6 +18,7 @@ import type { DetachResult } from './services/query/detach.service.js'
 import type { GraphRelationship } from './driver/types.js'
 import { getModel } from './meta/index.js'
 import { elementIdOfEntity } from './utils.js'
+import { quote } from './query/quote.js'
 import { toJson } from './serialise.js'
 
 /**
@@ -79,7 +80,7 @@ async function changeLabel(entity: object, label: string, verb: 'SET' | 'REMOVE'
   const neode = requireNeode()
   const elementId = elementIdOf(entity)
 
-  await neode.writeCypher(`MATCH (n) WHERE elementId(n) = $elementId ${verb} n:${label}`, {
+  await neode.writeCypher(`MATCH (n) WHERE elementId(n) = $elementId ${verb} n:${quote(label)}`, {
     elementId,
   })
 
@@ -201,8 +202,7 @@ const methods: MethodImpl = {
   },
 
   async delete(this, options) {
-    const soft =
-      options && typeof options === 'object' ? (options).soft : undefined
+    const soft = options && typeof options === 'object' ? options.soft : undefined
 
     // Labels-as-state: SET the soft-delete label instead of deleting,
     // returning the refreshed entity

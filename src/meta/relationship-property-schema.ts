@@ -1,6 +1,6 @@
 import type { Newable } from '../meta/newable.js'
 import { Direction } from '../query/index.js'
-import type {PropertyType} from './property-schema.js';
+import type { PropertyType } from './property-schema.js'
 import type PropertySchema from './property-schema.js'
 
 export type RelationshipType =
@@ -11,7 +11,14 @@ export default class RelationshipPropertySchema {
   private readonly key: string
   private type!: string
   private direction!: Direction
-  private target!: Newable
+  private target: Newable | undefined
+
+  /**
+  A target provider for forward-referenced classes: the arrow thunk the
+  user wrote, resolved on first getTarget() — the target class may be
+  declared later in the file, inside its temporal dead zone at registration
+  */
+  private targetProvider: (() => Newable) | undefined
   private many!: boolean
   private eager = false
 
@@ -50,12 +57,25 @@ export default class RelationshipPropertySchema {
     return this.direction
   }
 
-  setTarget(target: Newable) {
-    this.target = target
+  setTarget(target: Newable | (() => Newable)) {
+    // An arrow thunk has no prototype — store it for deferred resolution
+    // instead of calling it during registration
+    if (typeof target === 'function' && (target as Newable).prototype === undefined) {
+      this.targetProvider = target as () => Newable
+    } else {
+      this.target = target as Newable
+    }
   }
 
-  getTarget() {
-    return this.target
+  getTarget(): Newable {
+    if (this.targetProvider) {
+      const provider = this.targetProvider
+
+      this.targetProvider = undefined
+      this.target = provider()
+    }
+
+    return this.target!
   }
 
   setMany(many: boolean) {

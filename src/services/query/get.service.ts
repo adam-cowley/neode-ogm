@@ -2,43 +2,12 @@ import type { Newable } from '../../meta/newable.js'
 import Builder from '../../query/index.js'
 import { THIS_NODE } from '../../constants.js'
 import type EntitySchema from '../../meta/entity/entity-schema.js'
+import { applyOrder, type OrderSpec } from '../../query/order-spec.js'
 import QueryService from './query.service.js'
 
-/**
-Ordering spec, matching neode's all() forms:
-
-- `'name'` - order by one property ascending
-- `['name', 'age']` - order by several properties
-- `{ name: 'DESC' }` - property -> direction map
-- `[{ name: 'DESC' }, { age: 'ASC' }]` - list of property -> direction maps
-- `{ field: 'name', order: 'DESC' }` - two-arg (key, direction) descriptor
-*/
-export type OrderSpec =
-  | string
-  | (string | Record<string, string>)[]
-  | Record<string, string>
-  | { field: string; order?: string }
-
-/**
-Apply an ordering spec against the builder, prefixing each field with the
-node alias so callers can use bare property names.
-*/
-export function applyOrder(builder: Builder, order?: OrderSpec): void {
-  if (!order) {
-    return
-  }
-
-  if (typeof order === 'string') {
-    builder.orderBy(`${THIS_NODE}.${order}`)
-  } else if (Array.isArray(order)) {
-    for (const entry of order) {applyOrder(builder, entry)}
-  } else if ('field' in order && typeof order.field === 'string') {
-    builder.orderBy({ field: `${THIS_NODE}.${order.field}`, order: order.order })
-  } else {
-    for (const [key, direction] of Object.entries(order as Record<string, string>)) {builder.orderBy(`${THIS_NODE}.${key}`, direction)}
-    
-  }
-}
+// The order forms live in the shared query module (the Repository uses the
+// same ones) — re-exported here to keep the established import path
+export { applyOrder, type OrderSpec } from '../../query/order-spec.js'
 
 export default class GetService extends QueryService {
   async get<T>(

@@ -2,13 +2,13 @@ import Builder, { Direction } from '../../query/index.js'
 import { INTERNAL_ID, THIS_NODE } from '../../constants.js'
 import type { QueryOutput } from '../../driver/types.js'
 import { getModel } from '../../meta/index.js'
-import type EntitySchema from '../../meta/entity/entity-schema.js';
+import type EntitySchema from '../../meta/entity/entity-schema.js'
 import { EntityType } from '../../meta/entity/entity-schema.js'
-import type PropertySchema from '../../meta/property-schema.js';
+import type PropertySchema from '../../meta/property-schema.js'
 import { PropertyType, isProjectedProperty } from '../../meta/property-schema.js'
 import type RelationshipPropertySchema from '../../meta/relationship-property-schema.js'
 import { getValueOrDefault, getValuesAsRecord, setPropertyInBuilder } from '../../utils.js'
-import { modelPropertyValues } from '../write-utils.js'
+import { applyFakeValues, createNodeAndRelationships, modelPropertyValues } from '../write-utils.js'
 import { validate } from '../../validation/index.js'
 import QueryService from './query.service.js'
 
@@ -43,7 +43,9 @@ export default class MergeService extends QueryService {
     const written: Record<string, unknown> = { ...matchRecord }
 
     for (const property of schema.getProperties()) {
-      if (Object.hasOwn(matchRecord, property.getKey()) || isProjectedProperty(property)) {continue}
+      if (Object.hasOwn(matchRecord, property.getKey()) || isProjectedProperty(property)) {
+        continue
+      }
 
       const value = getValueOrDefault(set, property, schema)
 
@@ -66,8 +68,12 @@ export default class MergeService extends QueryService {
 
       // Match properties are inline in the MERGE, not set; projected
       // read-model values are never written
-      if (Object.hasOwn(matchRecord, key)) {continue}
-      if (isProjectedProperty(property)) {continue}
+      if (Object.hasOwn(matchRecord, key)) {
+        continue
+      }
+      if (isProjectedProperty(property)) {
+        continue
+      }
 
       const value = getValueOrDefault(set, property, schema)
 
@@ -95,7 +101,10 @@ export default class MergeService extends QueryService {
     return this.runner.run(query, params)
   }
 
-  async save(model: object, schema: EntitySchema): Promise<{ elementId: string }> {
+  async save(
+    model: object,
+    schema: EntitySchema,
+  ): Promise<{ elementId: string; created: boolean }> {
     // Validate the model's own values (defaults resolved) before any write
     validate(modelPropertyValues(model, schema), schema)
 
@@ -122,12 +131,27 @@ export default class MergeService extends QueryService {
       mergeOn = getValuesAsRecord(model, getMergeFields(schema), schema)
     }
 
+    if (Object.keys(mergeOn).length === 0) {
+      // Nothing to merge on: the entity carries no identity, so save() is
+      // a CREATE. (A bare MERGE (this:Label) would match an arbitrary
+      // existing node of the label and overwrite it.)
+      applyFakeValues(schema, model)
+
+      validate(modelPropertyValues(model, schema), schema)
+
+      const elementId = await createNodeAndRelationships(this.runner, schema, model)
+
+      return { elementId, created: true }
+    }
+
     builder.merge(THIS_NODE, schema.getLabels(), mergeOn)
 
     // Set Properties
     for (const property of schema.getProperties()) {
       // Projected read-model values are never written
-      if (isProjectedProperty(property)) {continue}
+      if (isProjectedProperty(property)) {
+        continue
+      }
 
       const value = getValueOrDefault(model, property, schema)
 
@@ -144,6 +168,14 @@ export default class MergeService extends QueryService {
 
     // Run it!
     const result = await this.runner.run(query, params)
+
+    // Was the merge a create or a match? The root statement's summary
+    // counters say — the nested relationship writes below also create
+    // nodes, so this must be read from the root merge, not at the end.
+    // Neo4j names the counter nodesCreated, the Relate engine nodes_created.
+    const counters = result.summary?.counters ?? {}
+
+    const created = ((counters['nodesCreated'] ?? counters['nodes_created'] ?? 0) as number) > 0
 
     // Get element ID
     const firstRecord = result.records[0]
@@ -226,11 +258,11 @@ export default class MergeService extends QueryService {
           )
         }
 
-        return;
+        return
       }),
     )
 
-    return { elementId: thisId }
+    return { elementId: thisId, created }
   }
 
   private async relateNodes<T>(
@@ -264,7 +296,9 @@ export default class MergeService extends QueryService {
         const key = property.getKey()
 
         // Ignore if not set
-        if (!Object.hasOwn(entity as Record<string, unknown>, key)) {continue}
+        if (!Object.hasOwn(entity as Record<string, unknown>, key)) {
+          continue
+        }
 
         const value = (entity as Record<string, unknown>)[key]
 
@@ -278,8 +312,10 @@ export default class MergeService extends QueryService {
           }
 
           case PropertyType.ALL_PROPERTIES: {
-            for (const entryValue of Object.values(value as Record<string, unknown>)) {setPropertyInBuilder(builder, thisRel, property, entryValue)}
-            
+            for (const entryValue of Object.values(value as Record<string, unknown>)) {
+              setPropertyInBuilder(builder, thisRel, property, entryValue)
+            }
+
             break
           }
 

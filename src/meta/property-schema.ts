@@ -80,9 +80,7 @@ export const TemporalTypes: PropertyType[] = [
   PropertyType.LOCALDATETIME,
 ]
 
-export const RelationshipTypes: PropertyType[] = [PropertyType.ONE_TO_ONE, PropertyType.ONE_TO_ONE]
-
-export type DefaultValue = (model: object, schema: EntitySchema) => any   | undefined
+export type DefaultValue = (model: object, schema: EntitySchema) => any | undefined
 
 export default class PropertySchema {
   private type: PropertyType = PropertyType.ANY

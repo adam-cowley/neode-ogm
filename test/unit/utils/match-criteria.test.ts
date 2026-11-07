@@ -1,7 +1,8 @@
 import EntitySchema from '../../../src/meta/entity/entity-schema'
 import { PropertyType } from '../../../src/meta/property-schema'
 import { GraphNode } from '../../../src/driver/types'
-import { hydrateNode, matchCriteriaForEntity, elementIdOfEntity } from '../../../src/utils'
+import { matchCriteriaForEntity, elementIdOfEntity } from '../../../src/utils'
+import { hydrateNode } from '../../../src/hydrate'
 import { ELEMENT_ID } from '../../../src/constants'
 
 // ---- Fixtures ----------------------------------------------------------------

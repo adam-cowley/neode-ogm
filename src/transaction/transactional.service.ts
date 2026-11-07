@@ -23,7 +23,6 @@ import UpdateService from '../services/query/update.service.js'
 import WithinDistanceService from '../services/query/within-distance.service.js'
 import { search, type ScoredEntity } from '../services/query/search.service.js'
 
-
 export default class TransactionalService implements INeode {
   private readonly handle: TransactionHandle
   private readonly eventEmitter: EventEmitter
@@ -138,7 +137,7 @@ export default class TransactionalService implements INeode {
 
     const merge = new MergeService(this.handle)
 
-    const { elementId } = await merge.save(entity as object, schema)
+    const { elementId, created } = await merge.save(entity as object, schema)
 
     const saved = await this.findById<T>(
       entityRecord.constructor as new (
@@ -151,8 +150,8 @@ export default class TransactionalService implements INeode {
       throw new Error('Entity was saved but could not be found immediately afterwards')
     }
 
-    // Emit event
-    this.eventEmitter.emit(EventType.NODE_CREATED, saved)
+    // Emit the event the merge actually was: a create or an update
+    this.eventEmitter.emit(created ? EventType.NODE_CREATED : EventType.NODE_UPDATED, saved)
 
     return saved
   }
@@ -193,13 +192,15 @@ export default class TransactionalService implements INeode {
 
     const elementId = elementIdOfEntity(schema, entity as object)
 
-    return elementId ? (new FindByIdService(this.handle).find(
-      entityRecord.constructor as new (
-        ...arguments_: never[]
-      ) => T,
-      schema,
-      elementId,
-    ) as Promise<T | undefined>) : undefined;
+    return elementId
+      ? (new FindByIdService(this.handle).find(
+          entityRecord.constructor as new (
+            ...arguments_: never[]
+          ) => T,
+          schema,
+          elementId,
+        ) as Promise<T | undefined>)
+      : undefined
   }
 
   /**

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import neo4j from 'neo4j-driver'
 
-import { configFromEnv, fromEnv } from '../../../src/utils'
+import { configFromEnv, fromEnv } from '../../../src/env'
 import Neode from '../../../src/neode.service'
 
 vi.mock('neo4j-driver', () => ({
