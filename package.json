@@ -33,7 +33,6 @@
     "test:package": "vitest run --project package",
     "test:types": "vitest run --typecheck --project types",
     "test:watch": "vitest",
-    "coverage": "vitest run --coverage",
     "docs:agents": "jiti scripts/generate-agent-docs.ts",
     "bench": "vitest bench --project unit",
     "typecheck": "tsc --noEmit",
@@ -42,7 +41,8 @@
     "format": "biome format --write .",
     "check:package": "publint && attw --pack . --profile node16",
     "release": "pnpm build && changeset publish",
-    "knip": "knip"
+    "knip": "knip",
+    "test:coverage": "vitest run --coverage"
   },
   "packageManager": "pnpm@12.18.0",
   "keywords": [
