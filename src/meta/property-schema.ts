@@ -74,16 +74,6 @@ export const ProjectedPropertyTypes: PropertyType[] = [
 /**
 Property types that map onto Neo4j temporal values
 */
-export const TemporalTypes: PropertyType[] = [
-  PropertyType.DATE,
-  PropertyType.TIME,
-  PropertyType.DATETIME,
-  PropertyType.LOCALTIME,
-  PropertyType.LOCALDATETIME,
-]
-
-export const RelationshipTypes: PropertyType[] = [PropertyType.ONE_TO_ONE, PropertyType.ONE_TO_ONE]
-
 export type DefaultValue = (model: object, schema: EntitySchema) => unknown
 
 export class PropertySchema {

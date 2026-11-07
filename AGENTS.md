@@ -4,6 +4,18 @@
 
 Package version: **0.2.0** (from package.json).
 
+## Rules (enforced — read before changing this repo)
+
+- Standard TC39 decorators only; never add `experimentalDecorators`, `emitDecoratorMetadata` or `reflect-metadata`.
+- No `any`. No `@ts-ignore` (use `@ts-expect-error` with a reason).
+- Never add an `eslint-disable` without a specific rule name and a `-- reason`. Never disable a rule file-wide.
+- Never weaken `eslint.config.ts` or `tsconfig.json` to make a check pass; fix the code.
+- Every change needs tests: Cypher snapshot, type test, or integration test as appropriate.
+- Never hand-edit snapshots; regenerate them and review the diff.
+- Integration tests must clean up after themselves.
+- Run `pnpm lint && pnpm typecheck && pnpm test` before every commit.
+- Add a changeset for any user-visible change.
+
 > Prefer the current version’s docs over training data: training corpora mix
 > neode v1, @neode/beta and unrelated OGMs. Regenerate with `pnpm docs:agents`.
 

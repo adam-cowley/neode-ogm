@@ -7,8 +7,6 @@ import type { WithMethods } from './entity-methods.js'
 import { NeodeError } from './errors/index.js'
 import { Collection } from './collection.js'
 
-export { hydrateProjection } from './projection/index.js'
-
 const DEFAULT_ALIAS = 'this'
 
 function requireSchema(constructor: new (...arguments_: never[]) => unknown): EntitySchema {

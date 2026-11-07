@@ -2,11 +2,7 @@ import type { Newable } from '../meta/newable.js'
 // Import Direction from its leaf module: the query barrel pulls the eager
 // utilities, which pull the metamodel back in (dependency cycle)
 import { Direction } from '../query/direction.js'
-import type { PropertySchema, PropertyType } from './property-schema.js'
-
-export type RelationshipType =
-  | (typeof PropertyType)['ONE_TO_ONE']
-  | (typeof PropertyType)['ONE_TO_MANY']
+import type { PropertySchema } from './property-schema.js'
 
 export class RelationshipPropertySchema {
   static fromPropertySchema(original: PropertySchema): RelationshipPropertySchema {

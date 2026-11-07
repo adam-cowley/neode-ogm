@@ -1,5 +1,4 @@
 export const CONNECTOR_AND = 'AND'
-export const CONNECTOR_OR = 'OR'
 
 interface WhereClause {
   toString(): string

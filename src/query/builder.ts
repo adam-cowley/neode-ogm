@@ -25,13 +25,8 @@ property to match on
 export interface EntityMatchCriteria {
   elementId?: string
   key: string
-  value: unknown
+  value?: unknown
 }
-
-export const mode = {
-  READ: 'READ',
-  WRITE: 'WRITE',
-} as const
 
 export type BuilderParameters = Record<string, unknown>
 

@@ -3,8 +3,8 @@ import { getModel } from '../src/meta';
 import { defineModel } from '../src/meta/map-schema';
 import EntitySchema from '../src/meta/entity/entity-schema';
 import type { GraphNode, GraphRelationship } from '../src/driver/types';
-import type { EagerRelationship, EagerNode } from '../src/utils';
-import { hydrateNode } from '../src/utils';
+import type { EagerRelationship, EagerNode } from '../src/utilities';
+import { hydrateNode } from '../src/utilities';
 
 // ---- Fixtures (map-based models; registry is global per file) ---------------
 

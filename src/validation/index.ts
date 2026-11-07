@@ -68,6 +68,4 @@ export function validate(properties: Record<string, unknown>, schema: EntitySche
   }
 }
 
-export { ValidationError, ERROR_VALIDATION } from './validation-error.js'
-
 export { buildPropertySchema } from './rule-table.js'

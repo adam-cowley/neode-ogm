@@ -1,6 +1,5 @@
 import type { Newable } from '../meta/newable.js'
 import type { Direction } from '../query/index.js'
-export type { DefaultValue } from './property-schema.js'
 import type { PropertySchema } from './property-schema.js'
 import { PropertyType } from './property-schema.js'
 

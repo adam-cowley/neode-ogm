@@ -39,7 +39,10 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0 --cache && biome format .",
     "lint:fix": "eslint . --fix --cache && biome format --write .",
-    "format": "biome format --write ."
+    "format": "biome format --write .",
+    "check:package": "publint && attw --pack . --profile node16",
+    "release": "pnpm build && changeset publish",
+    "knip": "knip"
   },
   "packageManager": "pnpm@12.18.0",
   "keywords": [
@@ -83,6 +86,8 @@
     "eslint-plugin-import-x": "^4.18.0",
     "eslint-plugin-unicorn": "^79.0.0",
     "jiti": "^2.7.0",
+    "knip": "^6.44.1",
+    "lefthook": "^2.2.2",
     "neo4j-driver": "^6.0.0",
     "publint": "^0.3.25",
     "tsdown": "^0.23.7",

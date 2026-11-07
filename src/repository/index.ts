@@ -10,10 +10,6 @@ import { fulltextIndexName } from '../services/schema/fulltext.service.js'
 import { isGraphNode, isRecord } from '../services/type-guards.js'
 import { hydrateNode } from '../utilities.js'
 
-export interface SearchOptions {
-  limit?: number
-}
-
 /**
 Ordering spec, matching neode's all() forms:
 
