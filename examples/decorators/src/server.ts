@@ -91,7 +91,8 @@ app.get('/recommend/:genre', (request, res) => {
   getNextMovie(request.params.genre, [])
     .then(({ genre, movie }) => {
       if (!genre || !movie) {
-        res.redirect('/'); return;
+        res.redirect('/')
+        return
       }
 
       res.render('vote', {

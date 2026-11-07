@@ -6,7 +6,9 @@ import { addRegistration, memberName } from '../registrations.js'
 /**
 Register a time property.
 */
-export function Time(config: PropertyConfig = {}): (value: undefined, context: ClassFieldDecoratorContext) => void {
+export function Time(
+  config: PropertyConfig = {},
+): (value: undefined, context: ClassFieldDecoratorContext) => void {
   return function (_value: undefined, context: ClassFieldDecoratorContext): void {
     const propertyKey = memberName(context)
 

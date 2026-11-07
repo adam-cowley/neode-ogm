@@ -1,183 +1,62 @@
 import type { ConnectionProvider } from '../../driver/types.js'
 import { getModels } from '../../meta/index.js'
 import type { EntitySchema } from '../../meta/entity/entity-schema.js'
-import type { PropertySchema } from '../../meta/property-schema.js';
-import { PropertyType } from '../../meta/property-schema.js'
-import FulltextIndexService from './fulltext.service.js'
+import type { PropertySchema } from '../../meta/property-schema.js'
+import {
+  ConstraintAction,
+  ConstraintType,
+  compositeSchemaObjectName,
+  cypherPropertyType,
+  propertyTypeStatement,
+  schemaStatement,
+  type SchemaResult,
+} from './schema-objects.js'
+import { FulltextIndexService } from './fulltext.service.js'
+import { NeodeError } from '../../errors/neode-error.js'
+import { VectorIndexService, type VectorIndexDefinition } from './vector.service.js'
 
-export const ConstraintAction = {
-  CREATE: 'CREATE',
-  DROP: 'DROP',
-} as const
-
-export type ConstraintAction = (typeof ConstraintAction)[keyof typeof ConstraintAction]
-
-export const ConstraintType = {
-  UNIQUE: 'UNIQUE',
-  EXISTS: 'EXISTS',
-  INDEX: 'INDEX',
-  FULLTEXT: 'FULLTEXT',
-  VECTOR: 'VECTOR',
-  PROPERTY_TYPE: 'PROPERTY_TYPE',
-} as const
-
-export type ConstraintType = (typeof ConstraintType)[keyof typeof ConstraintType]
-
-export interface SchemaResult {
-  action: ConstraintAction
-  type: ConstraintType
-  label: string
-  property: string
-  /**
-  All indexed properties (composite and full-text cover more than one)
-  */
-  properties?: string[]
-  statement: string
-  success: boolean
-  error?: Error
-}
+// Re-exported for the callers that import these from the schema service
+export * from './schema-objects.js'
 
 /**
-Deterministic schema object name: `<label>_<property>_<type>` (PLAN §G)
+Vector index definitions for the vector-declared properties of one label
+(NTS-447): one `VectorIndexDefinition` per property carrying a `vector`
+config, named by the deterministic `vectorIndexName()`.
 */
-export const schemaObjectName = (label: string, property: string, type: string): string =>
-  `${label.toLowerCase()}_${property}_${type.toLowerCase()}`
-
-/**
-Deterministic name for a composite object: `<label>_<props joined by _>_<type>`
-*/
-export const compositeSchemaObjectName = (
+export function vectorIndexDefinitionsForLabel(
   label: string,
-  properties: string[],
-  type: string,
-): string =>
-  schemaObjectName(label, properties.map((property) => property.toLowerCase()).join('_'), type)
+  properties: PropertySchema[],
+): VectorIndexDefinition[] {
+  const definitions: VectorIndexDefinition[] = []
 
-/**
-Backtick-escape a Cypher identifier
-*/
-const quote = (identifier: string): string => `\`${identifier.replaceAll('`', '``')}\``
+  for (const property of properties) {
+    const vector = property.getVector()
 
-/**
-Cypher property-type name for a declared property type, or undefined when
-the type has no single Cypher equivalent (NUMBER spans INTEGER + FLOAT, ANY
-is untyped): property-type constraints cannot be generated for those.
-*/
-export function cypherPropertyType(type: PropertyType): string | undefined {
-  switch (type) {
-    case PropertyType.STRING:
-    case PropertyType.UUID: {
-      return 'STRING'
-    }
-    case PropertyType.INTEGER: {
-      return 'INTEGER'
-    }
-    case PropertyType.FLOAT: {
-      return 'FLOAT'
-    }
-    case PropertyType.BOOLEAN: {
-      return 'BOOLEAN'
-    }
-    case PropertyType.DATE: {
-      return 'DATE'
-    }
-    case PropertyType.TIME: {
-      return 'TIME'
-    }
-    case PropertyType.DATETIME: {
-      return 'DATETIME'
-    }
-    case PropertyType.LOCALTIME: {
-      return 'LOCALTIME'
-    }
-    case PropertyType.LOCALDATETIME: {
-      return 'LOCALDATETIME'
-    }
-    case PropertyType.POINT: {
-      return 'POINT'
-    }
-    case PropertyType.DURATION: {
-      return 'DURATION'
-    }
-    default: {
-      return undefined
+    if (vector !== undefined) {
+      definitions.push({ label, property: property.getKey(), ...vector })
     }
   }
+
+  return definitions
 }
 
-/**
-CREATE/DROP statement for a single- or composite-property UNIQUE, EXISTS or
-INDEX schema object. Composite uniques use the parenthesised property list —
-the only spelling the Relate engine parses.
-*/
-export function schemaStatement(
-  action: ConstraintAction,
-  type: ConstraintType,
-  label: string,
-  properties: string[],
-  name: string = schemaObjectName(label, properties[0] ?? '', type),
-): string {
-  if (properties.length === 0) {
-    throw new TypeError(`Cannot create a ${type} schema object on ${label}: no properties given`)
-  }
-
-  const kind = type === ConstraintType.INDEX ? 'INDEX' : 'CONSTRAINT'
-
-  if (action === ConstraintAction.DROP) {
-    return `DROP ${kind} ${name} IF EXISTS`
-  }
-
-  const quoted = properties.map((property) => `n.${quote(property)}`)
-  const target =
-    type === ConstraintType.INDEX
-      ? `ON (${quoted.join(', ')})`
-      : type === ConstraintType.UNIQUE
-        ? quoted.length > 1
-          ? `REQUIRE (${quoted.join(', ')}) IS UNIQUE`
-          : `REQUIRE ${quoted[0]} IS UNIQUE`
-        : `REQUIRE ${quoted[0]} IS NOT NULL`
-
-  return `CREATE ${kind} ${name} IF NOT EXISTS FOR (n:${label}) ${target}`
-}
-
-/**
-CREATE/DROP statement for a property-type constraint (NTS-141): `REQUIRE n.prop IS :: STRING`
-*/
-export function propertyTypeStatement(
-  action: ConstraintAction,
-  label: string,
-  property: string,
-  cypherType: string,
-  name: string = schemaObjectName(label, property, ConstraintType.PROPERTY_TYPE),
-): string {
-  return action === ConstraintAction.DROP ? `DROP CONSTRAINT ${name} IF EXISTS` : `CREATE CONSTRAINT ${name} IF NOT EXISTS FOR (n:${label}) REQUIRE n.${quote(property)} IS :: ${cypherType}`;
-}
-
-export default class SchemaService {
+export class SchemaService {
   private readonly connection: ConnectionProvider
-  private readonly enterprise: boolean = false
+  private readonly enterprise: boolean
 
-  constructor(connection: ConnectionProvider, enterprise = false) {
+  constructor(connection: ConnectionProvider, isEnterprise = false) {
     this.connection = connection
-    this.enterprise = enterprise
-  }
-
-  async create(): Promise<SchemaResult[]> {
-    return this.runSchemaStatements(ConstraintAction.CREATE)
-  }
-
-  async drop(): Promise<SchemaResult[]> {
-    return this.runSchemaStatements(ConstraintAction.DROP)
+    this.enterprise = isEnterprise
   }
 
   private async runSchemaStatements(action: ConstraintAction): Promise<SchemaResult[]> {
-    const output = await Promise.all(
-      Array.from(getModels().values()).map(async (model) =>
+    const results = await Promise.all(
+      Array.from(getModels().values(), async (model) =>
         this.runSchemaStatementsForModel(action, model),
       ),
     )
 
-    return output.flat()
+    return results.flat()
   }
 
   private async runSchemaStatementsForModel(
@@ -185,7 +64,9 @@ export default class SchemaService {
     model: EntitySchema,
   ): Promise<SchemaResult[]> {
     const output = await Promise.all(
-      model.getLabels().map(async (label) => this.runSchemaStatementsForLabel(action, model, label)),
+      model
+        .getLabels()
+        .map(async (label) => this.runSchemaStatementsForLabel(action, model, label)),
     )
 
     return output.flat()
@@ -229,23 +110,54 @@ export default class SchemaService {
     // constraints so callers never handle index names
     const fulltext = await this.runFulltextStatementsForLabel(action, properties, label)
 
+    // Vector indexes (NTS-447): one per property declared with a vector
+    // config, run through VectorIndexService (statement logic is not
+    // duplicated here)
+    const vectors = await this.runVectorStatementsForLabel(action, properties, label)
+
     if (this.enterprise) {
       const exists = await this.runExistsConstraintStatementsForLabel(action, properties, label)
 
-      return uniques.concat(
+      return [
+        ...uniques,
         ...indexes,
         ...compositeUniques,
         ...compositeIndexes,
         ...propertyTypes,
         ...fulltext,
+        ...vectors,
         ...exists,
-      )
+      ]
     }
 
-    return uniques.concat(...indexes, ...compositeUniques, ...compositeIndexes, ...propertyTypes, ...fulltext)
+    return [
+      ...uniques,
+      ...indexes,
+      ...compositeUniques,
+      ...compositeIndexes,
+      ...propertyTypes,
+      ...fulltext,
+      ...vectors,
+    ]
   }
 
-  private runFulltextStatementsForLabel(
+  private async runVectorStatementsForLabel(
+    action: ConstraintAction,
+    properties: PropertySchema[],
+    label: string,
+  ): Promise<SchemaResult[]> {
+    const definitions = vectorIndexDefinitionsForLabel(label, properties)
+
+    if (definitions.length === 0) {
+      return []
+    }
+
+    const service = new VectorIndexService(this.connection, definitions)
+
+    return action === ConstraintAction.CREATE ? service.create() : service.drop()
+  }
+
+  private async runFulltextStatementsForLabel(
     action: ConstraintAction,
     properties: PropertySchema[],
     label: string,
@@ -253,7 +165,7 @@ export default class SchemaService {
     const fulltext = properties.filter((property) => property.getFulltext())
 
     if (fulltext.length === 0) {
-      return Promise.resolve([])
+      return []
     }
 
     const service = new FulltextIndexService(this.connection, [
@@ -317,7 +229,7 @@ export default class SchemaService {
     for (const property of properties) {
       const list = select(property)
 
-      if (!list?.length) {
+      if (list === undefined || list.length === 0) {
         continue
       }
 
@@ -325,7 +237,7 @@ export default class SchemaService {
     }
 
     return Promise.all(
-      Array.from(composites).map(async ([name, list]) =>
+      [...composites].map(async ([name, list]) =>
         this.runStatement(action, type, label, list, name),
       ),
     )
@@ -342,7 +254,7 @@ export default class SchemaService {
         .map(async (property) => {
           const type = cypherPropertyType(property.getType())
 
-          if (!type) {
+          if (type === undefined) {
             return {
               action,
               type: ConstraintType.PROPERTY_TYPE,
@@ -380,14 +292,14 @@ export default class SchemaService {
     const property = properties[0]
 
     if (property === undefined) {
-      throw new Error('A schema constraint requires at least one property')
+      throw new NeodeError('A schema constraint requires at least one property')
     }
 
     let statement: string
 
     if (type === ConstraintType.PROPERTY_TYPE) {
       if (cypherType === undefined) {
-        throw new Error('A property-type constraint requires a Cypher type')
+        throw new NeodeError('A property-type constraint requires a Cypher type')
       }
 
       statement = propertyTypeStatement(action, label, property, cypherType, name)
@@ -400,7 +312,7 @@ export default class SchemaService {
       type,
       label,
       property,
-      ...((properties.length > 1) && { properties }),
+      ...(properties.length > 1 && { properties }),
       statement,
       success: false,
     }
@@ -410,9 +322,17 @@ export default class SchemaService {
 
       output.success = true
     } catch (error) {
-      output.error = error as Error
+      output.error = error instanceof Error ? error : new Error(String(error))
     }
 
     return output
+  }
+
+  async create(): Promise<SchemaResult[]> {
+    return this.runSchemaStatements(ConstraintAction.CREATE)
+  }
+
+  async drop(): Promise<SchemaResult[]> {
+    return this.runSchemaStatements(ConstraintAction.DROP)
   }
 }

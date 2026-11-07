@@ -1,14 +1,15 @@
 import { randomUUID } from 'node:crypto'
 
 import { mergeModel, mergeProperty, mergeRelationshipProperty } from './index.js'
+import { NeodeError } from '../errors/index.js'
 import type { Newable } from './newable.js'
 import type { PropertySchema } from './property-schema.js'
 import { PropertyType } from './property-schema.js'
 import { toDirection } from '../query/index.js'
+import { isRecord } from '../services/type-guards.js'
 import type {
   ProjectionDefinition,
   PropertyDefinition,
-  PropertyTypeName,
   RelatedOneDefinition,
   RelatedManyDefinition,
   RelationshipCountDefinition,
@@ -35,7 +36,9 @@ const PROJECTION_TYPES = new Set([
   'computed',
 ])
 
-const PROPERTY_TYPES: Record<PropertyTypeName, PropertyType> = {
+// Keyed openly: map definitions may name types the table does not know
+// (unknown names fall back to ANY, neode parity)
+const PROPERTY_TYPES: Record<string, PropertyType | undefined> = {
   any: PropertyType.ANY,
   string: PropertyType.STRING,
   number: PropertyType.NUMBER,
@@ -91,7 +94,11 @@ resolve back through the shared registry like decorator-defined classes
 (`new constructor()` → `.constructor` finds the EntitySchema).
 */
 function virtualConstructor(name: string): Newable {
-  class Virtual {}
+  const Virtual = class {
+    // Instances hydrate through the metamodel; the declaration only marks
+    // the class non-empty for the no-extraneous-class rule
+    declare readonly __virtualModel?: undefined
+  }
 
   Object.defineProperty(Virtual, 'name', { value: name })
 
@@ -100,18 +107,16 @@ function virtualConstructor(name: string): Newable {
 
 function isRelationshipDefinition(value: unknown): value is RelationshipDefinition {
   return (
-    typeof value === 'object' &&
-    value !== null &&
-    RELATIONSHIP_TYPES.has((value as RelationshipDefinition).type)
+    isRecord(value) && typeof value['type'] === 'string' && RELATIONSHIP_TYPES.has(value['type'])
   )
 }
 
 function isProjectionDefinition(value: unknown): value is ProjectionDefinition {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    PROJECTION_TYPES.has((value as ProjectionDefinition).type)
-  )
+  return isRecord(value) && typeof value['type'] === 'string' && PROJECTION_TYPES.has(value['type'])
+}
+
+function isPropertyDefinition(value: unknown): value is PropertyDefinition {
+  return isRecord(value) && typeof value['type'] === 'string'
 }
 
 /**
@@ -156,7 +161,7 @@ function wireProjectionProperty(
 
       property.setRelationshipType(count.relationship)
       property.setDirection(toDirection(count.direction))
-      if (count.where) {
+      if (count.where !== undefined && count.where !== '') {
         property.setWhere(count.where)
       }
       if (count.minHops !== undefined) {
@@ -176,7 +181,7 @@ function wireProjectionProperty(
 
       property.setRelationshipType(exists.relationship)
       property.setDirection(toDirection(exists.direction))
-      if (exists.where) {
+      if (exists.where !== undefined && exists.where !== '') {
         property.setWhere(exists.where)
       }
       break
@@ -202,10 +207,18 @@ function wireProjectionProperty(
 function definePropertyModel(
   constructor: Newable,
   key: string,
-  definition: PropertyTypeName | PropertyDefinition,
+  definition: PropertyDefinition | string | string[],
 ): PropertySchema {
-  const full: PropertyDefinition =
-    typeof definition === 'string' ? { type: definition } : definition
+  let full: PropertyDefinition | { type: string }
+
+  if (typeof definition === 'string') {
+    full = { type: definition }
+  } else if (isPropertyDefinition(definition)) {
+    full = definition
+  } else {
+    // Not a definition shape (e.g. a stray array): falls through to ANY
+    full = { type: 'any' }
+  }
 
   // uuid properties generate a uuid by default (parity with the @Uuid decorator)
   if (full.type === 'uuid' && !Object.hasOwn(full, 'default')) {
@@ -227,7 +240,7 @@ function wireRelationshipModel(
   mergeRelationshipProperty(
     constructor,
     key,
-    definition.relationship ?? key,
+    definition.relationship,
     target,
     toDirection(definition.direction),
     definition.type === 'relationships' || definition.type === 'nodes',
@@ -274,10 +287,10 @@ function flushPendingProjections(): void {
       continue
     }
 
-    const targetName = (pending.definition as { target?: string }).target
-    const target = targetName ? modelsByName.get(targetName) : undefined
+    const targetName = 'target' in pending.definition ? pending.definition.target : undefined
+    const target = modelFor(targetName)
 
-    if (targetName && !target) {
+    if (targetName !== undefined && targetName !== '' && target === undefined) {
       continue
     }
 
@@ -296,7 +309,7 @@ export function defineModel(name: string, schema: SchemaDefinition): Newable {
 
   const model = mergeModel(constructor)
 
-  model.setLabels(schema.labels || [name])
+  model.setLabels(schema.labels ?? [name])
 
   // Agent-facing model explanation (NTS-445) — never a property
   if (schema.description !== undefined) {
@@ -319,16 +332,17 @@ export function defineModel(name: string, schema: SchemaDefinition): Newable {
     if (isRelationshipDefinition(value)) {
       pendingRelationships.push({ constructor, key, definition: value })
     } else if (isProjectionDefinition(value)) {
-      const targetName = (value as { target?: string }).target
-      const target = targetName ? modelsByName.get(targetName) : undefined
+      const targetName = 'target' in value ? value.target : undefined
+      const target = modelFor(targetName)
+      const hasTargetName = targetName !== undefined && targetName !== ''
 
-      if (targetName && !target) {
+      if (hasTargetName && target === undefined) {
         pendingProjections.push({ constructor, key, definition: value })
       } else {
         wireProjectionProperty(constructor, key, value, target)
       }
     } else {
-      definePropertyModel(constructor, key, value as PropertyTypeName | PropertyDefinition)
+      definePropertyModel(constructor, key, value)
     }
   }
 
@@ -363,13 +377,13 @@ export function extendModel(name: string, as: string, schema: SchemaDefinition =
   const original = definitionsByName.get(name)
 
   if (!original) {
-    throw new Error(unknownDefinitionError(name))
+    throw new NeodeError(unknownDefinitionError(name))
   }
 
   return defineModel(as, {
     ...original,
     ...schema,
-    labels: [...(original.labels || [name]), as],
+    labels: [...(original.labels ?? [name]), as],
   })
 }
 
@@ -377,7 +391,11 @@ export function extendModel(name: string, as: string, schema: SchemaDefinition =
 neode's helpful error message for a model lookup that found nothing
 */
 export function unknownDefinitionError(name: string): string {
-  const defined = Array.from(modelsByName.keys())
+  const defined: string[] = []
+
+  modelsByName.forEach((_constructor, definedName) => {
+    defined.push(definedName)
+  })
 
   let message = `Couldn't find a definition for "${name}".`
 
@@ -387,5 +405,16 @@ export function unknownDefinitionError(name: string): string {
     message += ` The models currently defined are [${defined.join(', ')}]`
   }
 
+  // NTS-446: name the fix
+  message += ' — register it with defineModel() or a decorator first'
+
   return message
+}
+
+/**
+The model registered under a projection's target name, or undefined for a
+blank/absent name
+*/
+function modelFor(targetName: string | undefined): Newable | undefined {
+  return targetName === undefined || targetName === '' ? undefined : modelsByName.get(targetName)
 }

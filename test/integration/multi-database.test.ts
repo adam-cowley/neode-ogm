@@ -1,5 +1,5 @@
 import { openBackend, isEnterprise, TestBackend } from './support/backend'
-import Neode from '../../src/neode.service'
+import { Neode } from '../../src/neode.service'
 import {
   AccessMode,
   ConnectionProvider,

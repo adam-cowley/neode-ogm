@@ -1,5 +1,5 @@
 import { NodeEntity, Uuid, String, InternalId } from '../../src/decorators'
-import Neode from '../../src/neode.service'
+import { Neode } from '../../src/neode.service'
 import { ConstraintAction, ConstraintType } from '../../src/services/schema/schema.service'
 import { openBackend, TestBackend } from './support/backend'
 

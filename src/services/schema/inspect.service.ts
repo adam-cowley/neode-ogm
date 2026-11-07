@@ -65,6 +65,59 @@ export interface SchemaInspection {
 }
 
 /**
+One row of a SHOW CONSTRAINTS / SHOW INDEXES result
+*/
+interface ShowRow {
+  has(key: string): boolean
+  get(key: string): unknown
+}
+
+/**
+String column value, defaulting to '' (the driver omits absent columns)
+*/
+function rowString(row: ShowRow, key: string): string {
+  const value = row.has(key) ? row.get(key) : undefined
+
+  return typeof value === 'string' ? value : ''
+}
+
+/**
+String[] column value, defaulting to []
+*/
+function rowStringList(row: ShowRow, key: string): string[] {
+  const value = row.has(key) ? row.get(key) : undefined
+
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : []
+}
+
+function rowToObject(row: ShowRow): SchemaObject {
+  return {
+    name: rowString(row, 'name'),
+    type: rowString(row, 'type'),
+    labelsOrTypes: row.has('labelsOrTypes') ? rowStringList(row, 'labelsOrTypes') : [],
+    properties: row.has('properties') ? rowStringList(row, 'properties') : [],
+  }
+}
+
+/**
+Constraint-backed indexes are reported by both SHOW commands — keep them
+out of the index diff, as are the system-managed token lookup indexes
+*/
+function indexRowToObject(row: ShowRow): SchemaObject | null {
+  const object = rowToObject(row)
+
+  if (object.type === 'LOOKUP') {
+    return null
+  }
+
+  const owningConstraint = row.has('owningConstraint') ? row.get('owningConstraint') : undefined
+
+  return owningConstraint === null || owningConstraint === undefined ? object : null
+}
+
+/**
 The schema objects the registered models (plus the given definitions) would install
 */
 export function declaredSchemaObjects(options: InspectOptions = {}): {
@@ -88,7 +141,7 @@ export function declaredSchemaObjects(options: InspectOptions = {}): {
           })
         }
 
-        if (property.isExists() && options.enterprise) {
+        if (property.isExists() && options.enterprise === true) {
           constraints.push({
             name: schemaObjectName(label, key, ConstraintType.EXISTS),
             type: ConstraintType.EXISTS,
@@ -107,7 +160,7 @@ export function declaredSchemaObjects(options: InspectOptions = {}): {
         }
 
         // Property-type constraint (NTS-141), opt-in via `typed: true`
-        if (property.isTyped() && cypherPropertyType(property.getType())) {
+        if (property.isTyped() && cypherPropertyType(property.getType()) !== undefined) {
           constraints.push({
             name: schemaObjectName(label, key, ConstraintType.PROPERTY_TYPE),
             type: ConstraintType.PROPERTY_TYPE,
@@ -121,7 +174,7 @@ export function declaredSchemaObjects(options: InspectOptions = {}): {
         // one of its properties declares it
         const compositeUnique = property.getCompositeUnique()
 
-        if (compositeUnique?.length) {
+        if (compositeUnique !== undefined && compositeUnique.length > 0) {
           declared(constraints, {
             name: compositeSchemaObjectName(label, compositeUnique, ConstraintType.UNIQUE),
             type: ConstraintType.UNIQUE,
@@ -132,7 +185,7 @@ export function declaredSchemaObjects(options: InspectOptions = {}): {
 
         const compositeIndex = property.getCompositeIndex()
 
-        if (compositeIndex?.length) {
+        if (compositeIndex !== undefined && compositeIndex.length > 0) {
           declared(indexes, {
             name: compositeSchemaObjectName(label, compositeIndex, ConstraintType.INDEX),
             type: ConstraintType.INDEX,
@@ -144,7 +197,9 @@ export function declaredSchemaObjects(options: InspectOptions = {}): {
     }
   }
 
-  for (const definition of options.fulltext || []) {
+  const fulltextDefinitions = options.fulltext ?? []
+
+  for (const definition of fulltextDefinitions) {
     indexes.push({
       name: fulltextIndexName(definition),
       type: ConstraintType.FULLTEXT,
@@ -153,7 +208,9 @@ export function declaredSchemaObjects(options: InspectOptions = {}): {
     })
   }
 
-  for (const definition of options.vector || []) {
+  const vectorDefinitions = options.vector ?? []
+
+  for (const definition of vectorDefinitions) {
     indexes.push({
       name: vectorIndexName(definition),
       type: ConstraintType.VECTOR,
@@ -177,39 +234,17 @@ export async function inspectSchema(
     connection.run('SHOW INDEXES', {}, 'READ'),
   ])
 
-  const rowToObject = (row: {
-    has(key: string): boolean
-    get(key: string): unknown
-  }): SchemaObject => ({
-    name: (row.get('name') as string) || '',
-    type: (row.get('type') as string) || '',
-    labelsOrTypes: row.has('labelsOrTypes') ? (row.get('labelsOrTypes') as string[]) || [] : [],
-    properties: row.has('properties') ? (row.get('properties') as string[]) || [] : [],
-  })
+  const installedConstraints = constraintRows.records.map((row) => rowToObject(row))
 
-  // Constraint-backed indexes are reported by both SHOW commands — keep
-  // them out of the index diff, as are the system-managed token lookup
-  // indexes
-  const indexRowsToObject = (row: {
-    has(key: string): boolean
-    get(key: string): unknown
-  }): SchemaObject | null => {
-    const object = rowToObject(row)
-
-    return object.type === 'LOOKUP' ||
-      (row.has('owningConstraint') && row.get('owningConstraint') != null) ? null : object;
-  }
-
-  const installedConstraints = constraintRows.records.map(rowToObject)
   const installedIndexes = indexRows.records
-    .map(indexRowsToObject)
+    .map((row) => indexRowToObject(row))
     .filter((object): object is SchemaObject => object !== null)
 
-  const declared = declaredSchemaObjects(options)
+  const declaredObjects = declaredSchemaObjects(options)
 
   return {
-    constraints: diff(declared.constraints, installedConstraints),
-    indexes: diff(declared.indexes, installedIndexes),
+    constraints: diff(declaredObjects.constraints, installedConstraints),
+    indexes: diff(declaredObjects.indexes, installedIndexes),
   }
 }
 

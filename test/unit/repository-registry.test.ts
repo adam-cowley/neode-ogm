@@ -1,5 +1,5 @@
 import { vi } from 'vitest'
-import Repository from '../../src/repository'
+import { Repository } from '../../src/repository'
 import {
   NodeEntity,
   InternalId,
@@ -8,8 +8,8 @@ import {
   Number,
   EntityRepository,
 } from '../../src/decorators'
-import { registerRepository, getRepository, resolveRepository } from '../../src/meta'
-import INeode from '../../src/neode.interface'
+import { registerRepository, getRepository, resolveRepository } from '../../src/meta/repositories'
+import type { INeode } from '../../src/neode.interface'
 import { GraphNode, QueryOutput, QueryRecord } from '../../src/driver/types'
 
 // ---- Fixtures (decorator registry is global per module registry) -----------

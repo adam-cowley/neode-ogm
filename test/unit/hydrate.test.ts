@@ -1,5 +1,5 @@
 import { defineModel } from '../../src/meta/map-schema'
-import Collection from '../../src/collection'
+import { Collection } from '../../src/collection'
 import { hydrate, hydrateFirst, toCollection } from '../../src/hydrate'
 import { GraphNode, QueryOutput, QueryRecord } from '../../src/driver/types'
 

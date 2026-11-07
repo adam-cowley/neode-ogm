@@ -32,7 +32,9 @@ export function validate(properties: Record<string, unknown>, schema: EntitySche
   const details: ValidationDetail[] = []
 
   for (const property of schema.getProperties()) {
-    if (SKIPPED_TYPES.has(property.getType())) {continue}
+    if (SKIPPED_TYPES.has(property.getType())) {
+      continue
+    }
 
     const key = property.getKey()
     const value = Object.hasOwn(properties, key) ? properties[key] : undefined
@@ -66,7 +68,6 @@ export function validate(properties: Record<string, unknown>, schema: EntitySche
   }
 }
 
+export { ValidationError, ERROR_VALIDATION } from './validation-error.js'
 
-export { ValidationError, ERROR_VALIDATION  } from './validation-error.js'
-
-export {buildPropertySchema} from './rule-table.js'
+export { buildPropertySchema } from './rule-table.js'

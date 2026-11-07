@@ -16,7 +16,7 @@ import { existsSync } from 'fs'
 import { ConnectionProvider } from '../../../src/driver/types'
 import { Neo4jConnectionProvider } from '../../../src/driver/neo4j-connection-provider.js'
 import { RelateConnectionProvider, requireRelateClient } from '../../../src/driver/relate'
-import Neode from '../../../src/neode.service'
+import { Neode } from '../../../src/neode.service'
 
 export interface BackendCapabilities {
   /** Server edition as reported by the backend */

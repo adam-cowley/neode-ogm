@@ -27,7 +27,9 @@ Register a property with an explicit type and config, e.g.
 
 Prefer this over `@String` to avoid shadowing global types.
 */
-export function Property(config: PropertyConfig = {}): (value: undefined, context: ClassFieldDecoratorContext) => void {
+export function Property(
+  config: PropertyConfig = {},
+): (value: undefined, context: ClassFieldDecoratorContext) => void {
   return function (_value: undefined, context: ClassFieldDecoratorContext): void {
     const propertyKey = memberName(context)
 

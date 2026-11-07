@@ -6,7 +6,9 @@ import { addRegistration, memberName } from '../registrations.js'
 /**
 Register a float property.
 */
-export function Float(config: PropertyConfig = {}): (value: undefined, context: ClassFieldDecoratorContext) => void {
+export function Float(
+  config: PropertyConfig = {},
+): (value: undefined, context: ClassFieldDecoratorContext) => void {
   return function (_value: undefined, context: ClassFieldDecoratorContext): void {
     const propertyKey = memberName(context)
 

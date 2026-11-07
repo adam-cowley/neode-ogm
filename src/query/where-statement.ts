@@ -56,13 +56,13 @@ export class WhereStatement {
 
     const statements = this.clauses.map((clause) => clause.toString())
 
-    let joined = statements[0]
+    const joined = statements
+      .map((statement, index) =>
+        index === 0 ? statement : ` ${this.connectors[index - 1] ?? CONNECTOR_AND} ${statement}`,
+      )
+      .join('')
 
-    for (let index = 1; index < statements.length; index++) {
-      joined += ` ${this.connectors[index - 1]} ${statements[index]}`
-    }
-
-    const prefix = this.prefix ? `${this.prefix} ` : ''
+    const prefix = this.prefix === '' ? '' : `${this.prefix} `
 
     return `${prefix}(${joined})`
   }

@@ -1,5 +1,11 @@
 import type { ConnectionProvider } from '../../driver/types.js'
-import { ConstraintAction, ConstraintType, type SchemaResult, schemaObjectName } from './schema.service.js'
+import { NeodeError } from '../../errors/neode-error.js'
+import {
+  ConstraintAction,
+  ConstraintType,
+  schemaObjectName,
+  type SchemaResult,
+} from './schema-objects.js'
 
 /**
 A full-text index to keep installed on the database
@@ -14,11 +20,14 @@ export interface FulltextIndexDefinition {
 }
 
 export function fulltextIndexName(definition: FulltextIndexDefinition): string {
-  return definition.name ? definition.name : schemaObjectName(
-    definition.label,
-    definition.properties.map((property) => property.toLowerCase()).join('_'),
-    ConstraintType.FULLTEXT,
-  );
+  return (
+    definition.name ??
+    schemaObjectName(
+      definition.label,
+      definition.properties.map((property) => property.toLowerCase()).join('_'),
+      ConstraintType.FULLTEXT,
+    )
+  )
 }
 
 export function createFulltextStatement(definition: FulltextIndexDefinition): string {
@@ -43,25 +52,13 @@ export function dropFulltextStatement(name: string): string {
 Installs/drops the given full-text index definitions, following the same
 result-reporting pattern as SchemaService
 */
-export default class FulltextIndexService {
+export class FulltextIndexService {
   private readonly connection: ConnectionProvider
   private readonly definitions: FulltextIndexDefinition[]
 
   constructor(connection: ConnectionProvider, definitions: FulltextIndexDefinition[]) {
     this.connection = connection
     this.definitions = definitions
-  }
-
-  async create(): Promise<SchemaResult[]> {
-    return this.run(ConstraintAction.CREATE)
-  }
-
-  async drop(): Promise<SchemaResult[]> {
-    return this.run(ConstraintAction.DROP)
-  }
-
-  private async run(action: ConstraintAction): Promise<SchemaResult[]> {
-    return Promise.all(this.definitions.map(async (definition) => this.runOne(action, definition)))
   }
 
   private async runOne(
@@ -76,7 +73,7 @@ export default class FulltextIndexService {
     const property = definition.properties[0]
 
     if (property === undefined) {
-      throw new Error(`Fulltext definition for ${definition.label} has no properties`)
+      throw new NeodeError(`Fulltext definition for ${definition.label} has no properties`)
     }
 
     const output: SchemaResult = {
@@ -94,9 +91,21 @@ export default class FulltextIndexService {
 
       output.success = true
     } catch (error) {
-      output.error = error as Error
+      output.error = error instanceof Error ? error : new Error(String(error))
     }
 
     return output
+  }
+
+  private async run(action: ConstraintAction): Promise<SchemaResult[]> {
+    return Promise.all(this.definitions.map(async (definition) => this.runOne(action, definition)))
+  }
+
+  async create(): Promise<SchemaResult[]> {
+    return this.run(ConstraintAction.CREATE)
+  }
+
+  async drop(): Promise<SchemaResult[]> {
+    return this.run(ConstraintAction.DROP)
   }
 }

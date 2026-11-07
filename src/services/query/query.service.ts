@@ -1,16 +1,31 @@
 import type { Newable } from '../../meta/newable.js'
 import type { Builder } from '../../query/index.js'
-import type { Runner, GraphNode } from '../../driver/types.js'
-import { hydrateNode } from '../../utils.js'
+import type { QueryOutput, Runner } from '../../driver/types.js'
+import { hydrateNode } from '../../utilities.js'
 import { THIS_NODE } from '../../constants.js'
 import { eagerNode } from '../../query/eager-utilities.js'
 import type { EntitySchema } from '../../meta/entity/entity-schema.js'
+import { isNodeLike } from '../type-guards.js'
 
-export default class QueryService {
+export class QueryService {
   protected readonly runner: Runner
 
   constructor(runner: Runner) {
     this.runner = runner
+  }
+
+  private getAndHydrate<T>(result: QueryOutput, constructor: Newable, schema: EntitySchema): T[] {
+    return result.records.map((row) => {
+      // With eager relationships the root column is a projection
+      // map carrying its own eager values, without them a plain node
+      const node = row.get(THIS_NODE)
+
+      if (!isNodeLike(node)) {
+        throw new TypeError(`The "${THIS_NODE}" column did not return a node value`)
+      }
+
+      return hydrateNode<T>(schema, constructor, node)
+    })
   }
 
   async returnFirst<T>(
@@ -33,40 +48,28 @@ export default class QueryService {
     // Eager Loading: when the schema declares eager relationships the
     // root node is returned as a map projection nesting an eager pattern
     // comprehension per relationship, up to MAX_EAGER_DEPTH degrees deep
-    if (schema.getRelationships().some((rel) => rel.getEager())) {
-      builder.return(`${eagerNode(1, THIS_NODE, schema)} AS ${THIS_NODE}`)
-    } else {
-      builder.return(THIS_NODE)
-    }
+    const hasEagerRelationships = schema
+      .getRelationships()
+      .some((relationship) => relationship.getEager())
+
+    builder.return(
+      hasEagerRelationships ? `${eagerNode(1, THIS_NODE, schema)} AS ${THIS_NODE}` : THIS_NODE,
+    )
 
     // Skip and limit
-    if (skip) {builder.skip(skip)}
-    if (limit) {builder.limit(limit)}
+    if (skip !== undefined && skip !== 0) {
+      builder.skip(skip)
+    }
+    if (limit !== undefined && limit !== 0) {
+      builder.limit(limit)
+    }
 
     // Build Cypher
     const { query, params } = builder.build()
 
-    const res = await this.runner.run(query, params)
-
-    if (res.records.length === 0) {
-      return []
-    }
+    const result = await this.runner.run(query, params)
 
     // Hydrate
-    return this.getAndHydrate(res, constructor, schema)
-  }
-
-  private async getAndHydrate<T>(
-    res: { records: { get(key: string): unknown; keys: string[] }[] },
-    constructor: Newable,
-    schema: EntitySchema,
-  ): Promise<T[]> {
-    return Promise.all(
-      res.records.map(async (row) =>
-        // With eager relationships the root column is a projection
-        // map carrying its own eager values, without them a plain node
-        hydrateNode<T>(schema, constructor, row.get(THIS_NODE) as GraphNode),
-      ),
-    )
+    return result.records.length === 0 ? [] : this.getAndHydrate(result, constructor, schema)
   }
 }

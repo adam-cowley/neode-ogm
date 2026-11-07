@@ -1,9 +1,11 @@
-import neo4j from 'neo4j-driver'
+import { isInt } from 'neo4j-driver'
 import { getModel } from '../meta/index.js'
-import type { EntitySchema } from '../meta/entity/entity-schema.js'
+import { EntitySchema } from '../meta/entity/entity-schema.js'
 import type { Newable } from '../meta/newable.js'
+import type { PropertySchema } from '../meta/property-schema.js'
 import { PropertyType } from '../meta/property-schema.js'
-import { hydrateNode } from '../utils.js'
+import { hydrateNode } from '../utilities.js'
+import { isRecord } from '../services/type-guards.js'
 
 /**
 Hydrate one row of a projection read (NTS-135/136/137/138).
@@ -22,63 +24,107 @@ projected kinds:
 */
 export function hydrateProjection<T>(
   schema: EntitySchema,
-  constructor: Newable,
+  constructor: new (...arguments_: never[]) => T,
   projection: Record<string, unknown>,
 ): T {
-  const entity = hydrateNode<T>(schema, constructor, projection) as unknown as Record<
-    string,
-    unknown
-  >
+  const entity = hydrateNode<Record<string, unknown>>(schema, constructor, projection)
 
   for (const property of schema.getProperties()) {
-    switch (property.getType()) {
-      case PropertyType.RELATED_ONE:
-      case PropertyType.RELATED_MANY: {
-        // Field subsets are already plain DTOs — nothing to hydrate
-        if (property.getFields()?.length) {break}
-
-        const raw = entity[property.getKey()]
-
-        if (raw === undefined || raw === null) {break}
-
-        const targetEntity = property.getEntity()
-        const targetSchema = targetEntity ? getModel(targetEntity) : undefined
-
-        // Unregistered target: leave the raw projection in place
-        if (!targetSchema) {break}
-
-        entity[property.getKey()] = Array.isArray(raw)
-          ? raw.map((item) =>
-              hydrateNode(targetSchema, targetEntity, item as Record<string, unknown>),
-            )
-          : hydrateNode(targetSchema, targetEntity, raw as Record<string, unknown>)
-        break
-      }
-
-      case PropertyType.RELATIONSHIP_COUNT: {
-        const value = entity[property.getKey()]
-
-        // neo4j-driver returns COUNT as an Integer; Relate as a number
-        entity[property.getKey()] = neo4j.isInt(value) ? value.toNumber() : Number(value)
-        break
-      }
-
-      case PropertyType.RELATIONSHIP_EXISTS:
-      case PropertyType.LABEL_PRESENT: {
-        entity[property.getKey()] = Boolean(entity[property.getKey()])
-        break
-      }
-
-      case PropertyType.EXPRESSION: {
-        break // raw projected value already assigned
-      }
-
-      case PropertyType.COMPUTED: {
-        entity[property.getKey()] = property.getCompute()!(entity)
-        break
-      }
-    }
+    postProcessProjection(entity, property)
   }
 
-  return entity as unknown as T
+  // hydrateNode built the entity from the model's constructor — the type
+  // parameter only names it; the guard is the checked edge the strict
+  // no-assertion rule requires
+  if (!isModelOf(entity, constructor)) {
+    throw new TypeError('hydration did not produce an entity object')
+  }
+
+  return entity
+}
+
+/**
+The hydrated entity record as the caller's model type
+*/
+function isModelOf<T>(
+  value: Record<string, unknown>,
+  constructor: new (...arguments_: never[]) => T,
+): value is T & Record<string, unknown> {
+  // hydrateNode instantiates the model constructor, so the entity's
+  // constructor is the model itself
+  return value.constructor === constructor
+}
+
+/**
+Post-process one projected property value on the hydrated entity
+*/
+function postProcessProjection(entity: Record<string, unknown>, property: PropertySchema): void {
+  const type = property.getType()
+  const key = property.getKey()
+
+  // Field subsets are already plain DTOs — nothing to hydrate
+  if (type === PropertyType.RELATED_ONE || type === PropertyType.RELATED_MANY) {
+    const fields = property.getFields()
+
+    if (fields !== undefined && fields.length > 0) {
+      return
+    }
+
+    const raw = entity[key]
+
+    if (raw === undefined || raw === null) {
+      return
+    }
+
+    // Unregistered (or never-resolved lazy) target: leave the raw
+    // projection in place
+    const targetEntity: Newable | undefined = property.getEntity()
+
+    if (targetEntity === undefined) {
+      return
+    }
+
+    const targetSchema = getModel(targetEntity)
+
+    // Unregistered target: leave the raw projection in place
+    if (!(targetSchema instanceof EntitySchema)) {
+      return
+    }
+
+    const hydrateOne = (item: unknown): unknown =>
+      isRecord(item) ? hydrateNode(targetSchema, targetEntity, item) : item
+
+    entity[key] = Array.isArray(raw) ? raw.map((item) => hydrateOne(item)) : hydrateOne(raw)
+
+    return
+  }
+
+  if (type === PropertyType.RELATIONSHIP_COUNT) {
+    const value = entity[key]
+
+    // neo4j-driver returns COUNT as an Integer; Relate as a number
+    entity[key] = isInt(value) ? value.toNumber() : Number(value)
+
+    return
+  }
+
+  if (type === PropertyType.RELATIONSHIP_EXISTS || type === PropertyType.LABEL_PRESENT) {
+    const value = entity[key]
+
+    entity[key] = Boolean(value)
+
+    return
+  }
+
+  if (type !== PropertyType.COMPUTED) {
+    return // raw projected value already assigned
+  }
+
+  const compute = property.getCompute()
+
+  if (compute === undefined) {
+    return
+  }
+
+  entity[key] = compute(entity)
 }

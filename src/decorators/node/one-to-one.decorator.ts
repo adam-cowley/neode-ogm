@@ -2,7 +2,9 @@ import { mergeRelationshipProperty } from '../../meta/index.js'
 import type { RelationshipConfig } from '../relationship-config.interface.js'
 import { addRegistration, memberName } from '../registrations.js'
 
-export function OneToOne(config: RelationshipConfig): (value: undefined, context: ClassFieldDecoratorContext) => void {
+export function OneToOne(
+  config: RelationshipConfig,
+): (value: undefined, context: ClassFieldDecoratorContext) => void {
   return function (_value: undefined, context: ClassFieldDecoratorContext): void {
     const propertyKey = memberName(context)
 

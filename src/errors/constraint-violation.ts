@@ -1,4 +1,4 @@
-import NeodeError from './neode-error.js'
+import { NeodeError } from './neode-error.js'
 
 /**
 A unique-constraint violation, raised on `merge()`/`create()` flows that
@@ -6,7 +6,7 @@ race an existing node. `label`/`property` are parsed from the database
 message when it names them (Neo4j does; the embedded Relate engine only
 names the constraint), and stay undefined otherwise.
 */
-export default class ConstraintViolationError extends NeodeError {
+export class ConstraintViolationError extends NeodeError {
   readonly label: string | undefined
   readonly property: string | undefined
 

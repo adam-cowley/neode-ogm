@@ -1,5 +1,5 @@
 import { openBackend, TestBackend } from './support/backend'
-import TransactionError from '../../src/transaction/errors'
+import { TransactionError } from '../../src/transaction/errors'
 
 describe('batch', () => {
   let backend: TestBackend

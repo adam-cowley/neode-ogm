@@ -1,4 +1,17 @@
-import neo4j from 'neo4j-driver'
+import {
+  isDate,
+  isDateTime,
+  isDuration,
+  isInt,
+  isLocalDateTime,
+  isLocalTime,
+  isNode,
+  isPath,
+  isPoint,
+  isRelationship,
+  isTime,
+} from 'neo4j-driver'
+import { isRecord } from '../services/type-guards.js'
 import type { QueryRecord } from './types.js'
 
 /**
@@ -17,30 +30,28 @@ export function jsonSafe(value: unknown): unknown {
     return value.toString()
   }
 
-  if (neo4j.isInt(value)) {
+  if (isInt(value)) {
     return value.toNumber()
   }
 
   if (
-    neo4j.isDate(value) ||
-    neo4j.isDateTime(value) ||
-    neo4j.isTime(value) ||
-    neo4j.isLocalTime(value) ||
-    neo4j.isLocalDateTime(value) ||
-    neo4j.isDuration(value)
+    isDate(value) ||
+    isDateTime(value) ||
+    isTime(value) ||
+    isLocalTime(value) ||
+    isLocalDateTime(value) ||
+    isDuration(value)
   ) {
     return value.toString()
   }
 
-  if (neo4j.isPoint(value)) {
-    const point = value as unknown as { srid: number; x: number; y: number; z?: number }
+  if (isPoint(value)) {
+    const { srid, x, y, z } = value
 
-    return point.z === undefined || point.z === null
-      ? { srid: point.srid, x: point.x, y: point.y }
-      : { srid: point.srid, x: point.x, y: point.y, z: point.z }
+    return z === undefined ? { srid, x, y } : { srid, x, y, z }
   }
 
-  if (neo4j.isNode(value)) {
+  if (isNode(value)) {
     return {
       elementId: value.elementId,
       labels: value.labels,
@@ -48,7 +59,7 @@ export function jsonSafe(value: unknown): unknown {
     }
   }
 
-  if (neo4j.isRelationship(value)) {
+  if (isRelationship(value)) {
     return {
       elementId: value.elementId,
       type: value.type,
@@ -58,7 +69,7 @@ export function jsonSafe(value: unknown): unknown {
     }
   }
 
-  if (neo4j.isPath(value)) {
+  if (isPath(value)) {
     const path = value
 
     return {
@@ -77,10 +88,8 @@ export function jsonSafe(value: unknown): unknown {
     return value.map((item) => jsonSafe(item))
   }
 
-  if (typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, jsonSafe(item)]),
-    )
+  if (isRecord(value)) {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, jsonSafe(item)]))
   }
 
   return value

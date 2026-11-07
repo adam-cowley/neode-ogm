@@ -1,4 +1,4 @@
-import Repository from '../../src/repository'
+import { Repository } from '../../src/repository'
 import { NodeEntity, InternalId, Uuid, String, Number } from '../../src/decorators'
 import { openBackend, TestBackend } from './support/backend'
 

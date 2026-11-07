@@ -27,13 +27,14 @@
     "test:integration": "vitest run --project integration",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
+    "docs:agents": "jiti scripts/generate-agent-docs.ts",
     "bench": "vitest bench --project unit",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0 --cache && biome format .",
     "lint:fix": "eslint . --fix --cache && biome format --write .",
     "format": "biome format --write ."
   },
-  "packageManager": "pnpm@10.33.0",
+  "packageManager": "pnpm@12.18.0",
   "keywords": [
     "neo4j",
     "ogm",

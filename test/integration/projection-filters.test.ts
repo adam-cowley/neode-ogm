@@ -9,7 +9,7 @@ import {
   RelationshipCount,
 } from '../../src/decorators'
 import { getModel } from '../../src/meta'
-import ProjectionService from '../../src/projection/projection.service'
+import { ProjectionService } from '../../src/projection/projection.service'
 
 /**
  * End-to-end nested filters / sort on projected read-model fields (NTS-145):

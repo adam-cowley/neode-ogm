@@ -1,7 +1,3 @@
-// Every schema service imports the model registry, whose transitive
-// imports (repository → utils) close a cycle back through
-// neode.service — inspect.service.ts sits in the same reported cycle
-// eslint-disable-next-line import-x/no-cycle -- structural to the schema services
 import { getModels } from '../../meta/index.js'
 import type { ConnectionProvider } from '../../driver/types.js'
 import {
@@ -12,6 +8,7 @@ import {
   propertyTypeStatement,
   schemaObjectName,
   schemaStatement,
+  vectorIndexDefinitionsForLabel,
 } from './schema.service.js'
 import {
   type FulltextIndexDefinition,
@@ -104,6 +101,23 @@ function declaredFulltextDefinitions(): FulltextIndexDefinition[] {
   }
 
   return definitions.filter((definition) => definition.properties.length > 0)
+}
+
+/**
+Vector index declarations from model metadata (NTS-447), so the drift
+report covers model-declared vector indexes without the caller passing
+them via options — mirroring declaredFulltextDefinitions()
+*/
+function declaredVectorDefinitions(): VectorIndexDefinition[] {
+  const definitions: VectorIndexDefinition[] = []
+
+  for (const model of getModels().values()) {
+    for (const label of model.getLabels()) {
+      definitions.push(...vectorIndexDefinitionsForLabel(label, model.getProperties()))
+    }
+  }
+
+  return definitions
 }
 
 /**
@@ -257,38 +271,44 @@ function driftGroup(
 
   const missing = group.declared
     .filter((object) => !installedNames.has(object.name))
-    .map((object): SchemaDriftEntry => ({
-      name: object.name,
-      type: object.type,
-      labelsOrTypes: object.labelsOrTypes,
-      properties: object.properties,
-      createStatement: createStatement(object, vectors, types),
-    }))
+    .map(
+      (object): SchemaDriftEntry => ({
+        name: object.name,
+        type: object.type,
+        labelsOrTypes: object.labelsOrTypes,
+        properties: object.properties,
+        createStatement: createStatement(object, vectors, types),
+      }),
+    )
 
   const stale = group.installed
     .filter((object) => !declaredNames.has(object.name))
-    .map((object): SchemaDriftEntry => ({
-      name: object.name,
-      type: object.type,
-      labelsOrTypes: object.labelsOrTypes,
-      properties: object.properties,
-      dropStatement: dropStatement(object),
-    }))
+    .map(
+      (object): SchemaDriftEntry => ({
+        name: object.name,
+        type: object.type,
+        labelsOrTypes: object.labelsOrTypes,
+        properties: object.properties,
+        dropStatement: dropStatement(object),
+      }),
+    )
 
   const mismatched = group.declared
     .map((object) => ({ declared: object, installed: installedByName.get(object.name) }))
     .filter(
-      (pair): pair is { declared: SchemaObject, installed: SchemaObject } =>
+      (pair): pair is { declared: SchemaObject; installed: SchemaObject } =>
         pair.installed !== undefined && !isSameDefinition(pair.declared, pair.installed),
     )
-    .map((pair): SchemaDriftEntry => ({
-      name: pair.declared.name,
-      type: pair.declared.type,
-      labelsOrTypes: pair.declared.labelsOrTypes,
-      properties: pair.declared.properties,
-      createStatement: createStatement(pair.declared, vectors, types),
-      dropStatement: dropStatement(pair.installed),
-    }))
+    .map(
+      (pair): SchemaDriftEntry => ({
+        name: pair.declared.name,
+        type: pair.declared.type,
+        labelsOrTypes: pair.declared.labelsOrTypes,
+        properties: pair.declared.properties,
+        createStatement: createStatement(pair.declared, vectors, types),
+        dropStatement: dropStatement(pair.installed),
+      }),
+    )
 
   return { missing, stale, mismatched }
 }
@@ -305,13 +325,16 @@ export async function schemaDrift(
   connection: ConnectionProvider,
   options: InspectOptions = {},
 ): Promise<SchemaDrift> {
+  const declaredVectors = [...declaredVectorDefinitions(), ...(options.vector ?? [])]
+
   const inspection = await inspectSchema(connection, {
     ...options,
     fulltext: [...declaredFulltextDefinitions(), ...(options.fulltext ?? [])],
+    vector: declaredVectors,
   })
 
   const vectors = new Map(
-    (options.vector ?? []).map((definition) => [vectorIndexName(definition), definition]),
+    declaredVectors.map((definition) => [vectorIndexName(definition), definition]),
   )
   const types = declaredPropertyTypes()
 
@@ -328,7 +351,11 @@ Pure function — no database access (NTS-450).
 */
 export function formatSchemaDrift(drift: SchemaDrift): string {
   const groups: [string, SchemaDriftEntry[], string][] = [
-    ['missing', [...drift.constraints.missing, ...drift.indexes.missing], 'declared but not installed'],
+    [
+      'missing',
+      [...drift.constraints.missing, ...drift.indexes.missing],
+      'declared but not installed',
+    ],
     ['stale', [...drift.constraints.stale, ...drift.indexes.stale], 'installed but not declared'],
     [
       'mismatched',
@@ -383,7 +410,7 @@ export async function applySchemaDrift(
   drift: SchemaDrift,
   options: ApplySchemaDiffOptions = {},
 ): Promise<SchemaResult[]> {
-  const targets: { action: ConstraintAction, entry: SchemaDriftEntry, statement: string }[] = []
+  const targets: { action: ConstraintAction; entry: SchemaDriftEntry; statement: string }[] = []
 
   for (const group of [drift.constraints, drift.indexes]) {
     for (const entry of group.missing) {

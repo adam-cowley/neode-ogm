@@ -3,9 +3,9 @@ import { Builder } from '../../query/index.js'
 import { THIS_NODE } from '../../constants.js'
 import type { EntitySchema } from '../../meta/entity/entity-schema.js'
 import type { PropertySchema } from '../../meta/property-schema.js'
-import { convertPropertyValue } from '../../utils.js'
-import neo4j from 'neo4j-driver'
-import QueryService from './query.service.js'
+import { convertPropertyValue } from '../../utilities.js'
+import { isPoint } from 'neo4j-driver'
+import { QueryService } from './query.service.js'
 import { applyOrder, type OrderSpec } from './get.service.js'
 
 // SRIDs of the point types Neo4j supports
@@ -35,7 +35,7 @@ coordinates have been validated as numbers.
 function toCypherPoint(point: unknown, property: PropertySchema): string {
   const converted = convertPropertyValue(point, property)
 
-  if (!neo4j.isPoint(converted)) {
+  if (!isPoint(converted)) {
     throw new TypeError(
       'Cannot query withinDistance: expected a point ({ x, y[, z] }, { latitude, longitude[, height] } or a driver Point)',
     )
@@ -47,22 +47,26 @@ function toCypherPoint(point: unknown, property: PropertySchema): string {
 
   switch (srid) {
     case SRID.CARTESIAN_3D: {
-      return `point({ x: ${x}, y: ${y}, z: ${requireFiniteNumber(converted.z, 'point z')} })`
+      const z = requireFiniteNumber(converted.z, 'point z')
+
+      return `point({ x: ${String(x)}, y: ${String(y)}, z: ${String(z)} })`
     }
     case SRID.WGS_84_2D: {
       // Driver Points store longitude as x, latitude as y
-      return `point({ longitude: ${x}, latitude: ${y} })`
+      return `point({ longitude: ${String(x)}, latitude: ${String(y)} })`
     }
     case SRID.WGS_84_3D: {
-      return `point({ longitude: ${x}, latitude: ${y}, height: ${requireFiniteNumber(converted.z, 'point height')} })`
+      const height = requireFiniteNumber(converted.z, 'point height')
+
+      return `point({ longitude: ${String(x)}, latitude: ${String(y)}, height: ${String(height)} })`
     }
     default: {
-      return `point({ x: ${x}, y: ${y} })`
+      return `point({ x: ${String(x)}, y: ${String(y)} })`
     }
   }
 }
 
-export default class WithinDistanceService extends QueryService {
+export class WithinDistanceService extends QueryService {
   async withinDistance<T>(
     constructor: Newable,
     schema: EntitySchema,
@@ -100,7 +104,9 @@ export default class WithinDistanceService extends QueryService {
 
     const origin = toCypherPoint(point, location)
 
-    builder.whereRaw(`point.distance(${THIS_NODE}.${locationProperty}, ${origin}) <= ${distance}`)
+    builder.whereRaw(
+      `point.distance(${THIS_NODE}.${locationProperty}, ${origin}) <= ${String(distance)}`,
+    )
 
     // Order by distance from the origin when asked for, otherwise by property
     if (order === 'distance') {

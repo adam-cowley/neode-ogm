@@ -1,7 +1,15 @@
 import { EventEmitter } from 'node:events'
-import { createRequire } from 'node:module'
 import { readdirSync } from 'node:fs'
-import { basename, extname, resolve } from 'node:path'
+import { createRequire } from 'node:module'
+/* eslint-disable unicorn/name-replacements -- "Neo4j" is the product name (the rule's `j` -> `index` replacement misfires on it) */
+import path from 'node:path'
+import type { Driver } from 'neo4j-driver'
+import { EventType, type NeodeEventHandler } from './common/events.js'
+import { INTERNAL_ID } from './constants.js'
+import { instrumentConnectionProvider } from './driver/instrumented.js'
+import { jsonSafeRecord } from './driver/json-safe.js'
+import { Neo4jConnectionProvider } from './driver/neo4j-connection-provider.js'
+import { RelateConnectionProvider } from './driver/relate.js'
 import type {
   AccessMode,
   ConnectionOptions,
@@ -13,51 +21,50 @@ import type {
   Runner,
   TransactionHandle,
 } from './driver/types.js'
-import { Neo4jConnectionProvider as Neo4indexConnectionProvider } from './driver/neo4j-connection-provider.js'
-import { RelateConnectionProvider } from './driver/relate.js'
-import { instrumentConnectionProvider } from './driver/instrumented.js'
-import { jsonSafeRecord } from './driver/json-safe.js'
-import { hydrate } from './hydrate.js'
+import { elementIdOfEntity } from './element-id.js'
 import { setDefaultNeode } from './entity-methods.js'
-import { getModel, getModels, resolveRepository } from './meta/index.js'
-import type { Newable } from './meta/newable.js'
+import { NeodeError } from './errors/index.js'
+import { hydrate } from './hydrate.js'
 import type { EntitySchema } from './meta/entity/entity-schema.js'
-import type { RelationshipPropertySchema } from './meta/relationship-property-schema.js'
+import { getModel, getModels } from './meta/index.js'
 import {
   defineModel,
   extendModel,
   getModelByName,
   unknownDefinitionError,
 } from './meta/map-schema.js'
-import { ontology, ontologyMarkdown, type Ontology } from './meta/ontology.js'
+import type { Newable } from './meta/newable.js'
+import { type Ontology, ontology, ontologyMarkdown } from './meta/ontology.js'
+import type { RelationshipPropertySchema } from './meta/relationship-property-schema.js'
+import { resolveRepository } from './meta/repositories.js'
 import type { SchemaDefinition } from './meta/schema-definition.interface.js'
-import { EventType, type NeodeEventHandler } from './common/events.js'
-import FindService from './services/query/find.service.js'
-import MergeService, { getMergeFields } from './services/query/merge.service.js'
-import CreateService from './services/query/create.service.js'
-import DeleteService, { type DeleteOptions } from './services/query/delete.service.js'
-import DetachService, { type DetachResult } from './services/query/detach.service.js'
-import type INeode from './neode.interface.js'
-import GetService, { type OrderSpec } from './services/query/get.service.js'
-import RelateService from './services/query/relate.service.js'
-import UpdateService from './services/query/update.service.js'
-import WithinDistanceService from './services/query/within-distance.service.js'
-import SchemaService, { type SchemaResult } from './services/schema/schema.service.js'
-import type Repository from './repository/index.js'
-import TransactionalService from './transaction/transactional.service.js'
-import TransactionError, { type BatchStatementError } from './transaction/errors.js'
-import FindByIdService from './services/query/find-by-id.service.js'
-import { INTERNAL_ID } from './constants.js'
-import { elementIdOfEntity } from './utils.js'
+import type { INeode } from './neode.interface.js'
+import { type RunCypherScriptOptions, runCypherScript } from './ops/index.js'
+import { hasProjectedProperties } from './projection/index.js'
+import { ProjectionService } from './projection/projection.service.js'
 import { Builder } from './query/index.js'
-import { search, type ScoredEntity } from './services/query/search.service.js'
-import FactoryBuilder from './services/factory.service.js'
-import { knn, type KnnMode } from './services/query/knn.service.js'
+import type { Repository } from './repository/index.js'
+import { FactoryBuilder } from './services/factory.service.js'
+import { type BulkChunk, type BulkOptions, BulkService } from './services/query/bulk.service.js'
+import { CreateService } from './services/query/create.service.js'
+import { type DeleteOptions, DeleteService } from './services/query/delete.service.js'
+import { type DetachResult, DetachService } from './services/query/detach.service.js'
+import { FindService } from './services/query/find.service.js'
+import { FindByIdService } from './services/query/find-by-id.service.js'
+import { GetService, type OrderSpec } from './services/query/get.service.js'
+import { type KnnMode, knn } from './services/query/knn.service.js'
+import { getMergeFields, MergeService } from './services/query/merge.service.js'
 import {
-  inspectSchema,
-  type InspectOptions,
-  type SchemaInspection,
-} from './services/schema/inspect.service.js'
+  type CursorPage,
+  type CursorPaginateOptions,
+  type OffsetPaginateOptions,
+  type Page,
+  PaginateService,
+} from './services/query/paginate.service.js'
+import { RelateService } from './services/query/relate.service.js'
+import { type ScoredEntity, search } from './services/query/search.service.js'
+import { UpdateService } from './services/query/update.service.js'
+import { WithinDistanceService } from './services/query/within-distance.service.js'
 import {
   type ApplySchemaDiffOptions,
   applySchemaDrift,
@@ -65,22 +72,79 @@ import {
   type SchemaDrift,
   schemaDrift,
 } from './services/schema/drift.service.js'
-import FulltextIndexService, {
+import {
   type FulltextIndexDefinition,
+  FulltextIndexService,
 } from './services/schema/fulltext.service.js'
-import VectorIndexService, { type VectorIndexDefinition } from './services/schema/vector.service.js'
-import BulkService, { type BulkChunk, type BulkOptions } from './services/query/bulk.service.js'
-import PaginateService, {
-  type Page,
-  type CursorPage,
-  type OffsetPaginateOptions,
-  type CursorPaginateOptions,
-} from './services/query/paginate.service.js'
-import ProjectionService from './projection/projection.service.js'
-import { hasProjectedProperties } from './projection/index.js'
-import { runCypherScript, type RunCypherScriptOptions } from './ops/index.js'
+import {
+  type InspectOptions,
+  inspectSchema,
+  type SchemaInspection,
+} from './services/schema/inspect.service.js'
+import { type SchemaResult, SchemaService } from './services/schema/schema.service.js'
+import { type VectorIndexDefinition, VectorIndexService } from './services/schema/vector.service.js'
+import { constructorOf, isConstructorOf, isRecord } from './services/type-guards.js'
+import { type BatchStatementError, TransactionError } from './transaction/errors.js'
+import { TransactionalService } from './transaction/transactional.service.js'
 
-export default class Neode implements INeode {
+/**
+The constructor parameter of the embedded Relate provider: the Relate
+database instance (its interface is private to driver/relate.ts, so it is
+referenced structurally).
+*/
+type RelateDatabaseValue = ConstructorParameters<typeof RelateConnectionProvider>[0]
+
+/**
+A map-based schema definition as loaded from a model module (withDirectory).
+The per-key values are validated by defineModel — the guard checks the
+envelope.
+*/
+function isSchemaDefinition(value: unknown): value is SchemaDefinition {
+  return isRecord(value)
+}
+
+/* eslint-disable unicorn/prefer-event-target -- the event emitter is shared with TransactionalService (its constructor takes it and calls on/emit), which an EventTarget adapter would break */
+export class Neode implements INeode {
+  /**
+  The structural minimum of the embedded Relate database (driver/relate.ts
+  keeps its interface private).
+  */
+  private static isRelateDatabase(value: unknown): value is RelateDatabaseValue {
+    return isRecord(value) && typeof value['connect'] === 'function'
+  }
+
+  /**
+  Create a Neode instance over a neo4j-driver Driver
+  (Neo4j Community / Enterprise, Memgraph, or any Bolt server)
+  */
+  static forDriver(
+    driver: Driver,
+    database?: string,
+    isEnterprise = false,
+    options: ConnectionOptions = {},
+  ): Neode {
+    return new Neode(new Neo4jConnectionProvider(driver, database), isEnterprise, options)
+  }
+
+  /**
+  Create a Neode instance over an embedded Relate database
+  (in-memory or file-backed)
+  */
+  static forRelate(
+    database: unknown,
+    namespace = 'neo4j',
+    isEnterprise = false,
+    options: ConnectionOptions = {},
+  ): Neode {
+    if (!this.isRelateDatabase(database)) {
+      throw new TypeError(
+        'forRelate expects an embedded Relate database instance (connect/checkpoint)',
+      )
+    }
+
+    return new Neode(new RelateConnectionProvider(database, namespace), isEnterprise, options)
+  }
+
   private readonly eventEmitter: EventEmitter = new EventEmitter()
 
   private readonly connection: ConnectionProvider
@@ -91,8 +155,12 @@ export default class Neode implements INeode {
 
   private enterprise = false
 
-  constructor(connection: ConnectionProvider, enterprise = false, options: ConnectionOptions = {}) {
-    this.enterprise = enterprise
+  constructor(
+    connection: ConnectionProvider,
+    isEnterprise = false,
+    options: ConnectionOptions = {},
+  ) {
+    this.enterprise = isEnterprise
 
     // Every statement — raw and service queries, inside and outside
     // transactions — funnels through this wrapper, the shared chokepoint
@@ -108,34 +176,70 @@ export default class Neode implements INeode {
     setDefaultNeode(this)
   }
 
-  /**
-  Create a Neode instance over a neo4j-driver Driver
-  (Neo4j Community / Enterprise, Memgraph, or any Bolt server)
-  */
-  static forDriver(
-    driver: import('neo4j-driver').Driver,
-    database?: string,
-    enterprise = false,
-    options: ConnectionOptions = {},
-  ): Neode {
-    return new Neode(new Neo4indexConnectionProvider(driver, database), enterprise, options)
+  private getSchema(constructor: unknown): EntitySchema {
+    const found = getModel(constructor)
+
+    if (found === undefined) {
+      const name = isConstructorOf(constructor) ? constructor.name : ''
+
+      throw new NeodeError(
+        `Couldn't find a model for "${name === '' ? 'unknown' : name}". Register it with @NodeEntity or defineModel() first.` +
+          ` Registered model(s) are: ${Array.from(getModels().keys(), (model) => model.name)
+            .filter((modelName) => modelName !== '')
+            .join(', ')}`,
+      )
+    }
+
+    return found
   }
 
   /**
-  Create a Neode instance over an embedded Relate database
-  (in-memory or file-backed)
+  The unknown-relationship error naming the model and its defined
+  relationships (NTS-446)
   */
-  static forRelate(
-    database: unknown,
-    namespace = 'neo4j',
-    enterprise = false,
-    options: ConnectionOptions = {},
-  ): Neode {
-    return new Neode(
-      new RelateConnectionProvider(database as never, namespace),
-      enterprise,
-      options,
+  private unknownRelationship(schema: EntitySchema, keyOrType: string): NeodeError {
+    const defined = schema.getRelationships().map((entry) => entry.getKey())
+
+    return new NeodeError(
+      `Unknown relationship "${keyOrType}" on model "${schema.getLabels().join(':') || 'entity'}"` +
+        (defined.length > 0
+          ? ` — defined relationships: ${defined.join(', ')}. ` +
+            'Check the relationship key (or the relationship type), or declare it on the model.'
+          : ' — the model declares no relationships; ' +
+            'declare one with @OneToMany/@OneToOne or a relationship definition first.'),
     )
+  }
+
+  /**
+  The relationship declared on the schema under the given key
+  (neode's relateTo resolves the relationship by definition key)
+  */
+  private requireRelationship(schema: EntitySchema, key: string): RelationshipPropertySchema {
+    if (!schema.hasRelationship(key)) {
+      throw this.unknownRelationship(schema, key)
+    }
+
+    return schema.getRelationship(key)
+  }
+
+  /**
+  Resolve a relationship by its definition KEY, falling back to the
+  relationship TYPE (neode's relate(from, to, type) accepts either)
+  */
+  private resolveRelationship(schema: EntitySchema, keyOrType: string): RelationshipPropertySchema {
+    if (schema.hasRelationship(keyOrType)) {
+      return schema.getRelationship(keyOrType)
+    }
+
+    const byType = schema
+      .getRelationships()
+      .find((relationship) => relationship.getType() === keyOrType)
+
+    if (byType) {
+      return byType
+    }
+
+    throw this.unknownRelationship(schema, keyOrType)
   }
 
   getConnection(): ConnectionProvider {
@@ -150,8 +254,8 @@ export default class Neode implements INeode {
     return this.enterprise
   }
 
-  setEnterprise(enterprise: boolean): void {
-    this.enterprise = enterprise
+  setEnterprise(isEnterprise: boolean): void {
+    this.enterprise = isEnterprise
   }
 
   /**
@@ -180,58 +284,6 @@ export default class Neode implements INeode {
     this.eventEmitter.off(event, handler)
 
     return this
-  }
-
-  private getSchema(constructor: unknown): EntitySchema {
-    const found = getModel(constructor)
-
-    if (!found) {
-      const name = (constructor as { name?: string })?.name || 'unknown'
-
-      throw new Error(
-        `Couldn't find a model for "${name}". Registered model(s) are: ${Array.from(
-          getModels().keys(),
-        )
-          .map((model) => (model as { name?: string }).name)
-          .join(', ')}`,
-      )
-    }
-
-    return found
-  }
-
-  /**
-  The relationship declared on the schema under the given key
-  (neode's relateTo resolves the relationship by definition key)
-  */
-  private requireRelationship(schema: EntitySchema, key: string): RelationshipPropertySchema {
-    if (!schema.hasRelationship(key)) {
-      throw new Error(
-        `Unknown relationship "${key}" on ${schema.getLabels().join(':') || 'entity'}`,
-      )
-    }
-
-    return schema.getRelationship(key)
-  }
-
-  /**
-  Resolve a relationship by its definition KEY, falling back to the
-  relationship TYPE (neode's relate(from, to, type) accepts either)
-  */
-  private resolveRelationship(schema: EntitySchema, keyOrType: string): RelationshipPropertySchema {
-    if (schema.hasRelationship(keyOrType)) {
-      return schema.getRelationship(keyOrType)
-    }
-
-    const byType = schema.getRelationships().find((rel) => rel.getType() === keyOrType)
-
-    if (byType) {
-      return byType
-    }
-
-    throw new Error(
-      `Unknown relationship "${keyOrType}" on ${schema.getLabels().join(':') || 'entity'}`,
-    )
   }
 
   /**
@@ -291,7 +343,7 @@ export default class Neode implements INeode {
     )
 
     const rows: QueryOutput = {
-      records: output.records.map(jsonSafeRecord),
+      records: output.records.map((record) => jsonSafeRecord(record)),
       summary: output.summary,
     }
 
@@ -385,7 +437,12 @@ export default class Neode implements INeode {
     try {
       return await work(tx)
     } catch (error) {
-      await tx.rollback().catch(() => {})
+      try {
+        await tx.rollback()
+      } catch {
+        // best-effort rollback — the work's error is the one to throw
+      }
+
       throw error
     }
   }
@@ -402,7 +459,12 @@ export default class Neode implements INeode {
     try {
       return await work(tx)
     } catch (error) {
-      await tx.rollback().catch(() => {})
+      try {
+        await tx.rollback()
+      } catch {
+        // best-effort rollback — the work's error is the one to throw
+      }
+
       throw error
     }
   }
@@ -440,7 +502,11 @@ export default class Neode implements INeode {
     }
 
     if (details.length > 0) {
-      await tx.rollback().catch(() => {})
+      try {
+        await tx.rollback()
+      } catch {
+        // best-effort rollback — the TransactionError is the one to throw
+      }
 
       throw new TransactionError(errors, results, details)
     }
@@ -489,11 +555,11 @@ export default class Neode implements INeode {
 
     const output = hasProjectedProperties(schema)
       ? await new ProjectionService(tx).find<T>(constructor, schema, value)
-      : await new FindService(tx).find(constructor, schema, value)
+      : await new FindService(tx).find<T>(constructor, schema, value)
 
     await tx.commit()
 
-    return output as T | undefined
+    return output
   }
 
   async findById<T>(
@@ -507,11 +573,11 @@ export default class Neode implements INeode {
 
     const output = hasProjectedProperties(schema)
       ? await new ProjectionService(tx).findById<T>(constructor, schema, elementId)
-      : await new FindByIdService(tx).find(constructor, schema, elementId)
+      : await new FindByIdService(tx).find<T>(constructor, schema, elementId)
 
     await tx.commit()
 
-    return output as T | undefined
+    return output
   }
 
   async get<T>(
@@ -560,33 +626,40 @@ export default class Neode implements INeode {
   }
 
   async save<T>(entity: T, database?: string): Promise<T> {
-    const entityRecord = entity as unknown as Record<string, unknown>
-    const schema = this.getSchema(entityRecord.constructor)
+    if (!isRecord(entity)) {
+      throw new TypeError('Cannot save a value that is not an entity object')
+    }
 
-    const res = await this.inWriteTransaction(async (tx) => {
+    const entityConstructor: unknown = entity.constructor
+
+    if (!isConstructorOf<T>(entityConstructor)) {
+      throw new TypeError('Cannot save a value whose constructor is not a class')
+    }
+
+    const schema = this.getSchema(entityConstructor)
+
+    const saved = await this.inWriteTransaction(async (tx) => {
       const mergeService = new MergeService(tx.getRunner())
 
-      const { elementId } = await mergeService.save(entity as object, schema)
+      const { elementId } = await mergeService.save(entity, schema)
 
       const findService = new FindByIdService(tx.getRunner())
 
-      const hydrated = await findService.find(
-        entityRecord.constructor as new (
-          ...arguments_: never[]
-        ) => T,
-        getModel(entityRecord.constructor),
-        elementId,
-      )
+      const hydrated = await findService.find<T>(entityConstructor, schema, elementId)
 
       await tx.commit()
 
-      return hydrated as T
+      if (hydrated === undefined) {
+        throw new NeodeError('Entity was saved but could not be found immediately afterwards')
+      }
+
+      return hydrated
     }, database)
 
     // Emit event
-    this.eventEmitter.emit(EventType.NODE_CREATED, res)
+    this.eventEmitter.emit(EventType.NODE_CREATED, saved)
 
-    return res
+    return saved
   }
 
   /**
@@ -603,20 +676,24 @@ export default class Neode implements INeode {
     const tx = await this.writeTransaction(database)
 
     try {
-      const entity = new constructor() as unknown as Record<string, unknown>
+      const constructed = new constructor()
 
-      Object.assign(entity, properties)
+      if (!isRecord(constructed)) {
+        throw new NeodeError('The model constructor did not produce an entity object')
+      }
 
-      const createService = new CreateService(tx)
+      Object.assign(constructed, properties)
 
-      const { elementId } = await createService.create(schema, entity)
+      const service = new CreateService(tx)
+
+      const { elementId } = await service.create(schema, constructed)
 
       const findService = new FindByIdService(tx)
 
-      const hydrated = await findService.find(constructor, schema, elementId)
+      const hydrated = await findService.find<T>(constructor, schema, elementId)
 
-      if (!hydrated) {
-        throw new Error('Entity was created but could not be found immediately afterwards')
+      if (hydrated === undefined) {
+        throw new NeodeError('Entity was created but could not be found immediately afterwards')
       }
 
       await tx.commit()
@@ -624,7 +701,7 @@ export default class Neode implements INeode {
       // Emit event
       this.eventEmitter.emit(EventType.NODE_CREATED, hydrated)
 
-      return hydrated as T
+      return hydrated
     } catch (error) {
       await tx.rollback()
 
@@ -654,22 +731,22 @@ export default class Neode implements INeode {
       const firstRecord = output.records[0]
 
       if (firstRecord === undefined) {
-        throw new Error('mergeOn returned no records')
+        throw new NeodeError('mergeOn returned no records')
       }
 
       const elementId = firstRecord.get(INTERNAL_ID)
 
       if (typeof elementId !== 'string') {
-        throw new Error('mergeOn did not return an elementId')
+        throw new NeodeError('mergeOn did not return an elementId')
       }
 
       const findService = new FindByIdService(tx)
 
-      const hydrated = await findService.find(constructor, schema, elementId)
+      const hydrated = await findService.find<T>(constructor, schema, elementId)
 
       await tx.commit()
 
-      return hydrated as T | undefined
+      return hydrated
     } catch (error) {
       await tx.rollback()
 
@@ -696,8 +773,8 @@ export default class Neode implements INeode {
     // semantics: "Neode will create relationships when either a Node
     // instance, ID property or Object containing match parameters
     // is passed")
-    const hasRelationshipValues = schema.getRelationships().some((rel) => {
-      const value = properties[rel.getKey()]
+    const hasRelationshipValues = schema.getRelationships().some((relationship) => {
+      const value = properties[relationship.getKey()]
 
       if (value === undefined || value === null) {
         return false
@@ -707,10 +784,15 @@ export default class Neode implements INeode {
     })
 
     if (hasRelationshipValues) {
-      const entity = new constructor() as unknown as Record<string, unknown>
-      Object.assign(entity, properties)
+      const constructed = new constructor()
 
-      return this.save(entity as T, database)
+      if (!isRecord(constructed)) {
+        throw new NeodeError('The model constructor did not produce an entity object')
+      }
+
+      Object.assign(constructed, properties)
+
+      return this.save(constructed, database)
     }
 
     const mergeKeys = new Set(getMergeFields(schema).map((property) => property.getKey()))
@@ -733,29 +815,33 @@ export default class Neode implements INeode {
     properties: Record<string, unknown> = {},
     database?: string,
   ): Promise<T | undefined> {
-    const entityRecord = entity as unknown as Record<string, unknown>
-    const schema = this.getSchema(entityRecord.constructor)
+    if (!isRecord(entity)) {
+      throw new TypeError('Cannot update a value that is not an entity object')
+    }
+
+    const entityConstructor: unknown = entity.constructor
+
+    if (!isConstructorOf<T>(entityConstructor)) {
+      throw new TypeError('Cannot update a value whose constructor is not a class')
+    }
+
+    const schema = this.getSchema(entityConstructor)
 
     const tx = await this.writeTransaction(database)
 
     try {
-      await new UpdateService(tx).update(schema, entity as object, properties)
+      await new UpdateService(tx).update(schema, entity, properties)
 
-      const elementId = elementIdOfEntity(schema, entity as object)
+      const elementId = elementIdOfEntity(schema, entity)
 
-      const hydrated = elementId
-        ? await new FindByIdService(tx).find(
-            entityRecord.constructor as new (
-              ...arguments_: never[]
-            ) => T,
-            schema,
-            elementId,
-          )
-        : undefined
+      const hydrated =
+        elementId === undefined
+          ? undefined
+          : await new FindByIdService(tx).find<T>(entityConstructor, schema, elementId)
 
       await tx.commit()
 
-      return hydrated as T | undefined
+      return hydrated
     } catch (error) {
       await tx.rollback()
 
@@ -768,17 +854,17 @@ export default class Neode implements INeode {
   from-entity's schema (neode's node.relateTo(node, relationshipName)):
   MERGE the relationship, or CREATE with `forceCreate`
   */
-  async relate<From extends object, To extends object>(
-    constructor: new (...arguments_: never[]) => From,
-    from: From,
-    to: To,
+  async relate(
+    constructor: Newable,
+    from: object,
+    to: object,
     relationshipKey: string,
     properties: Record<string, unknown> = {},
-    forceCreate = false,
+    shouldForceCreate = false,
     database?: string,
   ): Promise<GraphRelationship | undefined> {
     const schema = this.getSchema(constructor)
-    const rel = this.resolveRelationship(schema, relationshipKey)
+    const relationship = this.resolveRelationship(schema, relationshipKey)
 
     const tx = await this.writeTransaction(database)
 
@@ -787,16 +873,16 @@ export default class Neode implements INeode {
         schema,
         from,
         to,
-        rel,
+        relationship,
         properties,
-        forceCreate,
+        shouldForceCreate,
       )
 
       await tx.commit()
 
       if (result) {
         this.eventEmitter.emit(
-          forceCreate ? EventType.RELATIONSHIP_CREATED : EventType.RELATIONSHIP_MERGED,
+          shouldForceCreate ? EventType.RELATIONSHIP_CREATED : EventType.RELATIONSHIP_MERGED,
           result,
         )
       }
@@ -813,20 +899,20 @@ export default class Neode implements INeode {
   Remove the relationship of the given key between two nodes and return
   both re-hydrated
   */
-  async detach<From extends object, To extends object>(
-    constructor: new (...arguments_: never[]) => From,
-    from: From,
-    to: To,
+  async detach(
+    constructor: Newable,
+    from: object,
+    to: object,
     relationshipKey: string,
     database?: string,
-  ): Promise<DetachResult<From, To>> {
+  ): Promise<DetachResult<object, object>> {
     const schema = this.getSchema(constructor)
-    const rel = this.requireRelationship(schema, relationshipKey)
+    const relationship = this.requireRelationship(schema, relationshipKey)
 
     const tx = await this.writeTransaction(database)
 
     try {
-      const result = await new DetachService(tx).detach(schema, from, to, rel)
+      const result = await new DetachService(tx).detach(schema, from, to, relationship)
 
       await tx.commit()
 
@@ -1013,13 +1099,13 @@ export default class Neode implements INeode {
   async paginate<T>(
     constructor: new (...arguments_: never[]) => T,
     filter: Record<string, unknown> = {},
-    options: OffsetPaginateOptions | CursorPaginateOptions = { limit: 25 },
+    options?: OffsetPaginateOptions | CursorPaginateOptions,
   ): Promise<Page<T> | CursorPage<T>> {
     return new PaginateService(this.connection).paginate<T>(
       constructor,
       this.getSchema(constructor),
       filter,
-      options,
+      options ?? { limit: 25 },
     )
   }
 
@@ -1135,7 +1221,7 @@ export default class Neode implements INeode {
     const existing = getModelByName(name)
 
     if (!existing) {
-      throw new Error(unknownDefinitionError(name))
+      throw new NeodeError(unknownDefinitionError(name))
     }
 
     return existing
@@ -1159,15 +1245,28 @@ export default class Neode implements INeode {
   withDirectory(directory: string): this {
     const requireModule = createRequire(__filename)
 
-    for (const file of readdirSync(directory).filter((file) =>
-      ['.js', '.ts'].includes(extname(file).toLowerCase()),
-    )) {
-      const name = basename(file, extname(file))
-      const loaded = requireModule(resolve(directory, file)) as {
-        default?: SchemaDefinition
+    const files = readdirSync(directory).filter((file) =>
+      ['.js', '.ts'].includes(path.extname(file).toLowerCase()),
+    )
+
+    for (const file of files) {
+      const name = path.basename(file, path.extname(file))
+      const loaded: unknown = requireModule(path.resolve(directory, file))
+
+      // A module's default export is the definition; the module itself
+      // is the fallback (neode parity)
+      const candidate =
+        isRecord(loaded) && loaded['default'] !== undefined && loaded['default'] !== null
+          ? loaded['default']
+          : loaded
+
+      if (!isSchemaDefinition(candidate)) {
+        throw new TypeError(
+          `Cannot register model "${name}" from ${file}: the module did not export a schema definition`,
+        )
       }
 
-      this.model(name, loaded.default ?? (loaded as SchemaDefinition))
+      this.model(name, candidate)
     }
 
     return this
@@ -1186,18 +1285,14 @@ export default class Neode implements INeode {
   delete service; the legacy form `delete(entity, database)` — a string
   second argument, as accepted by INeode — is kept working.
   */
-  async delete<T>(entity: T, options?: DeleteOptions | string, database?: string): Promise<void> {
-    const schema = this.getSchema((entity as unknown as Record<string, unknown>).constructor)
+  async delete(entity: object, options?: DeleteOptions | string, database?: string): Promise<void> {
+    const schema = this.getSchema(constructorOf(entity))
 
     const tx = await this.writeTransaction(typeof options === 'string' ? options : database)
 
     const service = new DeleteService(tx)
 
-    await service.delete(
-      schema,
-      entity as object,
-      typeof options === 'string' ? undefined : options,
-    )
+    await service.delete(schema, entity, typeof options === 'string' ? undefined : options)
 
     await tx.commit()
 
@@ -1210,8 +1305,8 @@ export default class Neode implements INeode {
   properties, returning the deleted count (neode's Model.deleteAll,
   extended with a count return)
   */
-  async deleteAll<T>(
-    constructor: new (...arguments_: never[]) => T,
+  async deleteAll(
+    constructor: Newable,
     parameters_: Record<string, unknown> = {},
     database?: string,
   ): Promise<number> {
@@ -1233,7 +1328,7 @@ export default class Neode implements INeode {
     const firstRecord = output.records[0]
 
     if (firstRecord === undefined) {
-      throw new Error('count query returned no records')
+      throw new NeodeError('count query returned no records')
     }
 
     return Number(firstRecord.get('count'))
@@ -1254,3 +1349,5 @@ export default class Neode implements INeode {
     return this.connection.close()
   }
 }
+/* eslint-enable unicorn/name-replacements -- "Neo4j" is the product name; the rule's `j` -> `index` replacement misfires on it */
+/* eslint-enable unicorn/prefer-event-target -- the emitter is shared with TransactionalService, which an EventTarget adapter would break */

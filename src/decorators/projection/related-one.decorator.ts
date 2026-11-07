@@ -16,7 +16,9 @@ Example:
 course: { title: string; status: string };
 ```
 */
-export function RelatedOne(config: RelatedConfig): (value: undefined, context: ClassFieldDecoratorContext) => void {
+export function RelatedOne(
+  config: RelatedConfig,
+): (value: undefined, context: ClassFieldDecoratorContext) => void {
   return function (_value: undefined, context: ClassFieldDecoratorContext): void {
     const propertyKey = memberName(context)
 
@@ -37,9 +39,7 @@ export function RelatedOne(config: RelatedConfig): (value: undefined, context: C
       const entity: Newable | undefined = config.target?.()
 
       if (entity === undefined && !config.fields) {
-        throw new Error(
-          `@RelatedOne on "${propertyKey}" requires either 'fields' or a 'target()'`,
-        )
+        throw new Error(`@RelatedOne on "${propertyKey}" requires either 'fields' or a 'target()'`)
       }
 
       if (entity !== undefined) {

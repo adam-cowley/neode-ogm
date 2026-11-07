@@ -5,4 +5,4 @@ no N+1.
 */
 export { projectionNode, hasProjectedProperties } from './projection.js'
 export { hydrateProjection } from './hydrate.js'
-export { default as ProjectionService } from './projection.service.js'
+export { ProjectionService } from './projection.service.js'

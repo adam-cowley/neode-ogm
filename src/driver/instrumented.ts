@@ -95,7 +95,11 @@ export function instrumentConnectionProvider(
 ): ConnectionProvider {
   return new Proxy(new InstrumentedConnectionProvider(inner, onQuery), {
     get(target, property, receiver) {
-      return property in target ? Reflect.get(target, property, receiver) : Reflect.get(inner, property, receiver);
+      const value: unknown = Reflect.has(target, property)
+        ? Reflect.get(target, property, receiver)
+        : Reflect.get(inner, property, receiver)
+
+      return value
     },
   })
 }

@@ -2,7 +2,7 @@
 // before anything below is evaluated
 import { openBackend, TestBackend } from './support/backend'
 import { InternalId, NodeEntity, String, Uuid } from '../../src/decorators'
-import Neode from '../../src/neode.service'
+import { Neode } from '../../src/neode.service'
 
 @NodeEntity()
 class RawPerson {

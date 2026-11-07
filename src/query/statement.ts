@@ -11,12 +11,13 @@ export class Statement {
   private readonly whereClauses: string[] = []
   private readonly orderClauses: Order[] = []
   private readonly detachDeleteValues: string[] = []
-  private readonly deleteValues: string[] = []
+  private readonly valuesToDelete: string[] = []
   private readonly returnValues: string[] = []
-  private readonly setValues: SetClause[] = []
+  private readonly valuesToSet: SetClause[] = []
   private readonly onCreateSetValues: SetClause[] = []
   private readonly onMatchSetValues: SetClause[] = []
-  private readonly removeValues: string[] = []
+  private readonly valuesToRemove: string[] = []
+  private readonly callValues: string[] = []
 
   private limitValue?: number
   private skipValue?: number
@@ -50,7 +51,7 @@ export class Statement {
   }
 
   delete(...values: string[]): this {
-    this.deleteValues.push(...values)
+    this.valuesToDelete.push(...values)
 
     return this
   }
@@ -68,13 +69,13 @@ export class Statement {
   }
 
   set(key: string, value: string, operator = '='): this {
-    this.setValues.push(new Property(key, value, operator))
+    this.valuesToSet.push(new Property(key, value, operator))
 
     return this
   }
 
   setRaw(items: SetClause[]): this {
-    this.setValues.push(...items)
+    this.valuesToSet.push(...items)
 
     return this
   }
@@ -92,30 +93,37 @@ export class Statement {
   }
 
   remove(items: string[]): this {
-    this.removeValues.push(...items)
+    this.valuesToRemove.push(...items)
 
     return this
   }
 
-  toString(includePrefix = true): string {
+  /**
+  Raw CALL clause line (e.g. a `db.create.setNodeVectorProperty` vector
+  write, NTS-449), rendered after the SET clauses and before DELETE /
+  RETURN
+  */
+  call(line: string): this {
+    this.callValues.push(line)
+
+    return this
+  }
+
+  toString(shouldIncludePrefix = true): string {
     const output: string[] = []
 
     if (this.pattern.length > 0) {
       const pattern = this.pattern.map((pattern) => pattern.toString()).join('')
 
-      if (includePrefix) {
-        output.push(`${this.prefix} ${pattern}`)
-      } else {
-        output.push(pattern)
-      }
+      output.push(shouldIncludePrefix ? `${this.prefix} ${pattern}` : pattern)
     }
 
     if (this.whereClauses.length > 0) {
       output.push(this.whereClauses.join(''))
     }
 
-    if (this.removeValues.length > 0) {
-      output.push(`REMOVE ${this.removeValues.join(', ')}`)
+    if (this.valuesToRemove.length > 0) {
+      output.push(`REMOVE ${this.valuesToRemove.join(', ')}`)
     }
 
     if (this.onCreateSetValues.length > 0) {
@@ -130,12 +138,16 @@ export class Statement {
       )
     }
 
-    if (this.setValues.length > 0) {
-      output.push(`SET ${this.setValues.map((value) => value.toString()).join(', ')}`)
+    if (this.valuesToSet.length > 0) {
+      output.push(`SET ${this.valuesToSet.map((value) => value.toString()).join(', ')}`)
     }
 
-    if (this.deleteValues.length > 0) {
-      output.push(`DELETE ${this.deleteValues.join(', ')}`)
+    if (this.callValues.length > 0) {
+      output.push(this.callValues.join('\n'))
+    }
+
+    if (this.valuesToDelete.length > 0) {
+      output.push(`DELETE ${this.valuesToDelete.join(', ')}`)
     }
 
     if (this.detachDeleteValues.length > 0) {
@@ -151,13 +163,13 @@ export class Statement {
     }
 
     if (this.skipValue !== undefined) {
-      output.push(`SKIP ${this.skipValue}`)
+      output.push(`SKIP ${String(this.skipValue)}`)
     }
 
     if (this.limitValue !== undefined) {
-      output.push(`LIMIT ${this.limitValue}`)
+      output.push(`LIMIT ${String(this.limitValue)}`)
     }
 
-    return output.filter((line) => line && line.length).join('\n')
+    return output.filter((line) => line.length > 0).join('\n')
   }
 }

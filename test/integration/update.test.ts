@@ -15,7 +15,7 @@ import { EntitySchema } from '../../src/meta/entity/entity-schema'
 // (neode.service → query.service) that query.service's own imports loop
 // back into, so the service's direct import resolves a completed module
 import { openBackend, TestBackend } from './support/backend'
-import UpdateService from '../../src/services/query/update.service'
+import { UpdateService } from '../../src/services/query/update.service'
 
 // ---- Fixtures (per-file: decorator registry is global per module registry) --
 

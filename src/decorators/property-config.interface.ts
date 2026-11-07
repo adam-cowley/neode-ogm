@@ -1,4 +1,5 @@
 import type { DefaultValue } from '../meta/property-schema.js'
+import type { TransformConfig, VectorConfig } from '../meta/schema-definition.interface.js'
 
 export interface PropertyConfig {
   /**
@@ -57,6 +58,21 @@ export interface PropertyConfig {
   are validated like any other write.
   */
   fake?: () => unknown
+
+  /**
+  Declare a vector index over the property (NTS-447): created by
+  `installSchema()`, dropped by `dropSchema()`, searched by `knn()`.
+  Also available standalone via the `@Vector` decorator.
+  */
+  vector?: VectorConfig
+
+  /**
+  Property value transforms (NTS-449): `in` converts the user value into
+  its stored form before validation on every write path (create / update
+  / merge / bulk writes), `out` converts the stored form back at
+  hydration on read. See TransformConfig.
+  */
+  transform?: TransformConfig
 
   /**
   neode validation rules (min, max, email, regex, …) — persisted as-is

@@ -5,7 +5,7 @@ import { openBackend, TestBackend } from './support/backend'
 import { getModel } from '../../src/meta'
 import type { Newable } from '../../src/meta/newable'
 import type { SchemaDefinition } from '../../src/meta/schema-definition.interface'
-import DeleteService from '../../src/services/query/delete.service'
+import { DeleteService } from '../../src/services/query/delete.service'
 
 // ---- Fixtures (map-based; model registry is global per module registry) -----
 

@@ -3,7 +3,7 @@
 // when this file's service imports are evaluated first.
 import { openBackend, TestBackend } from './support/backend'
 import { knn } from '../../src/services/query/knn.service'
-import VectorIndexService from '../../src/services/schema/vector.service'
+import { VectorIndexService } from '../../src/services/schema/vector.service'
 import { NodeEntity, InternalId, Float } from '../../src/decorators'
 
 // ---- Fixtures (per-file: decorator registry is global per module registry) --

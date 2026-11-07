@@ -1,7 +1,8 @@
 import { EAGER_ID, EAGER_LABELS, eagerPattern } from '../query/eager-utilities.js'
 import { Direction } from '../query/index.js'
-import type { EntitySchema } from '../meta/entity/entity-schema.js'
-import type { PropertySchema } from '../meta/property-schema.js';
+import { EntitySchema } from '../meta/entity/entity-schema.js'
+import { NeodeError } from '../errors/index.js'
+import type { PropertySchema } from '../meta/property-schema.js'
 import { PropertyType, isProjectedProperty } from '../meta/property-schema.js'
 import { RelationshipPropertySchema } from '../meta/relationship-property-schema.js'
 import { getModel } from '../meta/index.js'
@@ -28,13 +29,21 @@ Target node labels as a Cypher label pattern (':A:B'), or ''
 function targetLabels(property: PropertySchema): string {
   const entity = property.getEntity()
 
-  if (!entity) {
+  // Fields-subset properties carry no target entity (it is not needed for
+  // their projection) — no label pattern to append
+  if (entity === undefined) {
     return ''
   }
 
-  const labels = getModel(entity)?.getLabels()
+  const targetSchema = getModel(entity)
 
-  return labels?.length ? ':' + labels.map(quote).join(':') : ''
+  if (!(targetSchema instanceof EntitySchema)) {
+    return ''
+  }
+
+  const labels = targetSchema.getLabels()
+
+  return labels.length > 0 ? ':' + labels.map((label) => quote(label)).join(':') : ''
 }
 
 /**
@@ -49,18 +58,18 @@ function hopPattern(property: PropertySchema): string {
   }
 
   if (minHops !== undefined && minHops === maxHops) {
-    return `*${minHops}`
+    return `*${String(minHops)}`
   }
 
   if (minHops !== undefined && maxHops !== undefined) {
-    return `*${minHops}..${maxHops}`
+    return `*${String(minHops)}..${String(maxHops)}`
   }
 
   if (minHops !== undefined) {
-    return `*${minHops}..`
+    return `*${String(minHops)}..`
   }
 
-  return `*..${maxHops}`
+  return `*..${String(maxHops)}`
 }
 
 /**
@@ -72,23 +81,25 @@ function relationshipPattern(alias: string, property: PropertySchema): string {
 
   const type = (property.getRelationshipType() ?? '')
     .split('|')
-    .filter((part) => part.length)
+    .filter((part) => part.length > 0)
     .map((part) => quote(part))
     .join('|')
 
-  const types = type ? `:${type}` : ''
+  const types = type.length > 0 ? `:${type}` : ''
 
-  const dirIn = direction === Direction.INCOMING ? '<' : ''
-  const dirOut = direction === Direction.OUTGOING ? '>' : ''
+  const directionIn = direction === Direction.INCOMING ? '<' : ''
+  const directionOut = direction === Direction.OUTGOING ? '>' : ''
 
-  return `(${alias})${dirIn}-[${types}${hopPattern(property)}]-${dirOut}(node${targetLabels(property)})`
+  return `(${alias})${directionIn}-[${types}${hopPattern(property)}]-${directionOut}(node${targetLabels(property)})`
 }
 
 /**
 WHERE fragment inside COUNT { } / EXISTS { } subqueries
 */
 function subqueryWhere(property: PropertySchema): string {
-  return property.getWhere() ? ` WHERE ${property.getWhere()}` : ''
+  const where = property.getWhere()
+
+  return where !== undefined && where.length > 0 ? ` WHERE ${where}` : ''
 }
 
 /**
@@ -99,22 +110,30 @@ function relatedProjection(alias: string, property: PropertySchema): string {
   const fields = property.getFields()
 
   // No field subset: full-entity eager loading (the existing eager patterns)
-  if (!fields?.length) {
-    const rel = new RelationshipPropertySchema(key)
+  if (fields === undefined || fields.length === 0) {
+    const relationship = new RelationshipPropertySchema(key)
 
-    rel.setType(property.getRelationshipType() ?? key)
-    rel.setDirection(property.getDirection() ?? Direction.OUTGOING)
-    rel.setTarget(property.getEntity())
-    rel.setMany(property.getType() === PropertyType.RELATED_MANY)
+    relationship.setType(property.getRelationshipType() ?? key)
+    relationship.setDirection(property.getDirection() ?? Direction.OUTGOING)
+    const target = property.getEntity()
 
-    return eagerPattern(1, alias, rel)
+    if (target === undefined) {
+      throw new Error(
+        `Projection property "${key}" has no field subset and no target — add 'fields' or 'target()'`,
+      )
+    }
+
+    relationship.setTarget(target)
+    relationship.setMany(property.getType() === PropertyType.RELATED_MANY)
+
+    return eagerPattern(1, alias, relationship)
   }
 
   const isMany = property.getType() === PropertyType.RELATED_MANY
 
   const pattern =
     fields.length === 1
-      ? `node.${fields[0]}`
+      ? `node.${fields[0] ?? ''}`
       : `node { ${fields.map((field) => `.${field}`).join(', ')} }`
 
   const comprehension = `[ ${relationshipPattern(alias, property)} | ${pattern} ]`
@@ -127,40 +146,40 @@ function relatedProjection(alias: string, property: PropertySchema): string {
 One `key: expression` pair of the RETURN map projection
 */
 function projectedProperty(alias: string, property: PropertySchema): string {
-  switch (property.getType()) {
-    case PropertyType.RELATED_ONE:
-    case PropertyType.RELATED_MANY: {
-      return relatedProjection(alias, property)
-    }
+  const type = property.getType()
+  const key = property.getKey()
 
-    case PropertyType.RELATIONSHIP_COUNT: {
-      return `${property.getKey()}: COUNT { ${relationshipPattern(alias, property)}${subqueryWhere(property)} }`
-    }
-
-    case PropertyType.RELATIONSHIP_EXISTS: {
-      return `${property.getKey()}: EXISTS { ${relationshipPattern(alias, property)}${subqueryWhere(property)} }`
-    }
-
-    case PropertyType.LABEL_PRESENT: {
-      return `${property.getKey()}: ${alias}:${quote(property.getLabel()!)}`
-    }
-
-    case PropertyType.EXPRESSION: {
-      return `${property.getKey()}: ${property.getExpression()}`
-    }
-
-    default: {
-      // COMPUTED runs in TypeScript after hydration
-      return ''
-    }
+  if (type === PropertyType.RELATED_ONE || type === PropertyType.RELATED_MANY) {
+    return relatedProjection(alias, property)
   }
+
+  if (type === PropertyType.RELATIONSHIP_COUNT) {
+    return `${key}: COUNT { ${relationshipPattern(alias, property)}${subqueryWhere(property)} }`
+  }
+
+  if (type === PropertyType.RELATIONSHIP_EXISTS) {
+    return `${key}: EXISTS { ${relationshipPattern(alias, property)}${subqueryWhere(property)} }`
+  }
+
+  if (type === PropertyType.LABEL_PRESENT) {
+    const label = property.getLabel()
+
+    if (label === undefined) {
+      throw new NeodeError(`@LabelPresent property "${key}" requires a label`)
+    }
+
+    return `${key}: ${alias}:${quote(label)}`
+  }
+
+  // COMPUTED runs in TypeScript after hydration
+  return type === PropertyType.EXPRESSION ? `${key}: ${property.getExpression() ?? ''}` : ''
 }
 
 /**
 True when any property of the model projects a read-model value
 */
 export function hasProjectedProperties(schema: EntitySchema): boolean {
-  return schema.getProperties().some(isProjectedProperty)
+  return schema.getProperties().some((property) => isProjectedProperty(property))
 }
 
 /**
@@ -176,16 +195,18 @@ export function projectionNode(alias: string, schema: EntitySchema): string {
   ]
 
   // Full-entity eager relationships (existing eager machinery)
-  for (const rel of schema
-    .getRelationships()
-    .filter((rel) => rel.getEager())) {parts.push(eagerPattern(1, alias, rel))}
+  for (const relationship of schema.getRelationships()) {
+    if (relationship.getEager()) {
+      parts.push(eagerPattern(1, alias, relationship))
+    }
+  }
 
   // Projected read-model properties
-  for (const property of schema
-    .getProperties()
-    .filter(
-      (property) => isProjectedProperty(property) && property.getType() !== PropertyType.COMPUTED,
-    )) {parts.push(projectedProperty(alias, property))}
+  for (const property of schema.getProperties()) {
+    if (isProjectedProperty(property) && property.getType() !== PropertyType.COMPUTED) {
+      parts.push(projectedProperty(alias, property))
+    }
+  }
 
   return `${alias} { ${parts.join(', ')} }`
 }

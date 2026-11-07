@@ -1,6 +1,6 @@
 import { Builder } from './builder.js'
 import { getModel } from '../meta/index.js'
-import type { EntitySchema } from '../meta/entity/entity-schema.js';
+import type { EntitySchema } from '../meta/entity/entity-schema.js'
 import { EntityType } from '../meta/entity/entity-schema.js'
 import type { RelationshipPropertySchema } from '../meta/relationship-property-schema.js'
 
@@ -22,19 +22,17 @@ fields.
 export function eagerPattern(
   depth: number,
   alias: string,
-  rel: RelationshipPropertySchema,
+  relationship: RelationshipPropertySchema,
 ): string {
   const builder = new Builder()
 
-  const name = rel.getKey()
-  const type = rel.getType()
-  const direction = rel.getDirection()
+  const name = relationship.getKey()
+  const type = relationship.getType()
+  const direction = relationship.getDirection()
   const relationshipVariable = `${alias}_${name}_rel`
   const nodeVariable = `${alias}_${name}_node`
 
-  const targetSchema = rel.getTarget()
-    ? (getModel(rel.getTarget()) as EntitySchema | undefined)
-    : undefined
+  const targetSchema = getModel(relationship.getTarget()) as EntitySchema | undefined
 
   // Build Pattern
   builder
@@ -42,14 +40,15 @@ export function eagerPattern(
     .relationship(type, direction, relationshipVariable)
     .to(nodeVariable, targetSchema?.getLabels() ?? false)
 
-  let fields: string
-
-  fields = targetSchema && targetSchema.getType() === EntityType.RelationshipEntity ? eagerRelationship(depth + 1, relationshipVariable, name, nodeVariable, targetSchema) : eagerNode(depth + 1, nodeVariable, targetSchema);
+  const fields =
+    targetSchema?.getType() === EntityType.RelationshipEntity
+      ? eagerRelationship(depth + 1, relationshipVariable, name, nodeVariable, targetSchema)
+      : eagerNode(depth + 1, nodeVariable, targetSchema)
 
   const pattern = `${name}: [ ${builder.pattern().trim()} | ${fields} ]`
 
   // Get the first?
-  return rel.getMany() ? pattern : pattern + '[0]';
+  return relationship.getMany() ? pattern : pattern + '[0]'
 }
 
 /**
@@ -74,11 +73,13 @@ export function eagerNode(depth: number, alias: string, schema?: EntitySchema): 
 
   // Eager
   if (schema && depth <= MAX_EAGER_DEPTH) {
-    for (const rel of schema
+    const eagerRelationships = schema
       .getRelationships()
-      .filter((rel) => rel.getEager())) {
-        pattern += `\n${indent}${indent},` + eagerPattern(depth, alias, rel)
-      }
+      .filter((relationship) => relationship.getEager())
+
+    for (const relationship of eagerRelationships) {
+      pattern += `\n${indent}${indent},` + eagerPattern(depth, alias, relationship)
+    }
   }
 
   pattern += `\n${indent}}`

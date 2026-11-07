@@ -1,5 +1,21 @@
 import { z } from 'zod'
-import neo4j from 'neo4j-driver'
+import {
+  Date as DriverDate,
+  DateTime as DriverDateTime,
+  isDate,
+  isDateTime,
+  isDuration,
+  isInt,
+  isLocalDateTime,
+  isLocalTime,
+  isPoint,
+  isTime,
+  LocalDateTime as DriverLocalDateTime,
+  LocalTime as DriverLocalTime,
+  Time as DriverTime,
+} from 'neo4j-driver'
+
+import { isRecord } from '../services/type-guards.js'
 
 /**
 Zod schemas for the property value types that are not plain JSON.
@@ -42,8 +58,17 @@ Joi.object().type(neo4j.types.Integer)).
 */
 export const integerSchema: z.ZodType = z.union([
   z.number().int(),
-  z.custom((value) => neo4j.isInt(value)),
+  z.custom((value) => isInt(value)),
 ])
+
+/**
+The string form of an engine value object: the driver's temporal value
+classes and the embedded engine's Cypher value classes override toString
+to their parseable Cypher form.
+*/
+export function isStringFormed(value: unknown): value is { toString(): string } {
+  return isRecord(value) && typeof value.toString === 'function'
+}
 
 /**
 A temporal value is valid when it is the driver instance itself, a
@@ -58,7 +83,9 @@ function temporalSchema(
 ): z.ZodType {
   return z.custom(
     (value) => {
-      if (isInstance(value) || (value instanceof Date)) {return true}
+      if (isInstance(value) || value instanceof Date) {
+        return true
+      }
 
       if (typeof value === 'number') {
         return Number.isFinite(value) && !Number.isNaN(new Date(value).getTime())
@@ -74,12 +101,11 @@ function temporalSchema(
         }
       }
 
-      // Structural check for other engine value classes (e.g. the embedded
-      // Relate engine's CypherDate-style objects): accepted when their
+      // Structural check for other engine value classes: accepted when their
       // string form parses like the driver's own values
-      if (typeof value === 'object') {
+      if (isStringFormed(value)) {
         try {
-          fromString(String(value))
+          fromString(value.toString())
 
           return true
         } catch {
@@ -96,32 +122,32 @@ function temporalSchema(
 }
 
 export const dateSchema: z.ZodType = temporalSchema(
-  (value) => neo4j.isDate(value),
-  (value) => neo4j.Date.fromString(value),
+  (value) => isDate(value),
+  (value) => DriverDate.fromString(value),
   'Neo4j Date',
 )
 
 export const timeSchema: z.ZodType = temporalSchema(
-  (value) => neo4j.isTime(value),
-  (value) => neo4j.Time.fromString(value),
+  (value) => isTime(value),
+  (value) => DriverTime.fromString(value),
   'Neo4j Time',
 )
 
 export const datetimeSchema: z.ZodType = temporalSchema(
-  (value) => neo4j.isDateTime(value),
-  (value) => neo4j.DateTime.fromString(value),
+  (value) => isDateTime(value),
+  (value) => DriverDateTime.fromString(value),
   'Neo4j DateTime',
 )
 
 export const localtimeSchema: z.ZodType = temporalSchema(
-  (value) => neo4j.isLocalTime(value),
-  (value) => neo4j.LocalTime.fromString(value),
+  (value) => isLocalTime(value),
+  (value) => DriverLocalTime.fromString(value),
   'Neo4j LocalTime',
 )
 
 export const localdatetimeSchema: z.ZodType = temporalSchema(
-  (value) => neo4j.isLocalDateTime(value),
-  (value) => neo4j.LocalDateTime.fromString(value),
+  (value) => isLocalDateTime(value),
+  (value) => DriverLocalDateTime.fromString(value),
   'Neo4j LocalDateTime',
 )
 
@@ -138,16 +164,18 @@ driver's Point type check, we validate the SRID consistency up front.
 */
 export const pointSchema: z.ZodType = z.custom(
   (value) => {
-    if (neo4j.isPoint(value)) {
+    if (isPoint(value)) {
       // driver v6 types Point.srid as Integer but stores a plain number
-      return POINT_SRIDS.includes((value as unknown as { srid: number }).srid)
+      const srid: unknown = value.srid
+
+      return typeof srid === 'number' && POINT_SRIDS.includes(srid)
     }
 
-    if (typeof value !== 'object' || value === null) {
+    if (!isRecord(value)) {
       return false
     }
 
-    const { x, y, z, latitude, longitude, height, srid } = value as Record<string, unknown>
+    const { x, y, z, latitude, longitude, height, srid } = value
 
     // Cartesian coordinates
     if (x !== undefined || y !== undefined || z !== undefined) {
@@ -198,18 +226,19 @@ durations — they were stored as strings).
 */
 export const durationSchema: z.ZodType = z.custom(
   (value) => {
-    if (neo4j.isDuration(value)) {
+    if (isDuration(value)) {
       return true
     }
 
-    if (typeof value !== 'object' || value === null) {
+    if (!isRecord(value)) {
       return false
     }
 
-    const { months = 0, days = 0, seconds = 0, nanoseconds = 0 } = value as Record<string, unknown>
+    const { months = 0, days = 0, seconds = 0, nanoseconds = 0 } = value
 
     return [months, days, seconds, nanoseconds].every(
-      (component) => typeof component === 'number' && Number.isInteger(component) && component >= 0,
+      (component) =>
+        typeof component === 'number' && Number.isSafeInteger(component) && component >= 0,
     )
   },
   {

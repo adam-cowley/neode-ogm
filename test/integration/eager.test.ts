@@ -13,7 +13,7 @@ import { Direction } from '../../src/query'
 import { Builder } from '../../src/query'
 import { getModel, mergeRelationshipProperty } from '../../src/meta'
 import { THIS_NODE } from '../../src/constants'
-import QueryService from '../../src/services/query/query.service'
+import { QueryService } from '../../src/services/query/query.service'
 import type { Runner } from '../../src/driver/types'
 
 // ---- Fixtures (per-file: decorator registry is global per module registry) --

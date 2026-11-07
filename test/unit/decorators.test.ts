@@ -1,4 +1,4 @@
-import { EntitySchema, EntityType  } from '../../src/meta/entity/entity-schema'
+import { EntitySchema, EntityType } from '../../src/meta/entity/entity-schema'
 import {
   NodeEntity,
   Primary,
@@ -12,7 +12,7 @@ import {
   OneToMany,
 } from '../../src/decorators'
 import { getModel } from '../../src/meta'
-import { PropertySchema, PropertyType } from "../../src/meta/property-schema"
+import { PropertySchema, PropertyType } from '../../src/meta/property-schema'
 import { Direction } from '../../src/query'
 import { RelationshipPropertySchema } from '../../src/meta/relationship-property-schema'
 

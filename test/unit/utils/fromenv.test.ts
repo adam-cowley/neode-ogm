@@ -1,27 +1,26 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import neo4j from 'neo4j-driver'
 
-import { configFromEnv, fromEnv } from '../../../src/utils'
-import Neode from '../../../src/neode.service'
+import { configFromEnv, fromEnv } from '../../../src/from-env'
+import { Neode } from '../../../src/neode.service'
 
-vi.mock('neo4j-driver', () => ({
-  default: {
-    driver: vi.fn(() => ({ mocked: 'driver' })),
-    auth: {
-      basic: vi.fn(
-        (username: string, password: string) =>
-          ({
-            scheme: 'basic',
-            principal: username,
-            credentials: password,
-          }) as const,
-      ),
-    },
-    logging: {
-      console: vi.fn((level: string) => ({ level, logger: vi.fn() })),
-    },
-  },
-}))
+vi.mock('neo4j-driver', () => {
+  const driver = vi.fn(() => ({ mocked: 'driver' }))
+  const auth = {
+    basic: vi.fn(
+      (username: string, password: string) =>
+        ({
+          scheme: 'basic',
+          principal: username,
+          credentials: password,
+        }) as const,
+    ),
+  }
+  const logging = {
+    console: vi.fn((level: string) => ({ level, logger: vi.fn() })),
+  }
+  return { default: { driver, auth, logging }, driver, auth, logging }
+})
 
 const NEO4J_VARS = [
   'NEO4J_PROTOCOL',

@@ -1,7 +1,10 @@
 import { z } from 'zod'
-import neo4j from 'neo4j-driver'
+import { isInt } from 'neo4j-driver'
 
-import type { PropertySchema } from '../meta/property-schema.js';
+import { isRecord } from '../services/type-guards.js'
+import { NeodeError } from '../errors/index.js'
+
+import type { PropertySchema } from '../meta/property-schema.js'
 import { PropertyType } from '../meta/property-schema.js'
 import {
   anySchema,
@@ -11,6 +14,7 @@ import {
   durationSchema,
   floatSchema,
   integerSchema,
+  isStringFormed,
   localdatetimeSchema,
   localtimeSchema,
   numberSchema,
@@ -123,11 +127,24 @@ const HOSTNAME_PATTERN =
   /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/
 
 function failUnsupported(rule: string, key: string): never {
-  throw new Error(`Not sure how to validate ${rule} on ${key}`)
+  // NTS-446: what failed, where, and the fix
+  throw new NeodeError(
+    `Cannot validate property "${key}": unknown validation rule "${rule}" — ` +
+      'check the rule name in the property definition against the documented rules',
+  )
+}
+
+/**
+Rule options as a record; non-object options (true, a string, …) carry none
+*/
+function ruleOptions(options: unknown): Record<string, unknown> {
+  return isRecord(options) ? options : {}
 }
 
 function asNumber(value: unknown): number | null {
-  if (neo4j.isInt(value)) {return value.toNumber()}
+  if (isInt(value)) {
+    return value.toNumber()
+  }
 
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
@@ -136,22 +153,43 @@ function asString(value: unknown): string | null {
   return typeof value === 'string' ? value : null
 }
 
-function matches(value: unknown, expected: unknown, insensitive: boolean): boolean {
-  return insensitive && typeof value === 'string' && typeof expected === 'string' ? value.toLowerCase() === expected.toLowerCase() : value === expected;
+function doesMatch(value: unknown, expected: unknown, isInsensitive: boolean): boolean {
+  return isInsensitive && typeof value === 'string' && typeof expected === 'string'
+    ? value.toLowerCase() === expected.toLowerCase()
+    : value === expected
 }
 
 function toDate(value: unknown): Date | null {
-  if (value instanceof Date) {return value}
+  if (value instanceof Date) {
+    return value
+  }
 
-  if (typeof value === 'number') {return new Date(value)}
+  if (typeof value === 'number') {
+    return new Date(value)
+  }
 
-  if (typeof value === 'string' || typeof value === 'object') {
-    const date = new Date(String(value))
+  const string_ = parseableString(value)
+
+  if (string_ !== null) {
+    const date = new Date(string_)
 
     return Number.isNaN(date.getTime()) ? null : date
   }
 
   return null
+}
+
+/**
+The string form of a value: strings pass through; engine value objects
+(the driver temporal classes and the embedded engine's Cypher value
+classes) go through their declared toString.
+*/
+function parseableString(value: unknown): string | null {
+  if (typeof value === 'string') {
+    return value
+  }
+
+  return isStringFormed(value) ? value.toString() : null
 }
 
 function decimalPlaces(value: number): number {
@@ -163,13 +201,13 @@ function decimalPlaces(value: number): number {
 function numberRefine(
   schema: z.ZodType,
   message: string,
-  predicate: (value: number) => boolean,
+  isMatch: (value: number) => boolean,
 ): z.ZodType {
   return schema.refine(
     (value) => {
       const number_ = asNumber(value)
 
-      return number_ !== null && predicate(number_)
+      return number_ !== null && isMatch(number_)
     },
     { message },
   )
@@ -178,13 +216,13 @@ function numberRefine(
 function stringRefine(
   schema: z.ZodType,
   message: string,
-  predicate: (value: string) => boolean,
+  isMatch: (value: string) => boolean,
 ): z.ZodType {
   return schema.refine(
     (value) => {
       const string_ = asString(value)
 
-      return string_ !== null && predicate(string_)
+      return string_ !== null && isMatch(string_)
     },
     { message },
   )
@@ -204,7 +242,9 @@ function applyBooleanRule(
   switch (rule) {
     case 'positive':
     case 'negative': {
-      if (kind !== 'number') {failUnsupported(rule, key)}
+      if (kind !== 'number') {
+        failUnsupported(rule, key)
+      }
 
       const isPositive = rule === 'positive'
 
@@ -216,24 +256,32 @@ function applyBooleanRule(
     }
 
     case 'port': {
-      if (kind !== 'number') {failUnsupported(rule, key)}
+      if (kind !== 'number') {
+        failUnsupported(rule, key)
+      }
 
       return numberRefine(
         schema,
         `"${key}" must be a valid port`,
-        (value) => Number.isInteger(value) && value >= 0 && value <= 65_535,
+        (value) => Number.isSafeInteger(value) && value >= 0 && value <= 65_535,
       )
     }
 
     case 'integer': {
-      if (kind !== 'number') {failUnsupported(rule, key)}
+      if (kind !== 'number') {
+        failUnsupported(rule, key)
+      }
 
-      return numberRefine(schema, `"${key}" must be an integer`, (value) => Number.isInteger(value))
+      return numberRefine(schema, `"${key}" must be an integer`, (value) =>
+        Number.isSafeInteger(value),
+      )
     }
 
     case 'isoDate':
     case 'iso': {
-      if (kind !== 'string') {failUnsupported(rule, key)}
+      if (kind !== 'string') {
+        failUnsupported(rule, key)
+      }
 
       return schema.refine(
         (value) => ISO_DATE.safeParse(value).success || ISO_DATETIME.safeParse(value).success,
@@ -242,7 +290,9 @@ function applyBooleanRule(
     }
 
     case 'creditCard': {
-      if (kind !== 'string') {failUnsupported(rule, key)}
+      if (kind !== 'string') {
+        failUnsupported(rule, key)
+      }
 
       return schema.refine((value) => IS_CREDIT_CARD.safeParse(value).success, {
         message: `"${key}" must be a valid credit card number`,
@@ -250,7 +300,9 @@ function applyBooleanRule(
     }
 
     case 'alphanum': {
-      if (kind !== 'string') {failUnsupported(rule, key)}
+      if (kind !== 'string') {
+        failUnsupported(rule, key)
+      }
 
       return stringRefine(schema, `"${key}" must only contain alpha-numeric characters`, (value) =>
         /^[a-zA-Z0-9]+$/.test(value),
@@ -258,7 +310,9 @@ function applyBooleanRule(
     }
 
     case 'token': {
-      if (kind !== 'string') {failUnsupported(rule, key)}
+      if (kind !== 'string') {
+        failUnsupported(rule, key)
+      }
 
       return stringRefine(
         schema,
@@ -268,7 +322,9 @@ function applyBooleanRule(
     }
 
     case 'hostname': {
-      if (kind !== 'string') {failUnsupported(rule, key)}
+      if (kind !== 'string') {
+        failUnsupported(rule, key)
+      }
 
       return stringRefine(schema, `"${key}" must be a valid hostname`, (value) =>
         HOSTNAME_PATTERN.test(value),
@@ -276,38 +332,50 @@ function applyBooleanRule(
     }
 
     case 'lowercase': {
-      if (kind !== 'string') {failUnsupported(rule, key)}
+      if (kind !== 'string') {
+        failUnsupported(rule, key)
+      }
 
       return schema.transform((value) => asString(value)?.toLowerCase() ?? value)
     }
 
     case 'uppercase': {
-      if (kind !== 'string') {failUnsupported(rule, key)}
+      if (kind !== 'string') {
+        failUnsupported(rule, key)
+      }
 
       return schema.transform((value) => asString(value)?.toUpperCase() ?? value)
     }
 
     case 'truthy':
     case 'falsy': {
-      if (kind !== 'boolean') {failUnsupported(rule, key)}
+      if (kind !== 'boolean') {
+        failUnsupported(rule, key)
+      }
 
       const isExpected = rule === 'truthy'
 
       return schema.refine((value) => value === isExpected, {
-        message: `"${key}" must be ${isExpected}`,
+        message: `"${key}" must be ${String(isExpected)}`,
       })
     }
 
     case 'truncate': {
-      if (kind !== 'string') {failUnsupported(rule, key)}
+      if (kind !== 'string') {
+        failUnsupported(rule, key)
+      }
 
       // Already handled alongside max (Joi: truncate makes max truncate
       // instead of fail) — don't transform twice
-      if (state.truncated) {return schema}
+      if (state.truncated) {
+        return schema
+      }
 
       const limit = typeof context.config['max'] === 'number' ? context.config['max'] : null
 
-      if (limit === null) {throw new Error('"truncate" must have a max limit')}
+      if (limit === null) {
+        throw new Error('"truncate" must have a max limit')
+      }
 
       state.truncated = true
 
@@ -353,7 +421,9 @@ function applyStringFormat(
 ): z.ZodType {
   const { key } = context
 
-  if (context.kind !== 'string') {failUnsupported(rule, key)}
+  if (context.kind !== 'string') {
+    failUnsupported(rule, key)
+  }
 
   switch (rule) {
     case 'email': {
@@ -377,7 +447,9 @@ function applyStringFormat(
 
     case 'base64': {
       const pattern =
-        options['paddingRequired'] === false ? /^[A-Za-z0-9+/]+(={0,2})?$/ : /^[A-Za-z0-9+/]+={0,2}$/
+        options['paddingRequired'] === false
+          ? /^[A-Za-z0-9+/]+(={0,2})?$/
+          : /^[A-Za-z0-9+/]+={0,2}$/
 
       return stringRefine(schema, `"${key}" must be a valid base64 string`, (value) =>
         pattern.test(value),
@@ -391,7 +463,7 @@ function applyStringFormat(
       return stringRefine(schema, `"${key}" must only contain hexadecimal characters`, (value) => {
         const body = isAllowPrefix ? value.replace(/^0x/i, '') : value
 
-        return /^[0-9a-f]+$/i.test(body) ? !isByteAligned || body.length % 2 === 0 : false;
+        return /^[0-9a-f]+$/i.test(body) && (!isByteAligned || body.length % 2 === 0)
       })
     }
 
@@ -422,7 +494,7 @@ function applyGenericRule(
   switch (rule) {
     case 'min':
     case 'max': {
-      if ((kind !== 'string' && kind !== 'number') || typeof options !== 'number') {
+      if (typeof options !== 'number' || (kind !== 'string' && kind !== 'number')) {
         failUnsupported(rule, key)
       }
 
@@ -433,8 +505,8 @@ function applyGenericRule(
         return numberRefine(
           schema,
           isMin
-            ? `"${key}" must be greater than or equal to ${limit}`
-            : `"${key}" must be less than or equal to ${limit}`,
+            ? `"${key}" must be greater than or equal to ${String(limit)}`
+            : `"${key}" must be less than or equal to ${String(limit)}`,
           (value) => (isMin ? value >= limit : value <= limit),
         )
       }
@@ -454,75 +526,97 @@ function applyGenericRule(
       return stringRefine(
         schema,
         isMin
-          ? `"${key}" length must be at least ${limit} characters long`
-          : `"${key}" length must be less than or equal to ${limit} characters long`,
+          ? `"${key}" length must be at least ${String(limit)} characters long`
+          : `"${key}" length must be less than or equal to ${String(limit)} characters long`,
         (value) => (isMin ? value.length >= limit : value.length <= limit),
       )
     }
 
     case 'length': {
-      if (kind !== 'string' || typeof options !== 'number') {failUnsupported(rule, key)}
+      if (kind !== 'string' || typeof options !== 'number') {
+        failUnsupported(rule, key)
+      }
 
       return stringRefine(
         schema,
-        `"${key}" length must be ${options} characters long`,
+        `"${key}" length must be ${String(options)} characters long`,
         (value) => value.length === options,
       )
     }
 
     case 'precision': {
-      if (kind !== 'number' || typeof options !== 'number') {failUnsupported(rule, key)}
+      if (kind !== 'number' || typeof options !== 'number') {
+        failUnsupported(rule, key)
+      }
 
       return numberRefine(
         schema,
-        `"${key}" must have no more than ${options} decimal places`,
+        `"${key}" must have no more than ${String(options)} decimal places`,
         (value) => decimalPlaces(value) <= options,
       )
     }
 
     case 'multiple': {
-      if (kind !== 'number' || typeof options !== 'number') {failUnsupported(rule, key)}
+      if (kind !== 'number' || typeof options !== 'number') {
+        failUnsupported(rule, key)
+      }
 
       return numberRefine(
         schema,
-        `"${key}" must be a multiple of ${options}`,
+        `"${key}" must be a multiple of ${String(options)}`,
         (value) => value % options === 0,
       )
     }
 
     case 'regex': {
-      if (kind !== 'string') {failUnsupported(rule, key)}
+      if (kind !== 'string') {
+        failUnsupported(rule, key)
+      }
 
       const isRegExp = options instanceof RegExp
-      const options_ = isRegExp ? {} : ((options ?? {}) as Record<string, unknown>)
+      const options_ = isRegExp ? {} : ruleOptions(options)
       const pattern = isRegExp ? options : options_['pattern']
       const isInvert = options_['invert'] === true
       const name = typeof options_['name'] === 'string' ? options_['name'] : null
 
-      if (!(pattern instanceof RegExp)) {failUnsupported(rule, key)}
+      if (!(pattern instanceof RegExp)) {
+        failUnsupported(rule, key)
+      }
+
+      const patternName = name === null || name === '' ? 'required' : `"${name}"`
 
       return stringRefine(
         schema,
-        `"${key}" fails to match the ${name ? `"${name}"` : 'required'} pattern`,
+        `"${key}" fails to match the ${patternName} pattern`,
         (value) => pattern.test(value) !== isInvert,
       )
     }
 
     case 'replace': {
-      if (kind !== 'string') {failUnsupported(rule, key)}
+      if (kind !== 'string') {
+        failUnsupported(rule, key)
+      }
 
-      const options_ = (options ?? {}) as Record<string, unknown>
+      const options_ = ruleOptions(options)
       const pattern = options_['pattern']
       const replacement = typeof options_['replace'] === 'string' ? options_['replace'] : ''
 
-      if (!(pattern instanceof RegExp) && typeof pattern !== 'string') {failUnsupported(rule, key)}
+      if (typeof pattern !== 'string' && !(pattern instanceof RegExp)) {
+        failUnsupported(rule, key)
+      }
 
-      return schema.transform((value) => asString(value)?.replace(pattern, replacement) ?? value)
+      // Function form so user-supplied replacement strings never get their
+      // `$` patterns expanded by String#replace
+      return schema.transform(
+        (value) => asString(value)?.replace(pattern, () => replacement) ?? value,
+      )
     }
 
     case 'before':
     case 'after': {
-      if (kind !== 'temporal') {failUnsupported(rule, key)}
+      if (kind !== 'temporal') {
+        failUnsupported(rule, key)
+      }
 
       const isBefore = rule === 'before'
 
@@ -531,7 +625,9 @@ function applyGenericRule(
           const valueDate = toDate(value)
           const boundary = options === 'now' ? new Date() : toDate(options)
 
-          if (valueDate === null || boundary === null) {return false}
+          if (valueDate === null || boundary === null) {
+            return false
+          }
 
           return isBefore
             ? valueDate.getTime() <= boundary.getTime()
@@ -542,10 +638,12 @@ function applyGenericRule(
     }
 
     case 'guid': {
-      if (kind !== 'string') {failUnsupported(rule, key)}
+      if (kind !== 'string') {
+        failUnsupported(rule, key)
+      }
 
-      const version =
-        (options as Record<string, unknown> | null)?.['version'] === 'uuidv4' ? IS_UUID_V4 : IS_UUID
+      const options_ = ruleOptions(options)
+      const version = options_['version'] === 'uuidv4' ? IS_UUID_V4 : IS_UUID
 
       return schema.refine((value) => version.safeParse(value).success, {
         message: `"${key}" must be a valid GUID`,
@@ -553,13 +651,17 @@ function applyGenericRule(
     }
 
     case 'trim': {
-      if (kind !== 'string') {failUnsupported(rule, key)}
+      if (kind !== 'string') {
+        failUnsupported(rule, key)
+      }
 
-      return options ? schema.transform((value) => asString(value)?.trim() ?? value) : schema;
+      return options === undefined || options === false
+        ? schema
+        : schema.transform((value) => asString(value)?.trim() ?? value)
     }
 
     case 'allow': {
-      const values = Array.isArray(options) ? options : [options]
+      const values: unknown[] = Array.isArray(options) ? options : [options]
 
       state.allowValues.push(...values)
 
@@ -567,19 +669,19 @@ function applyGenericRule(
     }
 
     case 'valid': {
-      const values = Array.isArray(options) ? options : [options]
+      const values: unknown[] = Array.isArray(options) ? options : [options]
 
       return schema.refine(
-        (value) => values.some((expected) => matches(value, expected, state.insensitive)),
+        (value) => values.some((expected) => doesMatch(value, expected, state.insensitive)),
         { message: `"${key}" must be one of ${JSON.stringify(values)}` },
       )
     }
 
     case 'invalid': {
-      const values = Array.isArray(options) ? options : [options]
+      const values: unknown[] = Array.isArray(options) ? options : [options]
 
       return schema.refine(
-        (value) => values.every((expected) => !matches(value, expected, state.insensitive)),
+        (value) => values.every((expected) => !doesMatch(value, expected, state.insensitive)),
         { message: `"${key}" contains an invalid value` },
       )
     }
@@ -610,16 +712,17 @@ function applyRule(
   state: BuildState,
 ): z.ZodType {
   if (BOOLEAN_OR_OPTIONS_RULES.has(rule)) {
-    if (options === undefined || options === false) {return schema}
+    if (options === undefined || options === false) {
+      return schema
+    }
 
-    const options_ =
-      typeof options === 'object' && options !== null ? (options as Record<string, unknown>) : {}
+    const options_ = ruleOptions(options)
 
     return applyStringFormat(schema, rule, options_, context)
   }
 
   if (BOOLEAN_TRUE_RULES.has(rule)) {
-    return options === true ? applyBooleanRule(schema, rule, context, state) : schema;
+    return options === true ? applyBooleanRule(schema, rule, context, state) : schema
   }
 
   return applyGenericRule(schema, rule, options, context, state)
@@ -666,6 +769,25 @@ function baseSchemaFor(property: PropertySchema): { schema: z.ZodType; kind: Rul
     case PropertyType.DURATION: {
       return { schema: durationSchema, kind: 'duration' }
     }
+    case PropertyType.ANY:
+    case PropertyType.INTERNAL_ID:
+    case PropertyType.ALL_PROPERTIES:
+    case PropertyType.ONE_TO_ONE:
+    case PropertyType.ONE_TO_MANY:
+    case PropertyType.RELATED_ONE:
+    case PropertyType.RELATED_MANY:
+    case PropertyType.RELATIONSHIP_COUNT:
+    case PropertyType.RELATIONSHIP_EXISTS:
+    case PropertyType.LABEL_PRESENT:
+    case PropertyType.COMPUTED:
+    case PropertyType.EXPRESSION:
+    case PropertyType.START_NODE:
+    case PropertyType.END_NODE:
+    case PropertyType.OTHER_NODE:
+    case PropertyType.NODE:
+    case PropertyType.RELATIONSHIP: {
+      return { schema: anySchema, kind: 'any' }
+    }
     default: {
       return { schema: anySchema, kind: 'any' }
     }
@@ -692,17 +814,19 @@ export function buildPropertySchema(
 
   let schema = base
 
-  for (const rule of Object.keys(config)) {
-    if (IGNORED_KEYS.has(rule)) {continue}
+  for (const [rule, ruleOptions] of Object.entries(config)) {
+    if (IGNORED_KEYS.has(rule)) {
+      continue
+    }
 
-    schema = applyRule(schema, rule, config[rule], context, state)
+    schema = applyRule(schema, rule, ruleOptions, context, state)
   }
 
   // allow values bypass every other check (Joi semantics)
   if (state.allowValues.length > 0) {
     schema = z.union([
       z.custom((value) =>
-        state.allowValues.some((expected) => matches(value, expected, state.insensitive)),
+        state.allowValues.some((expected) => doesMatch(value, expected, state.insensitive)),
       ),
       schema,
     ])

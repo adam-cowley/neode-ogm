@@ -3,7 +3,9 @@ import { mergeModel } from '../../meta/index.js'
 import type { NodeConfig } from '../node-config.interface.js'
 import { getRegistrations } from '../registrations.js'
 
-export function NodeEntity(config: NodeConfig = {}): (constructor: Newable, context: ClassDecoratorContext) => void {
+export function NodeEntity(
+  config: NodeConfig = {},
+): (constructor: Newable, context: ClassDecoratorContext) => void {
   return function (constructor: Newable, context: ClassDecoratorContext): void {
     // Replay field registrations queued by property/relationship decorators.
     // Read the metadata object from the decorator context: esbuild attaches
@@ -17,10 +19,10 @@ export function NodeEntity(config: NodeConfig = {}): (constructor: Newable, cont
     const model = mergeModel(constructor)
 
     // If no label has been defined, use the constructor name
-    const labels = config.labels || [constructor.name]
+    const labels = config.labels ?? [constructor.name]
 
     // Sort Labels by name
-    labels.sort()
+    labels.sort(compareStrings)
 
     // Set Labels in definition
     model.setLabels(labels)
@@ -30,4 +32,16 @@ export function NodeEntity(config: NodeConfig = {}): (constructor: Newable, cont
       model.setDescription(config.description)
     }
   }
+}
+
+/**
+Default Array#sort order for label strings (UTF-16 code-unit comparison, the
+same order the previous no-comparator sort produced)
+*/
+function compareStrings(a: string, b: string): number {
+  if (a < b) {
+    return -1
+  }
+
+  return a > b ? 1 : 0
 }

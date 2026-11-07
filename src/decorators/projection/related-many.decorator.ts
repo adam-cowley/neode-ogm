@@ -18,7 +18,9 @@ Example:
 completedLessons: string[];
 ```
 */
-export function RelatedMany(config: RelatedConfig): (value: undefined, context: ClassFieldDecoratorContext) => void {
+export function RelatedMany(
+  config: RelatedConfig,
+): (value: undefined, context: ClassFieldDecoratorContext) => void {
   return function (_value: undefined, context: ClassFieldDecoratorContext): void {
     const propertyKey = memberName(context)
 
@@ -36,9 +38,7 @@ export function RelatedMany(config: RelatedConfig): (value: undefined, context: 
       const entity: Newable | undefined = config.target?.()
 
       if (entity === undefined && !config.fields) {
-        throw new Error(
-          `@RelatedMany on "${propertyKey}" requires either 'fields' or a 'target()'`,
-        )
+        throw new Error(`@RelatedMany on "${propertyKey}" requires either 'fields' or a 'target()'`)
       }
 
       if (entity !== undefined) {

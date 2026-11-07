@@ -8,8 +8,8 @@ import {
   Time as Neo4jTime,
 } from 'neo4j-driver'
 
-import { PropertySchema, PropertyType  } from '../../../src/meta/property-schema'
-import { convertPropertyValue } from '../../../src/utils'
+import { PropertySchema, PropertyType } from '../../../src/meta/property-schema'
+import { convertPropertyValue } from '../../../src/utilities'
 
 function property(type: PropertyType, array: boolean = false): PropertySchema {
   const schema = new PropertySchema('value')

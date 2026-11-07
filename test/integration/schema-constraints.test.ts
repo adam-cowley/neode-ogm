@@ -2,11 +2,11 @@
 // utils <-> neode.service circular init that would otherwise surface
 // when this file's service imports are evaluated first.
 import { openBackend, TestBackend } from './support/backend'
-import SchemaService from '../../src/services/schema/schema.service'
+import { SchemaService } from '../../src/services/schema/schema.service'
 import { inspectSchema } from '../../src/services/schema/inspect.service'
 import { NodeEntity, InternalId, Uuid, Property } from '../../src/decorators'
 import { ConstraintViolationError } from '../../src/errors'
-import Repository from '../../src/repository'
+import { Repository } from '../../src/repository'
 
 // ---- Fixtures (per-file: decorator registry is global per module registry) --
 

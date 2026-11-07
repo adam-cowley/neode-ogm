@@ -1,9 +1,15 @@
 import type { EntitySchema } from '../../meta/entity/entity-schema.js'
-import { applyFakeValues, createNodeAndRelationships, modelPropertyValues } from '../write-utils.js'
+import {
+  applyEmbeddings,
+  applyFakeValues,
+  applyInTransforms,
+  createNodeAndRelationships,
+  modelPropertyValues,
+} from '../write-utilities.js'
 import { validate } from '../../validation/index.js'
-import QueryService from './query.service.js'
+import { QueryService } from './query.service.js'
 
-export default class CreateService extends QueryService {
+export class CreateService extends QueryService {
   /**
   CREATE a node for the given schema and model, recursively creating and
   relating any nested relationship targets
@@ -13,6 +19,15 @@ export default class CreateService extends QueryService {
     // (NTS-444): fake runs before validation, after explicit values and
     // defaults, so validation and the write see the same value
     applyFakeValues(schema, model)
+
+    // Resolve embedding sugar (NTS-449): a vector property declared with
+    // `from` + `provider` computes its vector from the source property
+    // being written, unless the vector itself is explicitly provided
+    await applyEmbeddings(schema, model)
+
+    // Apply `in` transforms (NTS-449): user value -> stored form, before
+    // validation, so validation and the write see the same value
+    await applyInTransforms(schema, model)
 
     // Validate the model's values (defaults resolved, neode parity) before any write
     validate(modelPropertyValues(model, schema), schema)

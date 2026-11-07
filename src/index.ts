@@ -1,5 +1,5 @@
 export { EventType } from './common/events.js'
-export { fromEnv } from './utils.js'
+export { fromEnv } from './from-env.js'
 export {
   NeodeError,
   ConstraintViolationError,
@@ -7,12 +7,12 @@ export {
   classifyError,
   isTransientError,
 } from './errors/index.js'
-export { default as Repository } from './repository/index.js'
-export { default as TransactionalService } from './transaction/transactional.service.js'
-export { registerRepository, getRepository, resolveRepository } from './meta/index.js'
+export { Repository } from './repository/index.js'
+export { TransactionalService } from './transaction/transactional.service.js'
+export { registerRepository, getRepository, resolveRepository } from './meta/repositories.js'
 export { mergeRelationshipProperty } from './meta/index.js'
-export type { RepositoryConstructor } from './meta/index.js'
-export { default as Collection } from './collection.js'
+export type { RepositoryConstructor } from './meta/repositories.js'
+export { Collection } from './collection.js'
 export { toJson, valueToJson } from './serialise.js'
 
 // Active-record instance methods on hydrated entities (P7.2)
@@ -86,9 +86,9 @@ export type { ScoredEntity } from './services/query/search.service.js'
 export { knn } from './services/query/knn.service.js'
 export type { KnnMode } from './services/query/knn.service.js'
 export { toFulltextQuery } from './services/index-support/lucene.js'
-export { default as FulltextIndexService } from './services/schema/fulltext.service.js'
+export { FulltextIndexService } from './services/schema/fulltext.service.js'
 export type { FulltextIndexDefinition } from './services/schema/fulltext.service.js'
-export { default as VectorIndexService } from './services/schema/vector.service.js'
+export { VectorIndexService } from './services/schema/vector.service.js'
 export type { VectorIndexDefinition } from './services/schema/vector.service.js'
 export { inspectSchema } from './services/schema/inspect.service.js'
 export type {
@@ -99,9 +99,9 @@ export type {
 } from './services/schema/inspect.service.js'
 
 // Bulk writes + pagination (NTS-125/126)
-export { default as BulkService } from './services/query/bulk.service.js'
+export { BulkService } from './services/query/bulk.service.js'
 export type { BulkChunk, BulkOptions } from './services/query/bulk.service.js'
-export { default as PaginateService } from './services/query/paginate.service.js'
+export { PaginateService } from './services/query/paginate.service.js'
 export type {
   Page,
   CursorPage,
@@ -152,9 +152,15 @@ export type {
 } from './meta/ontology.js'
 
 // Factories & seeding (NTS-444)
-export { default as FactoryBuilder } from './services/factory.service.js'
+export { FactoryBuilder } from './services/factory.service.js'
 export type { FactoryWithSpec } from './services/factory.service.js'
+
+// Vector model metadata (NTS-447)
+export type { VectorConfig } from './meta/schema-definition.interface.js'
+
+// Embedding transforms (NTS-449)
+export type { TransformConfig } from './meta/schema-definition.interface.js'
 
 export * from './decorators/index.js'
 
-export { default } from './neode.service.js'
+export { Neode as default } from './neode.service.js'

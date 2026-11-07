@@ -11,7 +11,7 @@ import {
 } from '../../../src/meta/map-schema'
 import { PropertyType } from '../../../src/meta/property-schema'
 import { Direction } from '../../../src/query'
-import Neode from '../../../src/neode.service'
+import { Neode } from '../../../src/neode.service'
 
 // The registry is global per module graph: use unique names per test
 describe('map-schema', () => {

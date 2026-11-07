@@ -1,38 +1,64 @@
 import { Builder } from '../../query/index.js'
 import { getModel } from '../../meta/index.js'
-import type { EntitySchema } from '../../meta/entity/entity-schema.js'
-import type { Newable } from '../../meta/newable.js'
+import { EntitySchema } from '../../meta/entity/entity-schema.js'
+import type { EntitySchema as EntitySchemaType } from '../../meta/entity/entity-schema.js'
 import type { RelationshipPropertySchema } from '../../meta/relationship-property-schema.js'
-import { elementIdOfEntity, matchCriteriaForEntity } from '../../utils.js'
-import FindByIdService from './find-by-id.service.js'
-import QueryService from './query.service.js'
+import { elementIdOfEntity } from '../../element-id.js'
+import { matchCriteriaForEntity } from '../../utilities.js'
+import { FindByIdService } from './find-by-id.service.js'
+import { QueryService } from './query.service.js'
+import { NeodeError } from '../../errors/index.js'
+import { constructorOf } from '../type-guards.js'
 
 export interface DetachResult<From, To> {
   from: From | undefined
   to: To | undefined
 }
 
-export default class DetachService extends QueryService {
+export class DetachService extends QueryService {
+  /**
+  Re-hydrate an entity by its elementId
+  */
+  private async refresh<T extends object>(
+    schema: EntitySchemaType,
+    entity: T,
+  ): Promise<T | undefined> {
+    const elementId = elementIdOfEntity(schema, entity)
+
+    const constructor = constructorOf(entity)
+
+    return constructor === undefined || elementId === undefined || elementId.length === 0
+      ? undefined
+      : new FindByIdService(this.runner).find<T>(constructor, schema, elementId)
+  }
+
   /**
   Remove the relationship(s) of the given type between two nodes
   (neode DetachFrom.js, narrowed to the relationship type and
   direction declared on the schema) and return both re-hydrated nodes.
   */
   async detach<From extends object, To extends object>(
-    schema: EntitySchema,
+    schema: EntitySchemaType,
     fromEntity: From,
     toEntity: To,
-    rel: RelationshipPropertySchema,
+    relationship: RelationshipPropertySchema,
   ): Promise<DetachResult<From, To>> {
+    const toConstructor: unknown = constructorOf(toEntity)
+
+    const targetSchema = typeof toConstructor === 'function' ? getModel(toConstructor) : undefined
+
+    if (!(targetSchema instanceof EntitySchema)) {
+      // NTS-446: name the relationship, what was received, and the fix
+      throw new NeodeError(
+        `Couldn't find a model for the target of relationship "${relationship.getKey()}" ` +
+          `— received "${typeof toConstructor === 'function' ? toConstructor.name : String(toConstructor)}". ` +
+          'Register the target model with @NodeEntity or defineModel() first.',
+      )
+    }
+
     const fromAlias = 'from'
     const toAlias = 'to'
-    const relAlias = 'rel'
-
-    const targetSchema = getModel((toEntity as Record<string, unknown>).constructor)
-
-    if (!targetSchema) {
-      throw new Error(`Couldn't find a model for the target of relationship "${rel.getKey()}"`)
-    }
+    const relationshipAlias = 'rel'
 
     const fromMatch = matchCriteriaForEntity(schema, fromEntity)
     const toMatch = matchCriteriaForEntity(targetSchema, toEntity)
@@ -41,11 +67,11 @@ export default class DetachService extends QueryService {
 
     builder.matchEntity(fromAlias, schema, fromMatch)
 
-    builder.relationship(rel.getType(), rel.getDirection(), relAlias)
+    builder.relationship(relationship.getType(), relationship.getDirection(), relationshipAlias)
 
     builder.toEntity(toAlias, targetSchema, toMatch)
 
-    builder.delete(relAlias)
+    builder.delete(relationshipAlias)
 
     const { query, params } = builder.build()
 
@@ -55,18 +81,5 @@ export default class DetachService extends QueryService {
       from: await this.refresh<From>(schema, fromEntity),
       to: await this.refresh<To>(targetSchema, toEntity),
     }
-  }
-
-  /**
-  Re-hydrate an entity by its elementId
-  */
-  private async refresh<T extends object>(schema: EntitySchema, entity: T): Promise<T | undefined> {
-    const elementId = elementIdOfEntity(schema, entity)
-
-    const constructor = (entity as Record<string, unknown>).constructor as Newable | undefined
-
-    return elementId && constructor ? (new FindByIdService(this.runner).find(constructor, schema, elementId) as Promise<
-      T | undefined
-    >) : undefined;
   }
 }

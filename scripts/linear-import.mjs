@@ -35,7 +35,9 @@ async function mcp(sessionId, method, parameters) {
     Accept: 'application/json, text/event-stream',
     Authorization: `Bearer ${LINEAR_API_KEY}`,
   }
-  if (sessionId) {headers['mcp-session-id'] = sessionId}
+  if (sessionId) {
+    headers['mcp-session-id'] = sessionId
+  }
 
   const response = await fetch(MCP_URL, {
     method: 'POST',
@@ -44,7 +46,9 @@ async function mcp(sessionId, method, parameters) {
   })
 
   const newSession = response.headers.get('mcp-session-id')
-  if (newSession) {mcp.sessionId = newSession}
+  if (newSession) {
+    mcp.sessionId = newSession
+  }
 
   const contentType = response.headers.get('content-type') || ''
   const body = await response.text()
@@ -351,7 +355,9 @@ async function main() {
   )
 
   const team = teamData.teams.nodes[0]
-  if (!team) {throw new Error(`Team ${TEAM_KEY} not found`)}
+  if (!team) {
+    throw new Error(`Team ${TEAM_KEY} not found`)
+  }
 
   const states = teamData.workflowStates.nodes
   const doneState =
@@ -378,8 +384,12 @@ async function main() {
     const phaseMatch = issue.title.match(/^Phase (\d):/)
     const taskMatch = issue.title.match(/^(P\d+\.\d+)\s*[—–-]/)
 
-    if (phaseMatch) {issueIds[`P${phaseMatch[1]}`] = issue.id}
-    if (taskMatch) {issueIds[taskMatch[1]] = issue.id}
+    if (phaseMatch) {
+      issueIds[`P${phaseMatch[1]}`] = issue.id
+    }
+    if (taskMatch) {
+      issueIds[taskMatch[1]] = issue.id
+    }
   }
 
   console.log(`▸ Found ${Object.keys(issueIds).length} existing issues on team ${TEAM_KEY}`)

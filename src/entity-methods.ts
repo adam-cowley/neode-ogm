@@ -11,60 +11,74 @@ performing the query (QueryService hands it only schemas and classes), so
 methods resolve a module-level default at call time. Set it explicitly
 with setDefaultNeode(); the most recently set instance wins.
 */
-import type Neode from './neode.service.js'
+
+import type { GraphRelationship } from './driver/types.js'
+import { elementIdOfEntity } from './element-id.js'
+import { getModel } from './meta/index.js'
 import type { Newable } from './meta/newable.js'
+import type { Neode } from './neode.service.js'
+import { toJson } from './serialise.js'
 import type { DeleteOptions } from './services/query/delete.service.js'
 import type { DetachResult } from './services/query/detach.service.js'
-import type { GraphRelationship } from './driver/types.js'
-import { getModel } from './meta/index.js'
-import { elementIdOfEntity } from './utils.js'
-import { toJson } from './serialise.js'
+import { constructorOf as constructorOfInstance } from './services/type-guards.js'
 
 /**
-The Neode instance that entity instance methods operate against.
+The Neode instance that entity instance methods operate against, held in
+an object so no module-level binding is ever reassigned from a function.
 
 shortcut: last-set-wins — multiple Neode instances cannot be addressed
 from instance methods; upgrade by threading the instance through hydration.
 */
-let defaultNeode: Neode | undefined
+const defaultNeodeHolder: { neode: Neode | undefined } = { neode: undefined }
 
 /**
 Set the Neode instance used by entity instance methods
 (`person.save()`, `person.relateTo(...)`, ...).
 */
 export function setDefaultNeode(neode: Neode): void {
-  defaultNeode = neode
+  defaultNeodeHolder.neode = neode
 }
 
 function requireNeode(): Neode {
-  if (!defaultNeode) {
+  const neode = defaultNeodeHolder.neode
+
+  if (neode === undefined) {
     throw new Error(
       'No Neode instance available for entity instance methods — call setDefaultNeode(neode) first',
     )
   }
 
-  return defaultNeode
+  return neode
 }
 
-function constructorOf(entity: object): new (...arguments_: never[]) => object {
-  return (entity as { constructor: unknown }).constructor as new (
-    ...arguments_: never[]
-  ) => object
+/**
+The constructor of an entity instance — always defined for class
+instances, but the guard keeps the unknown boundary checked.
+*/
+function requireConstructor(entity: object): Newable {
+  const found = constructorOfInstance(entity)
+
+  if (found === undefined) {
+    throw new Error('Entity has no constructor — cannot resolve its model')
+  }
+
+  return found
 }
 
 /**
 The elementId of a hydrated entity
 */
 function elementIdOf(entity: object): string {
-  const schema = getModel(constructorOf(entity))
+  const constructor: unknown = requireConstructor(entity)
+  const schema = getModel(constructor)
 
-  if (!schema) {
+  if (schema === undefined) {
     throw new Error('Entity is not a registered model — cannot resolve its elementId')
   }
 
   const elementId = elementIdOfEntity(schema, entity)
 
-  if (!elementId) {
+  if (elementId === undefined) {
     throw new Error('Entity has no elementId — save() it before changing its labels')
   }
 
@@ -83,9 +97,9 @@ async function changeLabel(entity: object, label: string, verb: 'SET' | 'REMOVE'
     elementId,
   })
 
-  const hydrated = await neode.findById(constructorOf(entity), elementId)
+  const hydrated = await neode.findById(requireConstructor(entity), elementId)
 
-  if (hydrated) {
+  if (hydrated !== undefined && hydrated !== null) {
     Object.assign(entity, hydrated)
   }
 
@@ -129,11 +143,11 @@ export interface EntityMethods {
   Relate this entity to another saved entity, resolving the
   relationship by its key on this entity's schema
   */
-  relateTo<To extends object>(
-    other: To,
+  relateTo(
+    other: object,
     relationshipKey: string,
     properties?: Record<string, unknown>,
-    forceCreate?: boolean,
+    shouldForceCreate?: boolean,
   ): Promise<GraphRelationship | undefined>
 
   /**
@@ -170,7 +184,7 @@ interface MethodImpl {
     other: object,
     relationshipKey: string,
     properties?: Record<string, unknown>,
-    forceCreate?: boolean,
+    shouldForceCreate?: boolean,
   ): Promise<GraphRelationship | undefined>
   detachFrom(
     this: object,
@@ -193,7 +207,7 @@ const methods: MethodImpl = {
   async update(this, properties = {}) {
     const hydrated = await requireNeode().update(this, properties)
 
-    if (hydrated) {
+    if (hydrated !== undefined) {
       Object.assign(this, hydrated)
     }
 
@@ -201,12 +215,11 @@ const methods: MethodImpl = {
   },
 
   async delete(this, options) {
-    const soft =
-      options && typeof options === 'object' ? (options).soft : undefined
+    const soft = typeof options === 'object' ? options.soft : undefined
 
     // Labels-as-state: SET the soft-delete label instead of deleting,
     // returning the refreshed entity
-    if (soft) {
+    if (soft !== undefined && soft !== '') {
       return changeLabel(this, soft, 'SET')
     }
 
@@ -223,23 +236,37 @@ const methods: MethodImpl = {
     return changeLabel(this, label, 'REMOVE')
   },
 
-  async relateTo(this, other, relationshipKey, properties = {}, forceCreate = false) {
+  async relateTo(this, other, relationshipKey, properties = {}, shouldForceCreate = false) {
     return requireNeode().relate(
-      constructorOf(this),
+      requireConstructor(this),
       this,
       other,
       relationshipKey,
       properties,
-      forceCreate,
+      shouldForceCreate,
     )
   },
 
   async detachFrom(this, other, relationshipKey) {
-    return requireNeode().detach(constructorOf(this), this, other, relationshipKey)
+    return requireNeode().detach(requireConstructor(this), this, other, relationshipKey)
   },
 }
 
 const METHODS_APPLIED = Symbol('neode:entity-methods-applied')
+
+/**
+The prototype a class's methods are defined on. Constructor types expose
+it as `any` — the runtime check is the checked edge.
+*/
+function prototypeOf(constructor: Newable): object {
+  const prototype: unknown = constructor.prototype
+
+  if (typeof prototype !== 'object' || prototype === null) {
+    throw new TypeError('applyEntityMethods expects a class constructor')
+  }
+
+  return prototype
+}
 
 /**
 Wire the instance methods onto an entity class's PROTOTYPE (idempotent:
@@ -247,11 +274,11 @@ applied once per constructor, at first hydration or by explicit call).
 Methods the user class already defines are left untouched.
 */
 export function applyEntityMethods(constructor: Newable, neode?: Neode): void {
-  if (neode) {
+  if (neode !== undefined) {
     setDefaultNeode(neode)
   }
 
-  const prototype = (constructor as unknown as { prototype: object }).prototype
+  const prototype = prototypeOf(constructor)
 
   if (Object.hasOwn(prototype, METHODS_APPLIED)) {
     return
@@ -259,7 +286,7 @@ export function applyEntityMethods(constructor: Newable, neode?: Neode): void {
 
   for (const [name, function_] of Object.entries(methods)) {
     // A user-defined method wins — partial adoption, no clobbering
-    if (name in prototype) {
+    if (Reflect.has(prototype, name)) {
       continue
     }
 

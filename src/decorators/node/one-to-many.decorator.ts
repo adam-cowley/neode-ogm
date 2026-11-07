@@ -7,7 +7,7 @@ export function OneToMany(
   entity: () => Newable,
   type?: string,
   direction?: Direction,
-  eager?: boolean,
+  isEager?: boolean,
   description?: string,
 ): (value: undefined, context: ClassFieldDecoratorContext) => void {
   return function (_value: undefined, context: ClassFieldDecoratorContext): void {
@@ -22,7 +22,7 @@ export function OneToMany(
         entity(),
         direction ?? Direction.BOTH,
         true,
-        eager,
+        isEager,
         description,
       )
     })

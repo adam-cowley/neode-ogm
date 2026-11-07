@@ -1,15 +1,16 @@
-import type { Newable } from '../../meta/newable.js'
 import { Builder } from '../../query/index.js'
 import { THIS_NODE } from '../../constants.js'
-import type { GraphNode, QueryParams as QueryParameters } from '../../driver/types.js'
+import type { QueryParams as QueryParameters, QueryRecord } from '../../driver/types.js'
 import { hydrate } from '../../hydrate.js'
 import { valueToJson } from '../../serialise.js'
 import type { EntitySchema } from '../../meta/entity/entity-schema.js'
-import type { PropertySchema } from '../../meta/property-schema.js';
+import type { PropertySchema } from '../../meta/property-schema.js'
 import { PropertyType } from '../../meta/property-schema.js'
-import QueryService from './query.service.js'
+import { QueryService } from './query.service.js'
 import { type OrderSpec, applyOrder } from './get.service.js'
+import { NeodeError } from '../../errors/index.js'
 import { labelPattern } from './bulk.service.js'
+import { isGraphNode } from '../type-guards.js'
 
 /**
 Property the cursor keyset defaults to when orderBy is not given
@@ -91,35 +92,20 @@ export interface CursorPage<T> {
   hasMore: boolean
 }
 
+// Property type -> Cypher cast function for cursor comparisons
+const TEMPORAL_CASTS: Partial<Record<PropertyType, string>> = {
+  [PropertyType.DATE]: 'date',
+  [PropertyType.TIME]: 'time',
+  [PropertyType.DATETIME]: 'datetime',
+  [PropertyType.LOCALTIME]: 'localtime',
+  [PropertyType.LOCALDATETIME]: 'localdatetime',
+}
+
 /**
 The Cypher cast that turns a plain param into the property's temporal type
 */
-export function temporalCastFn(type: PropertyType): string | undefined {
-  switch (type) {
-    case PropertyType.DATE: {
-      return 'date'
-    }
-
-    case PropertyType.TIME: {
-      return 'time'
-    }
-
-    case PropertyType.DATETIME: {
-      return 'datetime'
-    }
-
-    case PropertyType.LOCALTIME: {
-      return 'localtime'
-    }
-
-    case PropertyType.LOCALDATETIME: {
-      return 'localdatetime'
-    }
-
-    default: {
-      return undefined
-    }
-  }
+export function temporalCastFunction(type: PropertyType): string | undefined {
+  return TEMPORAL_CASTS[type]
 }
 
 /**
@@ -151,8 +137,8 @@ export function toCursorValue(
 }
 
 function requireLimit(limit: unknown): number {
-  if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1) {
-    throw new Error(`limit must be a positive integer, received ${limit}`)
+  if (typeof limit !== 'number' || !Number.isSafeInteger(limit) || limit < 1) {
+    throw new NeodeError(`limit must be a positive integer, received ${String(limit)}`)
   }
 
   return limit
@@ -185,37 +171,12 @@ Two modes, selected by the options shape:
    temporal property (`WHERE this.createdAt > datetime($cursor)`),
    returning { items, nextCursor, hasMore }
 */
-export default class PaginateService extends QueryService {
-  async paginate<T>(
-    constructor: Newable,
-    schema: EntitySchema,
-    filter: Record<string, unknown> = {},
-    options: PaginateOptions,
-  ): Promise<Page<T> | CursorPage<T>> {
-    const limit = requireLimit((options as { limit?: unknown }).limit)
-
-    if ('page' in options) {
-      if ('after' in options || 'before' in options) {
-        throw new Error('paginate accepts either page or after/before, not both')
-      }
-
-      return this.offsetPage<T>(
-        constructor,
-        schema,
-        filter,
-        options,
-        limit,
-      )
-    }
-
-    return this.cursorPage<T>(constructor, schema, filter, options, limit)
-  }
-
+export class PaginateService extends QueryService {
   /**
   Data query + COUNT query, two autocommit reads
   */
   private async offsetPage<T>(
-    constructor: Newable,
+    constructor: new (...arguments_: never[]) => T,
     schema: EntitySchema,
     filter: Record<string, unknown>,
     options: OffsetPaginateOptions,
@@ -223,8 +184,8 @@ export default class PaginateService extends QueryService {
   ): Promise<Page<T>> {
     const page = options.page ?? 1
 
-    if (!Number.isInteger(page) || page < 1) {
-      throw new Error(`page must be a positive integer, received ${page}`)
+    if (!Number.isSafeInteger(page) || page < 1) {
+      throw new NeodeError(`page must be a positive integer, received ${String(page)}`)
     }
 
     // Data query — hydrated through the shared eager-aware return path
@@ -263,65 +224,68 @@ export default class PaginateService extends QueryService {
   cast (src/query is upstream of this service)
   */
   private async cursorPage<T>(
-    constructor: Newable,
+    constructor: new (...arguments_: never[]) => T,
     schema: EntitySchema,
     filter: Record<string, unknown>,
     options: CursorPaginateOptions,
     limit: number,
   ): Promise<CursorPage<T>> {
     if (options.after !== undefined && options.before !== undefined) {
-      throw new Error('paginate accepts either after or before, not both')
+      throw new NeodeError('paginate accepts either after or before, not both')
     }
 
     const key = options.orderBy ?? DEFAULT_CURSOR_PROPERTY
 
     const property = schema.getProperties().find((candidate) => candidate.getKey() === key)
 
-    if (!property) {
-      throw new Error(
+    if (property === undefined) {
+      throw new NeodeError(
         `Unknown cursor property "${key}" on ${schema.getLabels().join(':') || 'entity'}`,
       )
     }
 
-    const cast = temporalCastFn(property.getType())
+    const cast = temporalCastFunction(property.getType())
 
     // Forward walks after a cursor; backward walks before one. Items
     // come back ascending either way
     const isForward = options.before === undefined
+
     const cursor = isForward ? options.after : options.before
 
     const parameters: QueryParameters = {}
-    const conds: string[] = []
+    const conditions: string[] = []
 
     for (const candidate of schema.getProperties()) {
       const filterKey = candidate.getKey()
 
-      if (Object.hasOwn(filter, filterKey)) {
-        const parameter = `filter_${filterKey.replaceAll(/[^a-z0-9]+/gi, '_')}`
-
-        parameters[parameter] = filter[filterKey]
-        conds.push(`${THIS_NODE}.${filterKey} = $${parameter}`)
+      if (!Object.hasOwn(filter, filterKey)) {
+        continue
       }
+
+      const parameter = `filter_${filterKey.replaceAll(/[^a-z0-9]+/gi, '_')}`
+
+      parameters[parameter] = filter[filterKey]
+      conditions.push(`${THIS_NODE}.${filterKey} = $${parameter}`)
     }
 
     if (cursor !== undefined) {
       parameters['cursor'] = toCursorValue(cursor, property)
 
       const comparison = isForward ? '>' : '<'
-      const value = cast ? `${cast}($cursor)` : '$cursor'
+      const value = cast === undefined ? '$cursor' : `${cast}($cursor)`
 
-      conds.push(`${THIS_NODE}.${key} ${comparison} ${value}`)
+      conditions.push(`${THIS_NODE}.${key} ${comparison} ${value}`)
     }
 
     const query = [
       `MATCH (${THIS_NODE}${labelPattern(schema.getLabels())})`,
-      conds.length > 0 ? `WHERE ${conds.join(' AND ')}` : '',
+      conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '',
       `ORDER BY ${THIS_NODE}.${key} ${isForward ? 'ASC' : 'DESC'}`,
       // One row over the page size answers hasMore
-      `LIMIT ${limit + 1}`,
+      `LIMIT ${String(limit + 1)}`,
       `RETURN ${THIS_NODE}`,
     ]
-      .filter((line) => line.length)
+      .filter((line) => line.length > 0)
       .join('\n')
 
     const output = await this.runner.run(query, parameters)
@@ -330,26 +294,48 @@ export default class PaginateService extends QueryService {
 
     const pageRecords = hasMore ? output.records.slice(0, limit) : output.records
 
-    // Backward walks fetch descending; items are returned ascending
-    const ordered = isForward ? pageRecords : [...pageRecords].reverse()
+    // Backward walks fetch descending; items are returned ascending.
+    // (Array#toReversed is outside the ES2022 lib target.)
+    const ordered = isForward
+      ? pageRecords
+      : pageRecords.reduceRight<QueryRecord[]>((records, record) => {
+          records.push(record)
 
-    const items = hydrate<T>(
-      constructor as new (
-        ...arguments_: never[]
-      ) => T,
-      { records: ordered },
-      THIS_NODE,
-    )
+          return records
+        }, [])
+
+    const items = hydrate<T>(constructor, { records: ordered }, THIS_NODE)
 
     // The boundary item of the walk: forward, the newest row fetched;
     // backward, the oldest (the first row of the ascending items)
     const boundary = ordered[isForward ? ordered.length - 1 : 0]
 
+    const boundaryNode = boundary === undefined ? undefined : boundary.get(THIS_NODE)
+
     const nextCursor =
-      hasMore && boundary
-        ? toCursorValue((boundary.get(THIS_NODE) as GraphNode).properties[key], property)
+      hasMore && isGraphNode(boundaryNode)
+        ? toCursorValue(boundaryNode.properties[key], property)
         : undefined
 
     return { items, nextCursor, hasMore }
+  }
+
+  async paginate<T>(
+    constructor: new (...arguments_: never[]) => T,
+    schema: EntitySchema,
+    filter: Record<string, unknown> = {},
+    options: PaginateOptions,
+  ): Promise<Page<T> | CursorPage<T>> {
+    const limit = requireLimit((options as { limit?: unknown }).limit)
+
+    if ('page' in options) {
+      if ('after' in options || 'before' in options) {
+        throw new NeodeError('paginate accepts either page or after/before, not both')
+      }
+
+      return this.offsetPage<T>(constructor, schema, filter, options, limit)
+    }
+
+    return this.cursorPage<T>(constructor, schema, filter, options, limit)
   }
 }

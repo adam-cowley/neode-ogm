@@ -7,8 +7,8 @@ import { ValidationError } from '../../src/validation/validation-error'
 // (neode.service → query.service) that query.service's own imports loop
 // back into, so the service's direct import resolves a completed module
 import { openBackend, TestBackend } from './support/backend'
-import UpdateService from '../../src/services/query/update.service'
-import MergeService from '../../src/services/query/merge.service'
+import { UpdateService } from '../../src/services/query/update.service'
+import { MergeService } from '../../src/services/query/merge.service'
 import { EntitySchema } from '../../src/meta/entity/entity-schema'
 
 // ---- Fixtures (per-file: decorator registry is global per module registry) --

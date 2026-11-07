@@ -1,9 +1,10 @@
 import type { Runner } from '../../driver/types.js'
-import type { WithMethods } from '../../entity-methods.js'
 import { hydrate } from '../../hydrate.js'
 import { getModel } from '../../meta/index.js'
 import { EntitySchema } from '../../meta/entity/entity-schema.js'
 import { type ScoredEntity, type ModelInput, resolveModel } from './search.service.js'
+import { isConstructorOf } from '../type-guards.js'
+import { isTransientError, NeodeError } from '../../errors/index.js'
 
 /**
 Which query form to use for the kNN search
@@ -79,47 +80,62 @@ export async function knn<T>(
     )
   }
 
-  if (!Number.isInteger(k) || k <= 0) {
+  if (!Number.isSafeInteger(k) || k <= 0) {
     throw new TypeError('Cannot run a kNN search: k must be a positive integer')
   }
 
   // The label scopes the MATCH; a vector index itself targets one label
   const schema = model instanceof EntitySchema ? model : getModel(model)
 
-  if (!schema) {
-    throw new Error('Cannot run a kNN search: no registered model found for the given constructor')
+  if (!(schema instanceof EntitySchema)) {
+    throw new TypeError(
+      'Cannot run a kNN search: no registered model found for the given constructor',
+    )
   }
 
   const label = schema.getLabels()[0]
 
-  if (!label) {
-    throw new Error('Cannot run a kNN search: the schema has no label to match against')
+  if (label === undefined) {
+    throw new NeodeError('Cannot run a kNN search: the schema has no label to match against')
   }
 
   const constructor = resolveModel(model)
+
+  // resolveModel guarantees a constructor; the guard names the constructed
+  // type for the generic hydrate call
+  if (!isConstructorOf<T>(constructor)) {
+    throw new TypeError('Cannot run a kNN search: the model is not a constructor')
+  }
+
   const parameters = { index: indexName, k, vector }
 
   const runForm = async (statement: string): Promise<ScoredEntity<T>[]> => {
     const output = await runner.run(statement, parameters)
 
-    // hydrate() keeps only records carrying a node under the alias, in order
-    const entities = hydrate<T>(constructor as new (...arguments_: never[]) => T, output, NODE_ALIAS)
+    const nodeRows = output.records.filter((row) => hasNode(row))
 
-    return output.records
-      .filter((row) => row.has(NODE_ALIAS) && row.get(NODE_ALIAS) != null)
-      .map((row, index) => ({
-        entity: entities[index],
-        score: row.get('score') as number,
-      }))
-      .filter((item): item is { entity: WithMethods<T>; score: number } => item.entity !== undefined)
+    // hydrate() keeps only records carrying a node under the alias, in order
+    const entities = hydrate<T>(constructor, output, NODE_ALIAS)
+
+    return entities.map((entity, index) => {
+      const row = nodeRows[index]
+
+      if (row === undefined) {
+        throw new NeodeError('kNN result rows and hydrated entities are misaligned')
+      }
+
+      return { entity, score: scoreOf(row) }
+    })
   }
 
   if (mode === 'procedure') {
-    return runForm(knnProcedureStatement())
+    return runWithIndexHint(indexName, async () => runForm(knnProcedureStatement()))
   }
 
   if (mode === 'search-clause') {
-    return runForm(knnSearchClauseStatement(label, indexName))
+    return runWithIndexHint(indexName, async () =>
+      runForm(knnSearchClauseStatement(label, indexName)),
+    )
   }
 
   let searchClauseError: unknown
@@ -133,10 +149,70 @@ export async function knn<T>(
   try {
     return await runForm(knnProcedureStatement())
   } catch (procedureError) {
-    throw new Error(
+    throw new NeodeError(
       'Cannot run a kNN search: the backend supports neither the Cypher 25 SEARCH clause ' +
-        `(${(searchClauseError as Error).message}) ` +
-        `nor the db.index.vector.queryNodes procedure (${(procedureError as Error).message})`,
+        `(${errorMessage(searchClauseError)}) ` +
+        `nor the db.index.vector.queryNodes procedure (${errorMessage(procedureError)}). ` +
+        'Ensure the vector index exists — did you run installSchema()?',
+      { cause: procedureError instanceof Error ? procedureError : undefined },
     )
   }
+}
+
+/**
+Run one kNN query form, naming the index and the installSchema() fix when
+the backend rejects the statement (most commonly: the index does not
+exist yet). Transient failures keep their typed identity — retry logic
+keys on it (NTS-446).
+*/
+async function runWithIndexHint<T>(
+  indexName: string,
+  run: () => Promise<ScoredEntity<T>[]>,
+): Promise<ScoredEntity<T>[]> {
+  try {
+    return await run()
+  } catch (error) {
+    if (isTransientError(error)) {
+      throw error
+    }
+
+    throw new NeodeError(
+      `kNN search over index "${indexName}" failed — ${errorMessage(error)}. ` +
+        'Ensure the vector index exists — did you run installSchema()?',
+      { cause: error instanceof Error ? error : undefined },
+    )
+  }
+}
+
+/**
+The message of a thrown value (thrown non-Errors have none)
+*/
+
+/**
+The message of a thrown value (thrown non-Errors have none)
+*/
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+/**
+True while the row carries a node value under the alias
+*/
+function hasNode(row: { has(key: string): boolean; get(key: string): unknown }): boolean {
+  if (!row.has(NODE_ALIAS)) {
+    return false
+  }
+
+  const node: unknown = row.get(NODE_ALIAS)
+
+  return node !== null && node !== undefined
+}
+
+/**
+The similarity score of a row (a float from the backend)
+*/
+function scoreOf(row: { get(key: string): unknown }): number {
+  const score: unknown = row.get('score')
+
+  return typeof score === 'number' ? score : Number(score)
 }

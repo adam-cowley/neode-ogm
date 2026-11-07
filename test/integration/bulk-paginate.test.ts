@@ -11,8 +11,8 @@ import {
 import { Direction } from '../../src/query'
 import { getModel } from '../../src/meta'
 import { ValidationError } from '../../src/validation'
-import BulkService from '../../src/services/query/bulk.service'
-import PaginateService from '../../src/services/query/paginate.service'
+import { BulkService } from '../../src/services/query/bulk.service'
+import { PaginateService } from '../../src/services/query/paginate.service'
 
 // ---- Fixtures (per-file: decorator registry is global per module registry) --
 

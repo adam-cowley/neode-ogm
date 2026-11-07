@@ -1,13 +1,20 @@
 import type { Newable } from '../meta/newable.js'
-import { Direction } from '../query/index.js'
-import type { PropertyType } from './property-schema.js'
-import type { PropertySchema } from './property-schema.js'
+// Import Direction from its leaf module: the query barrel pulls the eager
+// utilities, which pull the metamodel back in (dependency cycle)
+import { Direction } from '../query/direction.js'
+import type { PropertySchema, PropertyType } from './property-schema.js'
 
 export type RelationshipType =
   | (typeof PropertyType)['ONE_TO_ONE']
   | (typeof PropertyType)['ONE_TO_MANY']
 
 export class RelationshipPropertySchema {
+  static fromPropertySchema(original: PropertySchema): RelationshipPropertySchema {
+    const cloned = new RelationshipPropertySchema(original.getKey())
+
+    return cloned
+  }
+
   private readonly key: string
   private type!: string
   private direction!: Direction
@@ -22,12 +29,6 @@ export class RelationshipPropertySchema {
 
   constructor(key: string) {
     this.key = key
-  }
-
-  static fromPropertySchema(original: PropertySchema): RelationshipPropertySchema {
-    const cloned = new RelationshipPropertySchema(original.getKey())
-
-    return cloned
   }
 
   getKey(): string {
@@ -58,16 +59,16 @@ export class RelationshipPropertySchema {
     return this.target
   }
 
-  setMany(many: boolean): void {
-    this.many = many
+  setMany(isMany: boolean): void {
+    this.many = isMany
   }
 
   getMany(): boolean {
     return this.many
   }
 
-  setEager(eager: boolean): void {
-    this.eager = eager
+  setEager(isEager: boolean): void {
+    this.eager = isEager
   }
 
   getEager(): boolean {
@@ -82,7 +83,7 @@ export class RelationshipPropertySchema {
     return this.description
   }
 
-  toString(relAlias = ''): string {
-    return `${this.direction === Direction.INCOMING ? '<' : ''}-[${relAlias}:${this.type}]-${this.direction === Direction.OUTGOING ? '>' : ''}`
+  toString(relationshipAlias = ''): string {
+    return `${this.direction === Direction.INCOMING ? '<' : ''}-[${relationshipAlias}:${this.type}]-${this.direction === Direction.OUTGOING ? '>' : ''}`
   }
 }

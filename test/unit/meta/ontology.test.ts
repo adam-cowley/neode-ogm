@@ -3,7 +3,7 @@ import { getModel } from '../../../src/meta'
 import { defineModel, extendModel } from '../../../src/meta/map-schema'
 import { ontology, ontologyMarkdown } from '../../../src/meta/ontology'
 import { Direction } from '../../../src/query'
-import Neode from '../../../src/neode.service'
+import { Neode } from '../../../src/neode.service'
 
 // The registry is global per module graph: use unique names per test
 function findEntity(name: string) {

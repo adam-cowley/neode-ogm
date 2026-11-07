@@ -1,12 +1,12 @@
-import NeodeError from './neode-error.js'
+import { NeodeError } from './neode-error.js'
 
 /**
 A transient failure (`Neo.TransientError.*` codes, or the driver's /
 engine's own `retryable` verdict): retrying the operation may succeed.
-`isRetryable` is baked in by the code classification — a TransientError
-is only ever created for a retryable failure.
+`isRetryable` is baked in by the code classification — a TransientError is
+only ever created for a retryable failure.
 */
-export default class TransientError extends NeodeError {
+export class TransientError extends NeodeError {
   readonly isRetryable = true
   readonly code: string | undefined
 

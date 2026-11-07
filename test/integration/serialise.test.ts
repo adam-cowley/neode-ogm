@@ -10,7 +10,7 @@ import {
   OneToMany,
 } from '../../src/decorators'
 import { Direction } from '../../src/query'
-import Collection from '../../src/collection'
+import { Collection } from '../../src/collection'
 import { toJson } from '../../src/serialise'
 import { openBackend, TestBackend } from './support/backend'
 

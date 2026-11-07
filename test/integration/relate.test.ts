@@ -14,9 +14,9 @@ import {
 import { Direction } from '../../src/query'
 import { getModel } from '../../src/meta'
 import { EntitySchema } from '../../src/meta/entity/entity-schema'
-import DetachService from '../../src/services/query/detach.service'
-import RelateService from '../../src/services/query/relate.service'
-import RelationshipService from '../../src/services/query/relationship.service'
+import { DetachService } from '../../src/services/query/detach.service'
+import { RelateService } from '../../src/services/query/relate.service'
+import { RelationshipService } from '../../src/services/query/relationship.service'
 
 // ---- Fixtures (per-file: decorator registry is global per module registry) --
 //

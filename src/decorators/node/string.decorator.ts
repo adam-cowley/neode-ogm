@@ -8,7 +8,9 @@ Register a string property.
 
 @deprecated Use `@Property({ type: 'string' })` instead — `@String` shadows the global `String` type.
 */
-export function String(config?: PropertyConfig): (value: undefined, context: ClassFieldDecoratorContext) => void {
+export function String(
+  config?: PropertyConfig,
+): (value: undefined, context: ClassFieldDecoratorContext) => void {
   return function (_value: undefined, context: ClassFieldDecoratorContext): void {
     const propertyKey = memberName(context)
 

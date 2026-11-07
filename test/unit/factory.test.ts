@@ -1,4 +1,4 @@
-import Neode from '../../src/neode.service'
+import { Neode } from '../../src/neode.service'
 import { defineModel } from '../../src/meta/map-schema'
 import { NodeEntity, InternalId, Uuid, String, OneToMany } from '../../src/decorators'
 import { Direction } from '../../src/query'

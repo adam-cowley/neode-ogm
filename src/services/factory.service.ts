@@ -1,9 +1,12 @@
 import type { EntitySchema } from '../meta/entity/entity-schema.js'
+import { EntitySchema as EntitySchemaClass } from '../meta/entity/entity-schema.js'
 import { getModel } from '../meta/index.js'
 import type { Newable } from '../meta/newable.js'
 import { getModelByName, unknownDefinitionError } from '../meta/map-schema.js'
-import type Neode from '../neode.service.js'
+import type { Neode } from '../neode.service.js'
 import type { PropertySchema } from '../meta/property-schema.js'
+import { isConstructorOf, isRecord } from './type-guards.js'
+import { NeodeError } from '../errors/index.js'
 
 /**
 Fake-invocation cap when retrying a unique property's `fake` for a
@@ -38,8 +41,8 @@ function resolveConstructor(model: string | Newable): Newable {
 
   const found = getModelByName(model)
 
-  if (!found) {
-    throw new Error(unknownDefinitionError(model))
+  if (found === undefined) {
+    throw new NeodeError(unknownDefinitionError(model))
   }
 
   return found
@@ -60,7 +63,7 @@ properties with a `fake` generator are retried until the values are
 distinct within one batch (app-level check) — across runs the user's
 fake fn must be DB-safe (e.g. random UUIDs).
 */
-export default class FactoryBuilder<T extends object = any> {
+export class FactoryBuilder<T extends object = Record<string, unknown>> {
   private readonly neode: Neode
 
   private readonly newable: Newable
@@ -77,10 +80,10 @@ export default class FactoryBuilder<T extends object = any> {
 
     const schema = getModel(this.newable)
 
-    if (!schema) {
-      const name = (this.newable as { name?: string }).name ?? 'unknown'
+    if (!(schema instanceof EntitySchemaClass)) {
+      const name = typeof this.newable === 'function' ? this.newable.name : 'unknown'
 
-      throw new Error(
+      throw new NeodeError(
         `Couldn't find a model for "${name}". Register the model via model() or a decorator first.`,
       )
     }
@@ -88,12 +91,103 @@ export default class FactoryBuilder<T extends object = any> {
     this.schema = schema
   }
 
+  private async createOne(
+    overrides: Record<string, unknown>,
+    uniques: PropertySchema[],
+    used: Map<string, Set<unknown>>,
+  ): Promise<T> {
+    const properties: Record<string, unknown> = { ...overrides }
+
+    for (const property of uniques) {
+      const key = property.getKey()
+      const fake = property.getFake()
+
+      if (typeof fake !== 'function' || properties[key] !== undefined) {
+        continue
+      }
+
+      const seen = used.get(key) ?? new Set<unknown>()
+
+      let value: unknown
+      let attempts = 0
+
+      do {
+        value = fake()
+
+        if (++attempts > MAX_FAKE_ATTEMPTS) {
+          throw new NeodeError(
+            `The fake() generator for unique property "${key}" did not produce a distinct value after ${String(
+              MAX_FAKE_ATTEMPTS,
+            )} attempts`,
+          )
+        }
+      } while (seen.has(value))
+
+      seen.add(value)
+      used.set(key, seen)
+      properties[key] = value
+    }
+
+    // resolveConstructor guarantees a constructor; the guard names the
+    // constructed type for the generic create call
+    const constructor = this.newable
+
+    if (!isConstructorOf<T>(constructor)) {
+      throw new TypeError('The factory model is not a constructor')
+    }
+
+    return this.neode.create<T>(constructor, properties)
+  }
+
+  private async seedRelationships(
+    instance: T,
+    relationshipName: string,
+    spec: FactoryWithSpec,
+  ): Promise<void> {
+    if (!this.schema.hasRelationship(relationshipName)) {
+      throw new NeodeError(
+        `Unknown relationship "${relationshipName}" on ${this.schema.getLabels().join(':') || 'entity'}`,
+      )
+    }
+
+    const relationship = this.schema.getRelationship(relationshipName)
+
+    const target = relationship.getTarget()
+
+    if (typeof target !== 'function') {
+      throw new TypeError(
+        `Couldn't find a model for the target of relationship "${relationshipName}"`,
+      )
+    }
+
+    // resolveConstructor guarantees a constructor; the guard names the
+    // constructed type for the generic relate call
+    const constructor = this.newable
+
+    if (!isConstructorOf<T>(constructor)) {
+      throw new TypeError('The factory model is not a constructor')
+    }
+
+    for (let n = 0; n < spec.count; n++) {
+      const properties =
+        typeof spec.properties === 'function' ? spec.properties(n) : spec.properties
+
+      const created: unknown = await this.neode.create(target, properties)
+
+      if (!isRecord(created)) {
+        throw new TypeError('The factory created a non-object entity')
+      }
+
+      await this.neode.relate(constructor, instance, created, relationshipName)
+    }
+  }
+
   /**
   Seed `n` instances — `.create()` then resolves to an array
   */
   count(count: number): this {
     if (!Number.isSafeInteger(count) || count < 1) {
-      throw new Error('count() requires a positive integer')
+      throw new NeodeError('count() requires a positive integer')
     }
 
     this.total = count
@@ -108,7 +202,7 @@ export default class FactoryBuilder<T extends object = any> {
   */
   with(relationshipName: string, spec: FactoryWithSpec): this {
     if (!Number.isSafeInteger(spec.count) || spec.count < 0) {
-      throw new Error(`with() requires a non-negative integer count for "${relationshipName}"`)
+      throw new NeodeError(`with() requires a non-negative integer count for "${relationshipName}"`)
     }
 
     this.withs.push({ relationshipName, spec })
@@ -146,87 +240,16 @@ export default class FactoryBuilder<T extends object = any> {
       }
     }
 
-    return this.total === undefined ? instances[0]! : instances
-  }
+    if (this.total === undefined) {
+      const first = instances[0]
 
-  private async createOne(
-    overrides: Record<string, unknown>,
-    uniques: PropertySchema[],
-    used: Map<string, Set<unknown>>,
-  ): Promise<T> {
-    const properties: Record<string, unknown> = { ...overrides }
-
-    for (const property of uniques) {
-      const key = property.getKey()
-      const fake = property.getFake()
-
-      if (typeof fake !== 'function' || properties[key] !== undefined) {
-        continue
+      if (first === undefined) {
+        throw new NeodeError('The factory created no instance')
       }
 
-      const seen = used.get(key) ?? new Set<unknown>()
-
-      let value: unknown
-      let attempts = 0
-
-      do {
-        value = fake()
-
-        if (++attempts > MAX_FAKE_ATTEMPTS) {
-          throw new Error(
-            `The fake() generator for unique property "${key}" did not produce a distinct value after ${String(
-              MAX_FAKE_ATTEMPTS,
-            )} attempts`,
-          )
-        }
-      } while (seen.has(value))
-
-      seen.add(value)
-      used.set(key, seen)
-      properties[key] = value
+      return first
     }
 
-    return this.neode.create<T>(this.newable as new (...arguments_: never[]) => T, properties)
-  }
-
-  private async seedRelationships(
-    instance: T,
-    relationshipName: string,
-    spec: FactoryWithSpec,
-  ): Promise<void> {
-    if (!this.schema.hasRelationship(relationshipName)) {
-      throw new Error(
-        `Unknown relationship "${relationshipName}" on ${this.schema.getLabels().join(':') || 'entity'}`,
-      )
-    }
-
-    const rel = this.schema.getRelationship(relationshipName)
-
-    const target = rel.getTarget()
-
-    if (!target) {
-      throw new Error(`Couldn't find a model for the target of relationship "${relationshipName}"`)
-    }
-
-    for (let n = 0; n < spec.count; n++) {
-      const properties =
-        typeof spec.properties === 'function' ? spec.properties(n) : spec.properties
-
-      const related = await this.neode.create(
-        target as new (
-          ...arguments_: never[]
-        ) => any,
-        properties,
-      )
-
-      await this.neode.relate(
-        this.newable as new (
-          ...arguments_: never[]
-        ) => T,
-        instance,
-        related,
-        relationshipName,
-      )
-    }
+    return instances
   }
 }

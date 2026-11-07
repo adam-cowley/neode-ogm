@@ -3,8 +3,6 @@ import { getModel } from '../../src/meta'
 import { ConstraintType } from '../../src/services/schema/schema.service'
 import { openBackend, TestBackend } from './support/backend'
 
-
-
 // ---- Fixtures (per-file: decorator registry is global per module registry) --
 // A constraint and a plain index cannot co-exist on the same label/property,
 // so each concern gets its own property.

@@ -1,21 +1,29 @@
-import type { GraphNode, QueryOutput, QueryRecord } from './driver/types.js'
-import { getModel } from './meta/index.js'
+import type { QueryOutput, QueryRecord } from './driver/types.js'
+import { getModel, getModels } from './meta/index.js'
+import { isGraphNode } from './services/type-guards.js'
 import type { EntitySchema } from './meta/entity/entity-schema.js'
-import { type EagerRelationship, hydrateNode } from './utils.js'
+import { type EagerRelationship, hydrateNode } from './utilities.js'
 import type { WithMethods } from './entity-methods.js'
-import Collection from './collection.js'
+import { NeodeError } from './errors/index.js'
+import { Collection } from './collection.js'
 
 export { hydrateProjection } from './projection/index.js'
 
 const DEFAULT_ALIAS = 'this'
 
 function requireSchema(constructor: new (...arguments_: never[]) => unknown): EntitySchema {
-  const schema = getModel(constructor)
+  const model: unknown = constructor
+  const schema = getModel(model)
 
   if (!schema) {
-    const name = (constructor as { name?: string })?.name || 'unknown'
+    const name = constructor.name === '' ? 'unknown' : constructor.name
 
-    throw new Error(`Couldn't find a model for "${name}".`)
+    throw new NeodeError(
+      `Couldn't find a model for "${name}". Register it with @NodeEntity or defineModel() first.` +
+        ` Registered model(s) are: ${Array.from(getModels().keys(), (model) => model.name)
+          .filter((modelName) => modelName !== '')
+          .join(', ')}`,
+    )
   }
 
   return schema
@@ -27,11 +35,23 @@ hydrateNode understands: one legacy eager entry per column, whose node is
 the column value
 */
 function eagerColumns(row: QueryRecord, alias: string): Record<string, EagerRelationship[]> {
-  return Object.fromEntries(
-    row.keys
-      .filter((key) => key !== alias)
-      .map((key) => [key, [{ other: { node: row.get(key) as GraphNode } } as EagerRelationship]]),
-  )
+  const entries: [string, EagerRelationship[]][] = []
+
+  for (const key of row.keys) {
+    if (key === alias) {
+      continue
+    }
+
+    const value: unknown = row.get(key)
+
+    if (!isGraphNode(value)) {
+      continue
+    }
+
+    entries.push([key, [{ other: { node: value } }]])
+  }
+
+  return Object.fromEntries(entries)
 }
 
 /**
@@ -48,18 +68,16 @@ export function hydrate<T>(
   const schema = requireSchema(constructor)
 
   return output.records
-    .filter((row) => row.has(alias) && row.get(alias) != null)
-    .map(
-      (row) =>
-        // Hydration wires the active-record methods onto the prototype —
-        // the returned instance IS a WithMethods<T>
-        hydrateNode<T>(
-          schema,
-          constructor,
-          row.get(alias) as GraphNode,
-          eagerColumns(row, alias),
-        ) as WithMethods<T>,
-    )
+    .filter((row) => row.has(alias) && isGraphNode(row.get(alias)))
+    .map((row) => {
+      const node: unknown = row.get(alias)
+
+      if (!isGraphNode(node)) {
+        throw new TypeError(`The "${alias}" column did not return a node value`)
+      }
+
+      return hydrateNode<T>(schema, constructor, node, eagerColumns(row, alias))
+    })
 }
 
 /**

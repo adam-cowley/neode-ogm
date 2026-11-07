@@ -1,6 +1,8 @@
 import { getModels } from './index.js'
 import { PropertyType } from './property-schema.js'
-import { Direction } from '../query/index.js'
+// Leaf import: the query barrel pulls the eager utilities, which pull the
+// metamodel back in (dependency cycle)
+import { Direction } from '../query/direction.js'
 
 /**
 Human-readable property type names for ontology emission (NTS-445),

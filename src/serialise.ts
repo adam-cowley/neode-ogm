@@ -1,7 +1,17 @@
-import neo4j from 'neo4j-driver'
+import {
+  isDate,
+  isDateTime,
+  isDuration,
+  isInt,
+  isLocalDateTime,
+  isLocalTime,
+  isPoint,
+  isTime,
+} from 'neo4j-driver'
 import { getModel } from './meta/index.js'
-import type { PropertySchema } from './meta/property-schema.js';
+import type { PropertySchema } from './meta/property-schema.js'
 import { PropertyType } from './meta/property-schema.js'
+import { isRecord } from './services/type-guards.js'
 
 /**
 Property types that carry graph structure rather than user data: they are
@@ -21,12 +31,28 @@ const NON_OUTPUT_TYPES = new Set<PropertyType>([
 
 const pad = (value: number, length = 2): string => String(value).padStart(length, '0')
 
+/**
+A numeric field of a plain temporal object (the embedded Relate engine's
+hydrated shape): the first key holding a number, else 0.
+*/
+function numberAt(value: Record<string, unknown>, ...keys: string[]): number {
+  for (const key of keys) {
+    const field: unknown = value[key]
+
+    if (typeof field === 'number') {
+      return field
+    }
+  }
+
+  return 0
+}
+
 function hasKeys(value: Record<string, unknown>, keys: string[]): boolean {
-  return keys.every((key) => key in value)
+  return keys.every((key) => Reflect.has(value, key))
 }
 
 function dateToString(value: Record<string, unknown>): string {
-  return `${pad(value['year'] as number, 4)}-${pad(value['month'] as number)}-${pad(value['day'] as number)}`
+  return `${pad(numberAt(value, 'year'), 4)}-${pad(numberAt(value, 'month'))}-${pad(numberAt(value, 'day'))}`
 }
 
 function offsetToString(offsetSeconds: unknown): string {
@@ -45,18 +71,18 @@ function offsetToString(offsetSeconds: unknown): string {
 }
 
 function timeToString(value: Record<string, unknown>): string {
-  const base = `${pad(value['hour'] as number)}:${pad(value['minute'] as number)}:${pad(value['second'] as number)}`
-  const nanoseconds = (value['nanosecond'] as number) || 0
+  const base = `${pad(numberAt(value, 'hour'))}:${pad(numberAt(value, 'minute'))}:${pad(numberAt(value, 'second'))}`
+  const nanoseconds = numberAt(value, 'nanosecond')
 
-  return nanoseconds ? `${base}.${pad(nanoseconds, 9)}` : base
+  return nanoseconds === 0 ? base : `${base}.${pad(nanoseconds, 9)}`
 }
 
 function durationToString(value: Record<string, unknown>): string {
-  const seconds = (value['seconds'] as number) || 0
-  const nanos = (value['nanos'] as number) ?? (value['nanoseconds'] as number) ?? 0
-  const fraction = nanos ? `.${pad(nanos, 9)}` : ''
+  const seconds = numberAt(value, 'seconds')
+  const nanos = numberAt(value, 'nanos', 'nanoseconds')
+  const fraction = nanos === 0 ? '' : `.${pad(nanos, 9)}`
 
-  return `P${value['months'] ?? 0}M${value['days'] ?? 0}DT${seconds}${fraction}S`
+  return `P${String(numberAt(value, 'months'))}M${String(numberAt(value, 'days'))}DT${String(seconds)}${fraction}S`
 }
 
 function pointToJson(value: Record<string, unknown>): Record<string, unknown> {
@@ -71,23 +97,23 @@ Temporal types share an ISO string via toString(); points become plain
 coordinate objects. Returns undefined for non-driver values.
 */
 function driverValueToJson(value: unknown): unknown {
-  if (neo4j.isInt(value)) {
+  if (isInt(value)) {
     return value.toNumber()
   }
 
   if (
-    neo4j.isDate(value) ||
-    neo4j.isDateTime(value) ||
-    neo4j.isTime(value) ||
-    neo4j.isLocalDateTime(value) ||
-    neo4j.isLocalTime(value) ||
-    neo4j.isDuration(value)
+    isDate(value) ||
+    isDateTime(value) ||
+    isTime(value) ||
+    isLocalDateTime(value) ||
+    isLocalTime(value) ||
+    isDuration(value)
   ) {
     return value.toString()
   }
 
-  if (neo4j.isPoint(value)) {
-    return pointToJson(value as unknown as Record<string, unknown>)
+  if (isPoint(value) && isRecord(value)) {
+    return pointToJson(value)
   }
 
   return undefined
@@ -157,7 +183,29 @@ function plainObjectToJson(value: Record<string, unknown>, type: PropertyType): 
       break
     }
 
-    default: {
+    case PropertyType.ANY:
+    case PropertyType.INTERNAL_ID:
+    case PropertyType.ALL_PROPERTIES:
+    case PropertyType.UUID:
+    case PropertyType.STRING:
+    case PropertyType.INTEGER:
+    case PropertyType.FLOAT:
+    case PropertyType.NUMBER:
+    case PropertyType.BOOLEAN:
+    case PropertyType.ONE_TO_ONE:
+    case PropertyType.ONE_TO_MANY:
+    case PropertyType.RELATED_ONE:
+    case PropertyType.RELATED_MANY:
+    case PropertyType.RELATIONSHIP_COUNT:
+    case PropertyType.RELATIONSHIP_EXISTS:
+    case PropertyType.LABEL_PRESENT:
+    case PropertyType.COMPUTED:
+    case PropertyType.EXPRESSION:
+    case PropertyType.START_NODE:
+    case PropertyType.END_NODE:
+    case PropertyType.OTHER_NODE:
+    case PropertyType.NODE:
+    case PropertyType.RELATIONSHIP: {
       break
     }
   }
@@ -201,8 +249,8 @@ export function valueToJson(value: unknown, property: PropertySchema): unknown {
     return driver
   }
 
-  if (typeof value === 'object') {
-    const plain = plainObjectToJson(value as Record<string, unknown>, property.getType())
+  if (isRecord(value)) {
+    const plain = plainObjectToJson(value, property.getType())
 
     if (plain !== undefined) {
       return plain
@@ -219,11 +267,11 @@ internal id property) and `_labels` (the schema's labels). Eagerly loaded
 relationships are serialised recursively.
 */
 export function toJson(entity: unknown): Record<string, unknown> {
-  const instance = entity as Record<string, unknown> | null
-  const schema = instance ? getModel(instance.constructor) : undefined
+  const instance = isRecord(entity) ? entity : undefined
+  const schema = instance === undefined ? undefined : getModel(instance.constructor)
 
-  if (!schema || !instance) {
-    const name = instance?.constructor?.name ?? String(entity)
+  if (schema === undefined || instance === undefined) {
+    const name = instance?.constructor.name ?? String(entity)
 
     throw new Error(`Cannot serialise "${name}": no model is registered for it`)
   }
@@ -232,7 +280,7 @@ export function toJson(entity: unknown): Record<string, unknown> {
   const internalId = properties.find((property) => property.getType() === PropertyType.INTERNAL_ID)
 
   const output: Record<string, unknown> = {
-    _id: internalId ? (instance[internalId.getKey()] ?? null) : null,
+    _id: internalId === undefined ? null : (instance[internalId.getKey()] ?? null),
     _labels: schema.getLabels(),
   }
 

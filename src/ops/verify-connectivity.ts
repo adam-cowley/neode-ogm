@@ -7,8 +7,7 @@ Pure functions on a config shape mirroring the one fromEnv() produces
 facade methods; they construct a throwaway driver per check and close it.
 */
 
-import neo4j from 'neo4j-driver'
-import type { AuthToken } from 'neo4j-driver'
+import { type AuthToken, driver as createDriver } from 'neo4j-driver'
 
 export interface ConnectivityConfig {
   uri: string
@@ -28,7 +27,7 @@ Rejected by waitUntilReachable when the deadline passes.
 */
 export class ConnectivityTimeoutError extends Error {
   constructor(uri: string, timeout: number) {
-    super(`Database at ${uri} was not reachable within ${timeout}ms`)
+    super(`Database at ${uri} was not reachable within ${String(timeout)}ms`)
 
     this.name = 'ConnectivityTimeoutError'
   }
@@ -42,7 +41,7 @@ Note the check runs with whatever connectionTimeout the config carries —
 the driver's default applies otherwise.
 */
 export async function verifyConnectivity(target: ConnectivityConfig): Promise<void> {
-  const driver = neo4j.driver(target.uri, target.auth, target.config)
+  const driver = createDriver(target.uri, target.auth, target.config)
 
   try {
     await driver.verifyConnectivity(
@@ -116,7 +115,9 @@ async function sleep(ms: number): Promise<void> {
 
 async function rejectAfter(ms: number, uri: string, timeout: number): Promise<never> {
   return new Promise((_, reject) => {
-    const timer = setTimeout(() => { reject(new ConnectivityTimeoutError(uri, timeout)); }, ms)
+    const timer = setTimeout(() => {
+      reject(new ConnectivityTimeoutError(uri, timeout))
+    }, ms)
 
     // The loser of the race must not keep the process alive
     timer.unref()

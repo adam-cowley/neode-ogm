@@ -4,7 +4,14 @@ import { toJson } from './serialise.js'
 An iterable wrapper over an array of entities (parity with neode's
 Collection): reads like an array, serialises through toJson().
 */
-export default class Collection<T> {
+export class Collection<T> {
+  /**
+  Build a Collection from any iterable
+  */
+  static from<T>(values: Iterable<T>): Collection<T> {
+    return new Collection([...values])
+  }
+
   private readonly values: T[]
 
   constructor(values: T[] = []) {
@@ -28,22 +35,20 @@ export default class Collection<T> {
   }
 
   map<U>(function_: (value: T, index: number, array: T[]) => U): U[] {
-    return this.values.map(function_)
+    return this.values.map((value, index, array) => function_(value, index, array))
   }
 
-  find(function_: (value: T, index: number, array: T[]) => unknown): T | undefined {
-    return this.values.find(function_)
+  find(isMatch: (value: T, index: number, array: T[]) => boolean): T | undefined {
+    return this.values.find((value, index, array) => isMatch(value, index, array))
   }
 
   forEach(function_: (value: T, index: number, array: T[]) => void): void {
-    this.values.forEach(function_)
+    for (const [index, value] of this.values.entries()) {
+      function_(value, index, this.values)
+    }
   }
 
-  async toJson(): Promise<unknown[]> {
-    return Promise.all(this.values.map((value) => toJson(value)))
-  }
-
-  static from<T>(values: Iterable<T>): Collection<T> {
-    return new Collection(Array.from(values))
+  toJson(): unknown[] {
+    return this.values.map((value) => toJson(value))
   }
 }

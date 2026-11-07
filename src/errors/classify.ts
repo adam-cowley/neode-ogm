@@ -1,6 +1,6 @@
-import NeodeError from './neode-error.js'
-import ConstraintViolationError from './constraint-violation.js'
-import TransientError from './transient.js'
+import { ConstraintViolationError } from './constraint-violation.js'
+import { NeodeError } from './neode-error.js'
+import { TransientError } from './transient.js'
 
 /**
 The status codes every backend raises for a unique-constraint violation:
@@ -50,13 +50,15 @@ export function classifyError(error: unknown): unknown {
   const raw = error as ClassifiedError
   const code = typeof raw.code === 'string' ? raw.code : undefined
 
-  if (code && CONSTRAINT_VIOLATION_CODES.has(code)) {
+  if (code !== undefined && code !== '' && CONSTRAINT_VIOLATION_CODES.has(code)) {
     const parsed = CONSTRAINT_MESSAGE.exec(error.message)
 
     return new ConstraintViolationError(error.message, parsed?.[1], parsed?.[2], { cause: error })
   }
 
-  return (code?.startsWith(TRANSIENT_CODE_PREFIX)) || raw.retryable === true ? new TransientError(error.message, code, { cause: error }) : error;
+  const isTransient = code?.startsWith(TRANSIENT_CODE_PREFIX) === true || raw.retryable === true
+
+  return isTransient ? new TransientError(error.message, code, { cause: error }) : error
 }
 
 /**

@@ -66,8 +66,22 @@ function registerDriftModel(): void {
 
 const VECTOR_OPTION = { label: 'DriftPerson', property: 'emb', dimensions: 1536 }
 
+/** Model declaring a vector-indexed property (NTS-447 metadata, NTS-450 drift) */
+function registerVectorModel(): void {
+  class DriftDoc {
+    static __ogmUnitFixture?: void
+  }
+
+  const schema: EntitySchema = mergeModel(DriftDoc)
+
+  schema.setLabels(['DriftDoc'])
+  schema.addProperty('emb')
+  schema.getProperty('emb').setVector({ dimensions: 768 })
+}
+
 describe('schemaDrift (NTS-450)', () => {
   registerDriftModel()
+  registerVectorModel()
 
   const database = () => [
     record({
@@ -114,13 +128,17 @@ describe('schemaDrift (NTS-450)', () => {
 
     const drift = await schemaDrift(connection, { vector: [VECTOR_OPTION] })
 
-    // missing: the vector index is declared via options, not installed
-    expect(drift.indexes.missing).toHaveLength(1)
-    expect(drift.indexes.missing[0]).toMatchObject({
+    // missing: the vector index is declared via options AND via DriftDoc
+    // model metadata (NTS-447 wiring) — two missing vector indexes
+    expect(drift.indexes.missing).toHaveLength(2)
+    const declaredVector = drift.indexes.missing.find(
+      (entry) => entry.name === 'driftperson_emb_vector',
+    )
+    expect(declaredVector).toMatchObject({
       name: 'driftperson_emb_vector',
       type: 'VECTOR',
     })
-    expect(drift.indexes.missing[0]?.createStatement).toBe(
+    expect(declaredVector?.createStatement).toBe(
       'CREATE VECTOR INDEX driftperson_emb_vector IF NOT EXISTS ' +
         "FOR (n:DriftPerson) ON (n.`emb`) OPTIONS { indexConfig: { `vector.dimensions`: 1536, `vector.similarity_function`: 'cosine' } }",
     )
@@ -209,6 +227,24 @@ describe('schemaDrift (NTS-450)', () => {
     expect(drift.constraints.missing).toHaveLength(1)
     expect(clean.indexes.stale).toHaveLength(0)
     expect(clean.constraints.stale).toHaveLength(0)
+  })
+
+  it('derives vector indexes from model metadata without options (NTS-447 + NTS-450 wiring)', async () => {
+    const { connection } = provider([], [])
+
+    const drift = await schemaDrift(connection)
+
+    const vector = drift.indexes.missing.find((entry) => entry.type === 'VECTOR')
+
+    expect(vector).toMatchObject({
+      name: 'driftdoc_emb_vector',
+      labelsOrTypes: ['DriftDoc'],
+      properties: ['emb'],
+    })
+    expect(vector?.createStatement).toBe(
+      'CREATE VECTOR INDEX driftdoc_emb_vector IF NOT EXISTS ' +
+        "FOR (n:DriftDoc) ON (n.`emb`) OPTIONS { indexConfig: { `vector.dimensions`: 768, `vector.similarity_function`: 'cosine' } }",
+    )
   })
 })
 

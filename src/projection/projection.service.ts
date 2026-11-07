@@ -1,12 +1,13 @@
-import { Builder,  Direction  } from '../query/index.js'
+import { Builder, Direction } from '../query/index.js'
 import { THIS_NODE } from '../constants.js'
 import type { Runner } from '../driver/types.js'
-import type { EntitySchema } from '../meta/entity/entity-schema.js'
+import { EntitySchema } from '../meta/entity/entity-schema.js'
 import { getModel } from '../meta/index.js'
-import type { Newable } from '../meta/newable.js'
-import type { PropertySchema } from '../meta/property-schema.js';
+import type { PropertySchema } from '../meta/property-schema.js'
 import { PropertyType } from '../meta/property-schema.js'
 import type { OrderSpec } from '../services/query/get.service.js'
+import { isRecord } from '../services/type-guards.js'
+import { NeodeError } from '../errors/index.js'
 import { projectionNode } from './projection.js'
 import { hydrateProjection } from './hydrate.js'
 
@@ -28,7 +29,7 @@ function isFilterMap(value: unknown): value is Record<string, unknown> {
     return false
   }
 
-  const prototype = Object.getPrototypeOf(value)
+  const prototype: unknown = Object.getPrototypeOf(value)
 
   // Plain maps only — Date, driver temporals etc. stay own-property values
   return prototype === Object.prototype || prototype === null
@@ -51,18 +52,21 @@ function bindTraversal(
   builder: Builder,
   property: PropertySchema,
   alias: string,
-  optional: boolean,
+  isOptional: boolean,
 ): void {
   const types = (property.getRelationshipType() ?? property.getKey())
     .split('|')
-    .filter((part) => part.length)
+    .filter((part) => part.length > 0)
 
   const direction = property.getDirection() ?? Direction.OUTGOING
 
-  const target = property.getEntity()
-  const labels = target ? (getModel(target)?.getLabels() ?? false) : false
+  const targetEntity = property.getEntity()
 
-  if (optional) {
+  const targetSchema = typeof targetEntity === 'function' ? getModel(targetEntity) : undefined
+
+  const labels = targetSchema instanceof EntitySchema ? targetSchema.getLabels() : false
+
+  if (isOptional) {
     builder.optionalMatch(THIS_NODE)
   } else {
     builder.match(THIS_NODE)
@@ -101,7 +105,7 @@ function applyFilters(
     }
 
     if (!isRelatedProjection(property)) {
-      throw new Error(
+      throw new NeodeError(
         `Cannot apply a nested filter on '${key}': only @RelatedOne and @RelatedMany properties support nested filters`,
       )
     }
@@ -113,8 +117,9 @@ function applyFilters(
     // dedupe) — upgrade to an EXISTS { } wrap if singular graphs stop holding
     bindTraversal(builder, property, alias, false)
 
-    for (const [field, fieldValue] of Object.entries(value)) {builder.where(`${alias}.${field}`, fieldValue)}
-    
+    for (const [field, fieldValue] of Object.entries(value)) {
+      builder.where(`${alias}.${field}`, fieldValue)
+    }
 
     bound.set(key, alias)
   }
@@ -135,35 +140,37 @@ function applyOrder(
   schema: EntitySchema,
   bound: Map<string, string>,
 ): void {
-  if (!order) {
+  if (order === undefined || order === '') {
     return
   }
 
   if (typeof order === 'string') {
     builder.orderBy(`${THIS_NODE}.${order}`)
   } else if (Array.isArray(order)) {
-    for (const entry of order) {applyOrder(builder, entry, schema, bound)}
+    for (const entry of order) {
+      applyOrder(builder, entry, schema, bound)
+    }
   } else if ('field' in order && typeof order.field === 'string') {
     builder.orderBy({ field: `${THIS_NODE}.${order.field}`, order: order.order })
   } else {
     for (const [key, field] of Object.entries(order as Record<string, string>)) {
       const property = schema.hasProperty(key) ? schema.getProperty(key) : undefined
 
-      if (!property || !isRelatedProjection(property)) {
+      if (property === undefined || !isRelatedProjection(property)) {
         builder.orderBy(`${THIS_NODE}.${key}`, field)
 
         continue
       }
 
       if (property.getType() === PropertyType.RELATED_MANY) {
-        throw new Error(
+        throw new NeodeError(
           `Cannot sort by a nested property of '${key}': @RelatedMany has no single related node to order by`,
         )
       }
 
       const alias = bound.get(key)
 
-      if (alias) {
+      if (alias !== undefined) {
         builder.orderBy(`${alias}.${field}`)
 
         continue
@@ -189,18 +196,49 @@ NTS-145: object values on @RelatedOne / @RelatedMany filter keys traverse
 to the related node and filter on its properties (`{ course: { slug: 'x' } }`);
 a nested sort key (`{ course: 'slug' }`) ORDER BYs the bound traversal alias.
 */
-export default class ProjectionService {
+export class ProjectionService {
   private readonly runner: Runner
 
   constructor(runner: Runner) {
     this.runner = runner
   }
 
+  private async run<T>(
+    constructor: new (...arguments_: never[]) => T,
+    schema: EntitySchema,
+    builder: Builder,
+    limit?: number,
+    skip?: number,
+  ): Promise<T[]> {
+    builder.return(`${projectionNode(THIS_NODE, schema)} AS ${THIS_NODE}`)
+
+    if (skip !== undefined && skip !== 0) {
+      builder.skip(skip)
+    }
+    if (limit !== undefined && limit !== 0) {
+      builder.limit(limit)
+    }
+
+    const { query, params } = builder.build()
+
+    const result = await this.runner.run(query, params)
+
+    return result.records.map((row) => {
+      const projection = row.get(THIS_NODE)
+
+      if (!isRecord(projection)) {
+        throw new TypeError(`The "${THIS_NODE}" column did not return a projection map`)
+      }
+
+      return hydrateProjection<T>(schema, constructor, projection)
+    })
+  }
+
   /**
   All nodes matching the given property map (GetService parity)
   */
   async get<T>(
-    constructor: Newable,
+    constructor: new (...arguments_: never[]) => T,
     schema: EntitySchema,
     parameters: Record<string, unknown> = {},
     limit?: number,
@@ -222,24 +260,30 @@ export default class ProjectionService {
   One node by primary key value (FindService parity)
   */
   async find<T>(
-    constructor: Newable,
+    constructor: new (...arguments_: never[]) => T,
     schema: EntitySchema,
     value: unknown,
   ): Promise<T | undefined> {
     const builder = new Builder()
 
-    const primaryKey = schema.getPrimaryKey()!.getKey()
+    const primaryKey = schema.getPrimaryKey()
 
-    builder.match(THIS_NODE, schema.getLabels(), { [primaryKey]: value })
+    if (primaryKey === undefined) {
+      throw new NeodeError(`Cannot find ${schema.getLabels().join(':')}: no primary key declared`)
+    }
 
-    return (await this.run<T>(constructor, schema, builder, 1))[0]
+    builder.match(THIS_NODE, schema.getLabels(), { [primaryKey.getKey()]: value })
+
+    const results = await this.run<T>(constructor, schema, builder, 1)
+
+    return results[0]
   }
 
   /**
   One node by element ID (FindByIdService parity)
   */
   async findById<T>(
-    constructor: Newable,
+    constructor: new (...arguments_: never[]) => T,
     schema: EntitySchema,
     elementId: string,
   ): Promise<T | undefined> {
@@ -247,27 +291,8 @@ export default class ProjectionService {
 
     builder.match(THIS_NODE).whereId(THIS_NODE, elementId)
 
-    return (await this.run<T>(constructor, schema, builder, 1))[0]
-  }
+    const results = await this.run<T>(constructor, schema, builder, 1)
 
-  private async run<T>(
-    constructor: Newable,
-    schema: EntitySchema,
-    builder: Builder,
-    limit?: number,
-    skip?: number,
-  ): Promise<T[]> {
-    builder.return(`${projectionNode(THIS_NODE, schema)} AS ${THIS_NODE}`)
-
-    if (skip) {builder.skip(skip)}
-    if (limit) {builder.limit(limit)}
-
-    const { query, params } = builder.build()
-
-    const res = await this.runner.run(query, params)
-
-    return res.records.map((row) =>
-      hydrateProjection<T>(schema, constructor, row.get(THIS_NODE) as Record<string, unknown>),
-    )
+    return results[0]
   }
 }

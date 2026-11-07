@@ -4,7 +4,7 @@
 import { openBackend, TestBackend } from './support/backend'
 import { search } from '../../src/services/query/search.service'
 import { toFulltextQuery } from '../../src/services/index-support/lucene'
-import FulltextIndexService from '../../src/services/schema/fulltext.service'
+import { FulltextIndexService } from '../../src/services/schema/fulltext.service'
 import { NodeEntity, InternalId, String } from '../../src/decorators'
 
 // ---- Fixtures (per-file: decorator registry is global per module registry) --

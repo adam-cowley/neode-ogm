@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
-import Repository from '../../src/repository'
-import INeode from '../../src/neode.interface'
+import { Repository } from '../../src/repository'
+import type { INeode } from '../../src/neode.interface'
 import { GraphNode, QueryOutput, QueryRecord } from '../../src/driver/types'
 import {
   NodeEntity,

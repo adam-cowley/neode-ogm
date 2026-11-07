@@ -59,13 +59,21 @@ export interface QuerySummary {
   profile?: unknown
 }
 
+// eslint-disable-next-line unicorn/name-replacements -- `QueryParams` is the documented public API name and imported by name in the test suites; renaming is a breaking change
 export type QueryParams = Record<string, unknown>
 
 /**
 Anything able to run statements in its scope (autocommit or transaction).
 */
 export interface Runner {
-  run(statement: string, parameters?: QueryParams): Promise<QueryOutput>
+  run(
+    statement: string,
+    parameters?: QueryParams,
+    /**
+    Routing hint — bare runners ignore it (ConnectionProvider routes by it)
+    */
+    mode?: AccessMode,
+  ): Promise<QueryOutput>
 }
 
 /**

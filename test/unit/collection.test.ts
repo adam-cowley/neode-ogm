@@ -16,7 +16,7 @@ import {
 import { Direction } from '../../src/query'
 import { mergeModel, mergeProperty } from '../../src/meta'
 import { PropertyType } from '../../src/meta/property-schema'
-import Collection from '../../src/collection'
+import { Collection } from '../../src/collection'
 import { toJson } from '../../src/serialise'
 
 // ---- Fixtures (decorator registry is global per module registry) -----------

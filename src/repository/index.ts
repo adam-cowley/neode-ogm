@@ -1,14 +1,14 @@
-import { Builder,  eagerNode  } from '../query/index.js'
 import { THIS_NODE } from '../constants.js'
-import { getModel } from '../meta/index.js'
-import type { Newable } from '../meta/newable.js'
+import type { QueryOutput } from '../driver/types.js'
 import type { EntitySchema } from '../meta/entity/entity-schema.js'
+import { getModel } from '../meta/index.js'
 import type { PropertySchema } from '../meta/property-schema.js'
-import type INeode from '../neode.interface.js'
-import type { GraphNode, QueryOutput } from '../driver/types.js'
-import { hydrateNode } from '../utils.js'
-import { fulltextIndexName } from '../services/schema/fulltext.service.js'
+import type { INeode } from '../neode.interface.js'
+import { Builder, eagerNode } from '../query/index.js'
 import type { ScoredEntity } from '../services/query/search.service.js'
+import { fulltextIndexName } from '../services/schema/fulltext.service.js'
+import { isGraphNode, isRecord } from '../services/type-guards.js'
+import { hydrateNode } from '../utilities.js'
 
 export interface SearchOptions {
   limit?: number
@@ -35,22 +35,92 @@ export interface FindOptions {
   skip?: number
 }
 
-export default class Repository<Entity> {
+export class Repository<Entity> {
+  /**
+  Neo4j driver returns count() as an Integer instance, Relate as a number
+  */
+  private static toCount(value: unknown): number {
+    return hasToNumber(value) ? value.toNumber() : Number(value)
+  }
+
   protected schema: EntitySchema
 
   protected readonly neode: INeode
-  protected readonly entity: new (...arguments_: never[]) => Entity
+  protected readonly entity: new (
+    ...arguments_: never[]
+  ) => Entity
   protected readonly database: string | undefined
 
-  constructor(
-    neode: INeode,
-    entity: new (...arguments_: never[]) => Entity,
-    database?: string,
-  ) {
+  constructor(neode: INeode, entity: new (...arguments_: never[]) => Entity, database?: string) {
+    const entityConstructor: unknown = entity
+    const model = getModel(entityConstructor)
+
+    if (model === undefined) {
+      throw new Error(
+        'Cannot create a Repository for an unregistered model — register it with @NodeEntity / defineModel first',
+      )
+    }
+
     this.neode = neode
     this.entity = entity
     this.database = database
-    this.schema = getModel(entity)
+    this.schema = model
+  }
+
+  /**
+  Match every node of the entity's labels, filtered on the schema's
+  declared properties only (GetService parity: unknown keys are ignored)
+  */
+  private matchAll(parameters: Partial<Entity> = {}): Builder {
+    const record = parameters as Record<string, unknown>
+
+    const builder = new Builder()
+
+    builder.match(THIS_NODE, this.schema.getLabels())
+
+    for (const property of this.schema.getProperties()) {
+      const key = property.getKey()
+
+      if (Object.hasOwn(record, key)) {
+        builder.where(`${THIS_NODE}.${key}`, record[key])
+      }
+    }
+
+    return builder
+  }
+
+  private returnNodes(builder: Builder): void {
+    // Eager Loading: when the schema declares eager relationships the
+    // root node is returned as a map projection (QueryService parity)
+    const hasEagerRelationships = this.schema
+      .getRelationships()
+      .some((relationship) => relationship.getEager())
+
+    builder.return(
+      hasEagerRelationships ? `${eagerNode(1, THIS_NODE, this.schema)} AS ${THIS_NODE}` : THIS_NODE,
+    )
+  }
+
+  private applyOrder(builder: Builder, order: OrderSpec): void {
+    if (typeof order === 'string') {
+      builder.orderBy(`${THIS_NODE}.${order}`)
+    } else if (Array.isArray(order)) {
+      for (const entry of order) {
+        this.applyOrder(builder, entry)
+      }
+    } else if ('field' in order && typeof order.field === 'string') {
+      builder.orderBy({ field: `${THIS_NODE}.${order.field}`, order: order.order })
+    } else {
+      for (const [key, direction] of Object.entries(order)) {
+        builder.orderBy(`${THIS_NODE}.${key}`, direction)
+      }
+    }
+  }
+
+  private async read(builder: Builder): Promise<QueryOutput> {
+    const { query, params } = builder.build()
+
+    return this.neode.readCypher(query, params, this.database)
   }
 
   protected getLabels(): string[] {
@@ -58,11 +128,23 @@ export default class Repository<Entity> {
   }
 
   getPrimaryKey(): PropertySchema {
-    return this.schema.getPrimaryKey()!
+    const primaryKey = this.schema.getPrimaryKey()
+
+    if (primaryKey === undefined) {
+      throw new Error(
+        `Cannot resolve the primary key of ${this.getLabels().join(':')} — declare one (@Primary / @Uuid / @Property({ primary: true }))`,
+      )
+    }
+
+    return primaryKey
   }
 
   async find(id: unknown): Promise<Entity | undefined> {
-    return this.neode.find(this.entity, id as string, this.database) as Promise<Entity | undefined>
+    if (typeof id !== 'string' && typeof id !== 'number') {
+      throw new TypeError(`Repository.find expects a string or number id, received ${typeof id}`)
+    }
+
+    return this.neode.find(this.entity, id, this.database)
   }
 
   async findBy(properties: Partial<Entity> = {}): Promise<Entity | undefined> {
@@ -74,24 +156,31 @@ export default class Repository<Entity> {
   async findAll(parameters: Partial<Entity> = {}, options: FindOptions = {}): Promise<Entity[]> {
     const builder = this.matchAll(parameters)
 
-    if (options.order) {
+    if (options.order !== undefined) {
       this.applyOrder(builder, options.order)
     }
 
     this.returnNodes(builder)
 
-    if (options.skip) {builder.skip(options.skip)}
-    if (options.limit) {builder.limit(options.limit)}
+    if (options.skip !== undefined && options.skip !== 0) {
+      builder.skip(options.skip)
+    }
+
+    if (options.limit !== undefined && options.limit !== 0) {
+      builder.limit(options.limit)
+    }
 
     const output = await this.read(builder)
 
-    return output.records.map((row) =>
-      hydrateNode<Entity>(
-        this.schema,
-        this.entity as unknown as Newable,
-        row.get(THIS_NODE) as GraphNode,
-      ),
-    )
+    return output.records.map((row) => {
+      const node = row.get(THIS_NODE)
+
+      if (!isGraphNode(node)) {
+        throw new TypeError(`The "${THIS_NODE}" column did not return a node value`)
+      }
+
+      return hydrateNode<Entity>(this.schema, this.entity, node)
+    })
   }
 
   async where(parameters: Partial<Entity> = {}): Promise<Entity[]> {
@@ -115,7 +204,7 @@ export default class Repository<Entity> {
   }
 
   async save(object: Entity): Promise<Entity> {
-    return this.neode.save(object as unknown as object, this.database) as Promise<Entity>
+    return this.neode.save(object, this.database)
   }
 
   /**
@@ -140,8 +229,8 @@ export default class Repository<Entity> {
   the entity's primary key that sets the patched properties — update
   semantics for anything previously saved.
   */
-  async update(entity: Entity, properties: Partial<Entity>): Promise<Entity> {
-    Object.assign(entity as unknown as object, properties)
+  async update(entity: Entity & object, properties: Partial<Entity>): Promise<Entity> {
+    Object.assign(entity, properties)
 
     return this.save(entity)
   }
@@ -150,14 +239,18 @@ export default class Repository<Entity> {
   Delete by primary key value or by entity instance
   */
   async delete(target: Entity | string | number): Promise<void> {
-    if (target !== null && typeof target === 'object') {
+    if (isRecord(target)) {
       return this.neode.delete(target, this.database)
     }
 
     const entity = await this.find(target)
 
-    if (!entity) {
+    if (entity === undefined) {
       throw new Error(`Cannot delete: entity not found for ID ${String(target)}`)
+    }
+
+    if (!isRecord(entity)) {
+      throw new TypeError('Cannot delete: the found entity is not an object')
     }
 
     return this.neode.delete(entity, this.database)
@@ -202,7 +295,9 @@ export default class Repository<Entity> {
     property: keyof Entity & string,
     by = 1,
   ): Promise<number> {
-    const declared = this.schema.getProperties().find((schemaProperty) => schemaProperty.getKey() === property)
+    const declared = this.schema
+      .getProperties()
+      .find((schemaProperty) => schemaProperty.getKey() === property)
 
     if (declared === undefined) {
       throw new Error(
@@ -218,13 +313,10 @@ export default class Repository<Entity> {
     // set is injection-safe; the Builder's raw set has no parameter channel
     const key = declared.getKey().replaceAll('`', '``')
     const primaryKey = this.getPrimaryKey().getKey()
-    const id =
-      target !== null && typeof target === 'object'
-        ? (target as unknown as Record<string, unknown>)[primaryKey]
-        : target
+    const id = isRecord(target) ? target[primaryKey] : target
 
     const builder = new Builder().match(THIS_NODE, this.schema.getLabels(), { [primaryKey]: id })
-    builder.set(`${THIS_NODE}.\`${key}\` = coalesce(${THIS_NODE}.\`${key}\`, 0) + (${by})`)
+    builder.set(`${THIS_NODE}.\`${key}\` = coalesce(${THIS_NODE}.\`${key}\`, 0) + (${String(by)})`)
     builder.return(`${THIS_NODE}.\`${key}\` AS value`)
 
     const { query, params } = builder.build()
@@ -258,7 +350,13 @@ export default class Repository<Entity> {
       )
     }
 
-    const indexName = fulltextIndexName({ label: this.getLabels()[0]!, properties: fields })
+    const label = this.getLabels()[0]
+
+    if (label === undefined) {
+      throw new Error(`Cannot search ${this.getLabels().join(':')}: the model has no labels`)
+    }
+
+    const indexName = fulltextIndexName({ label, properties: fields })
 
     return this.neode.search(this.entity, indexName, query, options.limit)
   }
@@ -267,68 +365,16 @@ export default class Repository<Entity> {
     const builder = new Builder()
 
     const primaryKey = this.getPrimaryKey().getKey()
-    const value = (object as unknown as Record<string, unknown>)[primaryKey]
+    const value = isRecord(object) ? object[primaryKey] : undefined
 
     return builder.match(variable, this.schema.getLabels(), { [primaryKey]: value })
   }
+}
 
-  /**
-  Match every node of the entity's labels, filtered on the schema's
-  declared properties only (GetService parity: unknown keys are ignored)
-  */
-  private matchAll(parameters: Partial<Entity> = {}): Builder {
-    const record = parameters as Record<string, unknown>
-
-    const builder = new Builder()
-
-    builder.match(THIS_NODE, this.schema.getLabels())
-
-    for (const property of this.schema.getProperties()) {
-      const key = property.getKey()
-
-      if (Object.hasOwn(record, key)) {
-        builder.where(`${THIS_NODE}.${key}`, record[key])
-      }
-    }
-
-    return builder
-  }
-
-  private returnNodes(builder: Builder): void {
-    // Eager Loading: when the schema declares eager relationships the
-    // root node is returned as a map projection (QueryService parity)
-    if (this.schema.getRelationships().some((rel) => rel.getEager())) {
-      builder.return(`${eagerNode(1, THIS_NODE, this.schema)} AS ${THIS_NODE}`)
-    } else {
-      builder.return(THIS_NODE)
-    }
-  }
-
-  private applyOrder(builder: Builder, order: OrderSpec): void {
-    if (typeof order === 'string') {
-      builder.orderBy(`${THIS_NODE}.${order}`)
-    } else if (Array.isArray(order)) {
-      for (const entry of order) {this.applyOrder(builder, entry)}
-    } else if ('field' in order && typeof order.field === 'string') {
-      builder.orderBy({ field: `${THIS_NODE}.${order.field}`, order: order.order })
-    } else {
-      for (const [key, direction] of Object.entries(order)) {builder.orderBy(`${THIS_NODE}.${key}`, direction)}
-      
-    }
-  }
-
-  private async read(builder: Builder): Promise<QueryOutput> {
-    const { query, params } = builder.build()
-
-    return this.neode.readCypher(query, params, this.database)
-  }
-
-  /**
-  Neo4j driver returns count() as an Integer instance, Relate as a number
-  */
-  private static toCount(value: unknown): number {
-    return typeof value === 'object' &&
-      value !== null &&
-      typeof (value as { toNumber?: unknown }).toNumber === 'function' ? (value as { toNumber(): number }).toNumber() : Number(value);
-  }
+/**
+A driver Integer (or any object carrying toNumber) — the checked edge for
+count values.
+*/
+function hasToNumber(value: unknown): value is { toNumber(): number } {
+  return isRecord(value) && typeof value['toNumber'] === 'function'
 }

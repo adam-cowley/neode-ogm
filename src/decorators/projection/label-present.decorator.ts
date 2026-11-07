@@ -11,7 +11,9 @@ Example:
 isOptional: boolean;
 ```
 */
-export function LabelPresent(label: string): (value: undefined, context: ClassFieldDecoratorContext) => void {
+export function LabelPresent(
+  label: string,
+): (value: undefined, context: ClassFieldDecoratorContext) => void {
   return function (_value: undefined, context: ClassFieldDecoratorContext): void {
     const propertyKey = memberName(context)
 

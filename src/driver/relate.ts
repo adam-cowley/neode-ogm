@@ -3,19 +3,19 @@ import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 import type {
-  AccessMode,
   ConnectionProvider,
   QueryOutput,
   QueryParams as QueryParameters,
   QueryRecord,
   TransactionHandle,
 } from './types.js'
+import { isRecord } from '../services/type-guards.js'
 
 /**
 Client shapes from the embedded Relate engine (@relate/relate).
 Kept as structural types so the client stays a soft dependency.
 */
-type RelateResultRow = Record<string, unknown>;
+type RelateResultRow = Record<string, unknown>
 
 interface RelateResult {
   columns: string[]
@@ -42,6 +42,7 @@ interface RelateNodeValue {
   id: bigint | number
   labels: string[]
   properties: Record<string, unknown>
+  [key: string]: unknown
 }
 
 interface RelateRelationshipValue {
@@ -51,6 +52,65 @@ interface RelateRelationshipValue {
   startElementId: string
   endElementId: string
   properties: Record<string, unknown>
+  [key: string]: unknown
+}
+
+/**
+The embedded engine runs synchronously — commit/rollback/edition have
+nothing to await, but keep the async TransactionHandle interface.
+*/
+const noop = (): void => undefined
+
+/**
+True when the loaded module exposes the Relate client surface used here.
+*/
+function isRelateClientModule(value: unknown): value is RelateClientModule {
+  if (!isRecord(value)) {
+    return false
+  }
+
+  // The client exports Database as a class with a static open(), which is
+  // not a plain record
+  const database: unknown = value['Database']
+  const open: unknown =
+    typeof database === 'function' || isRecord(database) ? Reflect.get(database, 'open') : undefined
+
+  return typeof open === 'function'
+}
+
+/**
+True for a Relate node value: a plain object with a `kind` discriminator.
+*/
+function isRelateNodeValue(value: Record<string, unknown>): value is RelateNodeValue {
+  return (
+    typeof value['elementId'] === 'string' &&
+    Array.isArray(value['labels']) &&
+    isRecord(value['properties'])
+  )
+}
+
+/**
+True for a Relate relationship value: a plain object with a `kind` discriminator.
+*/
+function isRelateRelationshipValue(
+  value: Record<string, unknown>,
+): value is RelateRelationshipValue {
+  return (
+    typeof value['elementId'] === 'string' &&
+    typeof value['type'] === 'string' &&
+    typeof value['startElementId'] === 'string' &&
+    typeof value['endElementId'] === 'string' &&
+    isRecord(value['properties'])
+  )
+}
+
+/**
+Recursively normalize the entries of a property map.
+*/
+function normalizeProperties(properties: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(properties).map(([key, item]) => [key, normalizeRelateValue(item)]),
+  )
 }
 
 /**
@@ -65,11 +125,13 @@ The native library location is passed through via `RELATE_LIB`
 a sibling repository checkout exists.
 */
 export function requireRelateClient(): RelateClientModule {
-  if (!process.env['RELATE_LIB']) {
-    for (const dir of ['release', 'debug']) {
-      const candidate = resolveSiblingRepositoryLibrary(dir)
+  const relateLibrary = process.env['RELATE_LIB']
 
-      if (candidate) {
+  if (relateLibrary === undefined || relateLibrary === '') {
+    for (const profile of ['release', 'debug']) {
+      const candidate = resolveSiblingRepositoryLibrary(profile)
+
+      if (candidate !== null) {
         process.env['RELATE_LIB'] = candidate
         break
       }
@@ -81,20 +143,28 @@ export function requireRelateClient(): RelateClientModule {
   const nodeRequire = createRequire(import.meta.url)
 
   try {
-    return nodeRequire('@relate/relate') as RelateClientModule
+    const client: unknown = nodeRequire('@relate/relate')
+
+    if (isRelateClientModule(client)) {
+      return client
+    }
   } catch {
     const sibling = resolveSiblingRepositoryClient()
 
-    if (sibling) {
-      return nodeRequire(sibling) as RelateClientModule
-    }
+    if (sibling !== null) {
+      const siblingClient: unknown = nodeRequire(sibling)
 
-    throw new Error(
-      'The Relate client could not be loaded. Install it into ../relate ' +
-        '(git clone https://github.com/relatedb/relate && cargo build -p relate-ffi --release), ' +
-        'or point RELATE_CLIENT_PATH / RELATE_LIB at a working build.',
-    )
+      if (isRelateClientModule(siblingClient)) {
+        return siblingClient
+      }
+    }
   }
+
+  throw new NeodeError(
+    'The Relate client could not be loaded. Install it into ../relate ' +
+      '(git clone https://github.com/relatedb/relate && cargo build -p relate-ffi --release), ' +
+      'or point RELATE_CLIENT_PATH / RELATE_LIB at a working build.',
+  )
 }
 
 interface RelateClientModule {
@@ -103,16 +173,16 @@ interface RelateClientModule {
   }
 }
 
-function moduleDir(): string {
+function moduleDirectory(): string {
   return path.dirname(fileURLToPath(import.meta.url))
 }
 
 function resolveSiblingRepositoryClient(): string | null {
   const candidates = [
     process.env['RELATE_CLIENT_PATH'],
-    path.resolve(moduleDir(), '../../../relate/clients/javascript'),
-    path.resolve(moduleDir(), '../../../../relate/clients/javascript'),
-  ].filter((candidate): candidate is string => !!candidate)
+    path.resolve(moduleDirectory(), '../../../relate/clients/javascript'),
+    path.resolve(moduleDirectory(), '../../../../relate/clients/javascript'),
+  ].filter((candidate): candidate is string => candidate !== undefined && candidate !== '')
 
   for (const candidate of candidates) {
     if (fs.existsSync(path.join(candidate, 'index.js'))) {
@@ -125,8 +195,8 @@ function resolveSiblingRepositoryClient(): string | null {
 
 function resolveSiblingRepositoryLibrary(profile: string): string | null {
   const candidates = [
-    path.resolve(moduleDir(), '../../../relate'),
-    path.resolve(moduleDir(), '../../../../relate'),
+    path.resolve(moduleDirectory(), '../../../relate'),
+    path.resolve(moduleDirectory(), '../../../../relate'),
   ]
 
   for (const repository of candidates) {
@@ -173,55 +243,50 @@ export function normalizeRelateValue(value: unknown): unknown {
     return value
   }
 
-  if (typeof value === 'object' && !Array.isArray(value)) {
-    const object = value as Record<string, unknown>
-
-    if (object['kind'] === 'node') {
-      const node = value as RelateNodeValue
-
+  if (isRecord(value)) {
+    if (value['kind'] === 'node' && isRelateNodeValue(value)) {
       return {
-        elementId: node.elementId,
-        labels: node.labels,
-        properties: normalizeRelateValue(node.properties) as Record<string, unknown>,
+        elementId: value.elementId,
+        labels: value.labels,
+        properties: normalizeProperties(value.properties),
       }
     }
 
-    if (object['kind'] === 'relationship') {
-      const rel = value as RelateRelationshipValue
-
+    if (value['kind'] === 'relationship' && isRelateRelationshipValue(value)) {
       return {
-        elementId: rel.elementId,
-        type: rel.type,
-        startElementId: rel.startElementId,
-        endElementId: rel.endElementId,
-        properties: normalizeRelateValue(rel.properties) as Record<string, unknown>,
+        elementId: value.elementId,
+        type: value.type,
+        startElementId: value.startElementId,
+        endElementId: value.endElementId,
+        properties: normalizeProperties(value.properties),
       }
     }
 
-    const output: Record<string, unknown> = {}
-
-    for (const [key, item] of Object.entries(object)) {
-      output[key] = normalizeRelateValue(item)
-    }
-
-    return output
+    return normalizeProperties(value)
   }
 
-  return Array.isArray(value) ? value.map((item) => normalizeRelateValue(item)) : value;
+  return Array.isArray(value) ? value.map((item) => normalizeRelateValue(item)) : value
 }
 
-import { classifyError } from '../errors/index.js'
+import { classifyError, NeodeError, withQueryContext } from '../errors/index.js'
 
 /**
 The Relate JS client rejects with RelateError carrying the Neo4j error
 code — classify it into the taxonomy (NTS-129) so both backends surface
-typed errors
+typed errors, and carry the failing statement + redacted params on
+unclassified failures (NTS-446)
 */
-async function classified<T>(promise: Promise<T>): Promise<T> {
+async function classified<T>(
+  promise: Promise<T>,
+  statement?: string,
+  parameters?: QueryParameters,
+): Promise<T> {
   try {
     return await promise
   } catch (error) {
-    throw classifyError(error)
+    throw statement === undefined
+      ? classifyError(error)
+      : withQueryContext(error, statement, parameters)
   }
 }
 
@@ -229,19 +294,25 @@ class RelateTransactionHandle implements TransactionHandle {
   private open = true
 
   private readonly connection: RelateConnection
-  private readonly release: () => void = () => {}
+  private readonly release: () => void = noop
 
   constructor(connection: RelateConnection, release?: () => void) {
     this.connection = connection
-    this.release = release ?? (() => {})
+    this.release = release ?? noop
   }
 
   async run(statement: string, parameters?: QueryParameters): Promise<QueryOutput> {
     if (!this.open) {
-      throw new Error('Transaction has already been closed')
+      throw new NeodeError(
+        'Transaction has already been closed — begin a new one with beginTransaction()',
+      )
     }
 
-    const result = await classified(this.connection.queryAsync(statement, parameters))
+    const result = await classified(
+      this.connection.queryAsync(statement, parameters),
+      statement,
+      parameters,
+    )
 
     return {
       records: result.rows.map((row) => new RelateQueryRecord(result.columns, row)),
@@ -249,6 +320,7 @@ class RelateTransactionHandle implements TransactionHandle {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await -- the embedded engine commits synchronously; nothing to await
   async commit(): Promise<void> {
     if (!this.open) {
       return
@@ -265,6 +337,7 @@ class RelateTransactionHandle implements TransactionHandle {
     this.release()
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await -- the embedded engine rolls back synchronously; nothing to await
   async rollback(): Promise<void> {
     if (!this.open) {
       return
@@ -295,8 +368,7 @@ export class RelateConnectionProvider implements ConnectionProvider {
   private txOpen = false
 
   constructor(database: RelateDatabase, namespace = 'neo4j') {
-    const client = requireRelateClient()
-    client // the native library is loaded at require-time
+    requireRelateClient() // the native library is loaded at require-time
 
     this.connection = database.connect(namespace)
   }
@@ -304,22 +376,22 @@ export class RelateConnectionProvider implements ConnectionProvider {
   /**
   The embedded engine runs in a single namespace, fixed when the provider
   is constructed (`namespace`): the per-call `database` override and the
-  access mode are accepted for port parity and ignored.
+  access mode are accepted for port parity on the ConnectionProvider
+  interface and ignored here.
   */
-  async run(
-    statement: string,
-    parameters?: QueryParameters,
-    _mode?: AccessMode,
-    _database?: string,
-  ): Promise<QueryOutput> {
+  async run(statement: string, parameters?: QueryParameters): Promise<QueryOutput> {
     if (this.txOpen) {
-      throw new Error(
+      throw new NeodeError(
         "A transaction is open on this connection: use the transaction's own " +
           'methods for statements that belong to it, or commit/rollback first',
       )
     }
 
-    const result = await classified(this.connection.queryAsync(statement, parameters))
+    const result = await classified(
+      this.connection.queryAsync(statement, parameters),
+      statement,
+      parameters,
+    )
 
     return {
       records: result.rows.map((row) => new RelateQueryRecord(result.columns, row)),
@@ -327,10 +399,7 @@ export class RelateConnectionProvider implements ConnectionProvider {
     }
   }
 
-  async beginTransaction(
-    _mode: AccessMode = 'WRITE',
-    _database?: string,
-  ): Promise<TransactionHandle> {
+  async beginTransaction(): Promise<TransactionHandle> {
     const previous = this.queue
 
     let release!: () => void
@@ -347,6 +416,7 @@ export class RelateConnectionProvider implements ConnectionProvider {
     })
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await -- the embedded engine has no editions and no async call behind this
   async edition(): Promise<'enterprise' | 'community' | 'unknown'> {
     // The embedded engine has no editions
     return 'community'

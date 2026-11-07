@@ -1,4 +1,4 @@
-import {
+/* eslint-disable unicorn/name-replacements -- "Neo4j" is the product name (the rule's `j` -> `index` replacement misfires on it), and these are the documented public class names */ import {
   type Driver,
   type Node as DriverNode,
   type Record as DriverRecord,
@@ -24,7 +24,17 @@ import type {
   QueryRecord,
   TransactionHandle,
 } from './types.js'
-import { classifyError } from '../errors/index.js'
+import { classifyError, withQueryContext } from '../errors/index.js'
+import { isRecord } from '../services/type-guards.js'
+
+/**
+Recursively normalize the entries of a property map.
+*/
+function normalizeProperties(properties: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(properties).map(([key, item]) => [key, normalizeDriverValue(item)]),
+  )
+}
 
 /**
 Walk a driver result value and normalize driver-specific types
@@ -38,14 +48,14 @@ export function normalizeDriverValue(value: unknown): unknown {
   // Integers are natively represented in driver 5+, but the type can still
   // appear when lossless integers are enabled — convert defensively.
   if (DriverInteger.isInteger(value)) {
-    return (value).toNumber()
+    return value.toNumber()
   }
 
   if (isDriverNode(value)) {
     return {
       elementId: value.elementId,
       labels: value.labels,
-      properties: normalizeDriverValue(value.properties) as Record<string, unknown>,
+      properties: normalizeProperties(value.properties),
     }
   }
 
@@ -55,7 +65,7 @@ export function normalizeDriverValue(value: unknown): unknown {
       type: value.type,
       startElementId: value.startNodeElementId,
       endElementId: value.endNodeElementId,
-      properties: normalizeDriverValue(value.properties) as Record<string, unknown>,
+      properties: normalizeProperties(value.properties),
     }
   }
 
@@ -78,14 +88,8 @@ export function normalizeDriverValue(value: unknown): unknown {
     return value.map((item) => normalizeDriverValue(item))
   }
 
-  if (typeof value === 'object') {
-    const output: Record<string, unknown> = {}
-
-    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-      output[key] = normalizeDriverValue(item)
-    }
-
-    return output
+  if (isRecord(value)) {
+    return normalizeProperties(value)
   }
 
   return value
@@ -93,21 +97,19 @@ export function normalizeDriverValue(value: unknown): unknown {
 
 function isDriverNode(value: unknown): value is DriverNode {
   return (
-    !!value &&
-    typeof value === 'object' &&
-    typeof (value as DriverNode).elementId === 'string' &&
-    Array.isArray((value as DriverNode).labels) &&
-    typeof (value as DriverNode).properties === 'object'
+    isRecord(value) &&
+    typeof value['elementId'] === 'string' &&
+    Array.isArray(value['labels']) &&
+    isRecord(value['properties'])
   )
 }
 
 function isDriverRelationship(value: unknown): value is DriverRelationship {
   return (
-    !!value &&
-    typeof value === 'object' &&
-    typeof (value as DriverRelationship).elementId === 'string' &&
-    typeof (value as DriverRelationship).type === 'string' &&
-    typeof (value as DriverRelationship).startNodeElementId === 'string'
+    isRecord(value) &&
+    typeof value['elementId'] === 'string' &&
+    typeof value['type'] === 'string' &&
+    typeof value['startNodeElementId'] === 'string'
   )
 }
 
@@ -127,7 +129,8 @@ class DriverQueryRecord implements QueryRecord {
   }
 
   get keys(): string[] {
-    return this.record.keys as string[]
+    // The driver types record keys as `Key` (string | number); field names are strings
+    return this.record.keys.map(String)
   }
 }
 
@@ -146,7 +149,9 @@ export class Neo4jTransactionHandle implements TransactionHandle {
 
       return { records: result.records.map((record) => new DriverQueryRecord(record)) }
     } catch (error) {
-      throw classifyError(error)
+      // NTS-446: unclassified failures carry the failing statement and
+      // redacted params; typed errors pass through with their own message
+      throw withQueryContext(error, statement, parameters)
     }
   }
 
@@ -170,11 +175,12 @@ export class Neo4jConnectionProvider implements ConnectionProvider {
     this.database = database
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await -- driver session construction is synchronous; kept async so callers await it uniformly
   private async session(mode: AccessMode, database?: string): Promise<DriverSession> {
     const sessionDatabase = database ?? this.database
 
     return this.driver.session({
-      ...(sessionDatabase === undefined ? {} : { database: sessionDatabase }),
+      ...(sessionDatabase !== undefined && { database: sessionDatabase }),
       defaultAccessMode: mode === 'READ' ? DriverSessionMode.READ : DriverSessionMode.WRITE,
     })
   }
@@ -193,11 +199,9 @@ export class Neo4jConnectionProvider implements ConnectionProvider {
       return {
         records: result.records.map((record) => new DriverQueryRecord(record)),
         summary: {
-          counters: result.summary.counters
-            ? Object.fromEntries(
-                Object.entries(result.summary.counters.updates()).filter(([, value]) => value > 0),
-              )
-            : {},
+          counters: Object.fromEntries(
+            Object.entries(result.summary.counters.updates()).filter(([, value]) => value > 0),
+          ),
           // Populated by EXPLAIN / PROFILE statements (query options
           // are not used; the keywords prefix the statement itself)
           plan: result.summary.plan,
@@ -205,7 +209,8 @@ export class Neo4jConnectionProvider implements ConnectionProvider {
         },
       }
     } catch (error) {
-      throw classifyError(error)
+      // NTS-446: statement + redacted params on unclassified failures
+      throw withQueryContext(error, statement, parameters)
     } finally {
       await session.close()
     }
@@ -231,7 +236,11 @@ export class Neo4jConnectionProvider implements ConnectionProvider {
 
       const value = output.records[0]?.get('edition')
 
-      return value === 'enterprise' ? 'enterprise' : (value === 'community' ? 'community' : 'unknown')
+      if (value === 'enterprise') {
+        return 'enterprise'
+      }
+
+      return value === 'community' ? 'community' : 'unknown'
     } catch {
       return 'unknown'
     }
@@ -241,3 +250,5 @@ export class Neo4jConnectionProvider implements ConnectionProvider {
     await this.driver.close()
   }
 }
+
+/* eslint-enable unicorn/name-replacements -- file-scoped: only this Neo4j driver adapter may keep the product name */

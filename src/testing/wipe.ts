@@ -23,14 +23,18 @@ export async function wipe(target: WipeTarget): Promise<void> {
   const constraints = await runner.run('SHOW CONSTRAINTS')
 
   for (const record of constraints.records) {
-    await runner.run(`DROP CONSTRAINT \`${record.get('name')}\` IF EXISTS`)
+    const name = record.get('name')
+
+    await runner.run(`DROP CONSTRAINT \`${String(name)}\` IF EXISTS`)
   }
 
   const indexes = await runner.run('SHOW INDEXES')
 
   for (const record of indexes.records) {
+    const name = record.get('name')
+
     try {
-      await runner.run(`DROP INDEX \`${record.get('name')}\` IF EXISTS`)
+      await runner.run(`DROP INDEX \`${String(name)}\` IF EXISTS`)
     } catch {
       // Built-in / system indexes cannot be dropped
     }
@@ -38,5 +42,5 @@ export async function wipe(target: WipeTarget): Promise<void> {
 }
 
 function resolveRunner(target: WipeTarget): Runner {
-  return typeof (target as { getRunner?: unknown }).getRunner === 'function' ? (target as { getRunner(): Runner }).getRunner() : (target as Runner);
+  return 'getRunner' in target ? target.getRunner() : target
 }

@@ -7,7 +7,7 @@ import {
 } from '../../src/decorators'
 import { QueryOutput, Runner } from '../../src/driver/types'
 import { getModel } from '../../src/meta'
-import ProjectionService from '../../src/projection/projection.service'
+import { ProjectionService } from '../../src/projection/projection.service'
 
 /**
  * Nested filters / sort on projected read-model fields (NTS-145): object

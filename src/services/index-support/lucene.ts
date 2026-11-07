@@ -16,7 +16,7 @@ const LUCENE_OPERATORS = /\b(AND|OR|NOT|TO)\b/g
 const DEFAULT_MAX_TERMS = 12
 
 export function toFulltextQuery(text: string, maxTerms: number = DEFAULT_MAX_TERMS): string {
-  return (text ?? '')
+  return text
     .replaceAll(LUCENE_OPERATORS, ' ')
     .replaceAll(LUCENE_SPECIALS, ' ')
     .split(/\s+/)

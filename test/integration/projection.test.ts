@@ -11,7 +11,7 @@ import {
   RelationshipExists,
 } from '../../src/decorators'
 import { getModel } from '../../src/meta'
-import ProjectionService from '../../src/projection/projection.service'
+import { ProjectionService } from '../../src/projection/projection.service'
 import { toJson } from '../../src/serialise'
 import { openBackend, TestBackend } from './support/backend'
 

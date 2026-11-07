@@ -1,6 +1,6 @@
 import neo4j from 'neo4j-driver'
 
-import { PropertySchema, PropertyType  } from '../../../src/meta/property-schema'
+import { PropertySchema, PropertyType } from '../../../src/meta/property-schema'
 import { buildPropertySchema } from '../../../src/validation/rule-table'
 
 function prop(type: PropertyType, key = 'name'): PropertySchema {
@@ -47,16 +47,16 @@ describe('rule-table', () => {
   describe('unknown rules', () => {
     it("should throw with neode's error style for unknown rules", () => {
       expect(() => buildPropertySchema(prop(PropertyType.STRING), { banana: true })).toThrow(
-        'Not sure how to validate banana on name',
+        'Cannot validate property "name": unknown validation rule "banana"',
       )
     })
 
     it('should throw for rules the base type does not support', () => {
       expect(() => buildPropertySchema(prop(PropertyType.STRING), { precision: 2 })).toThrow(
-        'Not sure how to validate precision on name',
+        'Cannot validate property "name": unknown validation rule "precision"',
       )
       expect(() => buildPropertySchema(prop(PropertyType.POINT), { min: 2 })).toThrow(
-        'Not sure how to validate min on name',
+        'Cannot validate property "name": unknown validation rule "min"',
       )
     })
 

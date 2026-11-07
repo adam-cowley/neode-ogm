@@ -1,16 +1,24 @@
-import { Builder,  Direction  } from '../../query/index.js'
+import { Builder } from '../../query/index.js'
 import { INTERNAL_ID, THIS_NODE } from '../../constants.js'
 import type { QueryOutput } from '../../driver/types.js'
 import { getModel } from '../../meta/index.js'
-import type { EntitySchema } from '../../meta/entity/entity-schema.js';
+import type { EntitySchema } from '../../meta/entity/entity-schema.js'
 import { EntityType } from '../../meta/entity/entity-schema.js'
-import type { PropertySchema } from '../../meta/property-schema.js';
-import { PropertyType, isProjectedProperty } from '../../meta/property-schema.js'
+import type { PropertySchema } from '../../meta/property-schema.js'
+import { isProjectedProperty } from '../../meta/property-schema.js'
 import type { RelationshipPropertySchema } from '../../meta/relationship-property-schema.js'
-import { getValueOrDefault, getValuesAsRecord, setPropertyInBuilder } from '../../utils.js'
-import { modelPropertyValues } from '../write-utils.js'
+import { getValueOrDefault, getValuesAsRecord, setPropertyInBuilder } from '../../utilities.js'
+import {
+  applyEmbeddings,
+  applyInTransforms,
+  getOtherProperty,
+  modelPropertyValues,
+  setRelationshipEntityProperties,
+} from '../write-utilities.js'
 import { validate } from '../../validation/index.js'
-import QueryService from './query.service.js'
+import { NeodeError } from '../../errors/index.js'
+import { QueryService } from './query.service.js'
+import { isRecord } from '../type-guards.js'
 
 /**
 Properties used for merge matching: unique OR indexed
@@ -20,7 +28,42 @@ export function getMergeFields(schema: EntitySchema): PropertySchema[] {
   return schema.getProperties().filter((property) => property.isUnique() || property.isIndex())
 }
 
-export default class MergeService extends QueryService {
+export class MergeService extends QueryService {
+  private async relateNodes(
+    fromId: string,
+    toId: string,
+    relationship: RelationshipPropertySchema,
+    targetSchema: EntitySchema,
+    entity: unknown,
+  ): Promise<unknown> {
+    const fromNode = 'from'
+    const toNode = 'to'
+    const thisRelationship = 'rel'
+
+    const builder = new Builder()
+
+    // Match nodes by element ID, falling back to a merge if unknown
+    builder
+      .match(fromNode)
+      .whereId(fromNode, fromId)
+      .match(toNode)
+      .whereId(toNode, toId)
+
+      // Merge Relationship
+      .merge(fromNode)
+      .relationship(relationship.getType(), relationship.getDirection(), thisRelationship)
+      .to(toNode)
+
+    // Set relationship properties
+    if (targetSchema.getType() === EntityType.RelationshipEntity && isRecord(entity)) {
+      setRelationshipEntityProperties(builder, thisRelationship, targetSchema, entity)
+    }
+
+    const { query, params } = builder.build()
+
+    return this.runner.run(query, params)
+  }
+
   /**
   MERGE a node on the given match properties, then set the given properties
   */
@@ -35,15 +78,28 @@ export default class MergeService extends QueryService {
     )
 
     if (Object.keys(matchRecord).length === 0) {
-      throw new Error('mergeOn requires at least one match property')
+      throw new NeodeError('mergeOn requires at least one match property')
     }
+
+    // Resolve embedding sugar (NTS-449) onto the set values first: a
+    // vector property declared with `from` + `provider` computes its
+    // vector from the source property being written, unless the vector
+    // itself is explicitly provided
+    await applyEmbeddings(schema, set)
+
+    // Apply `in` transforms (NTS-449): user value -> stored form, on
+    // both the match and set values, before validation
+    await applyInTransforms(schema, matchRecord)
+    await applyInTransforms(schema, set)
 
     // Validate the combined match + set values before writing (neode
     // validates both), with the same defaults the set clause applies
     const written: Record<string, unknown> = { ...matchRecord }
 
     for (const property of schema.getProperties()) {
-      if (Object.hasOwn(matchRecord, property.getKey()) || isProjectedProperty(property)) {continue}
+      if (Object.hasOwn(matchRecord, property.getKey()) || isProjectedProperty(property)) {
+        continue
+      }
 
       const value = getValueOrDefault(set, property, schema)
 
@@ -66,8 +122,9 @@ export default class MergeService extends QueryService {
 
       // Match properties are inline in the MERGE, not set; projected
       // read-model values are never written
-      if (Object.hasOwn(matchRecord, key)) {continue}
-      if (isProjectedProperty(property)) {continue}
+      if (Object.hasOwn(matchRecord, key) || isProjectedProperty(property)) {
+        continue
+      }
 
       const value = getValueOrDefault(set, property, schema)
 
@@ -96,12 +153,23 @@ export default class MergeService extends QueryService {
   }
 
   async save(model: object, schema: EntitySchema): Promise<{ elementId: string }> {
+    if (!isRecord(model)) {
+      throw new TypeError('save requires a model object')
+    }
+
+    // Resolve embedding sugar (NTS-449): a vector property declared with
+    // `from` + `provider` computes its vector from the source property
+    // being written, unless the vector itself is explicitly provided
+    await applyEmbeddings(schema, model)
+
+    // Apply `in` transforms (NTS-449): user value -> stored form, before
+    // validation, so validation and the write see the same value
+    await applyInTransforms(schema, model)
+
     // Validate the model's own values (defaults resolved) before any write
     validate(modelPropertyValues(model, schema), schema)
 
     const builder = new Builder()
-
-    let mergeOn: Record<string, unknown>
 
     // Primary Key?
     const primaryKeys = schema
@@ -110,24 +178,24 @@ export default class MergeService extends QueryService {
         (property) =>
           property.isPrimaryKey() &&
           Object.hasOwn(model, property.getKey()) &&
-          (model as Record<string, unknown>)[property.getKey()] !== undefined,
+          model[property.getKey()] !== undefined,
       )
 
-    if (primaryKeys.length > 0) {
-      mergeOn = getValuesAsRecord(model, primaryKeys, schema)
-    }
-
-    // No primary keys: fall back to the merge fields (unique or indexed)
-    else {
-      mergeOn = getValuesAsRecord(model, getMergeFields(schema), schema)
-    }
+    // Primary keys when set, otherwise the merge fields (unique or indexed)
+    const mergeOn = getValuesAsRecord(
+      model,
+      primaryKeys.length > 0 ? primaryKeys : getMergeFields(schema),
+      schema,
+    )
 
     builder.merge(THIS_NODE, schema.getLabels(), mergeOn)
 
     // Set Properties
     for (const property of schema.getProperties()) {
       // Projected read-model values are never written
-      if (isProjectedProperty(property)) {continue}
+      if (isProjectedProperty(property)) {
+        continue
+      }
 
       const value = getValueOrDefault(model, property, schema)
 
@@ -149,150 +217,90 @@ export default class MergeService extends QueryService {
     const firstRecord = result.records[0]
 
     if (firstRecord === undefined) {
-      throw new Error('relate statement returned no records')
+      throw new NeodeError('relate statement returned no records')
     }
 
-    const thisId = firstRecord.get(INTERNAL_ID)
+    const thisId: unknown = firstRecord.get(INTERNAL_ID)
 
     if (typeof thisId !== 'string') {
-      throw new Error(`relate statement did not return an ${INTERNAL_ID}`)
+      throw new TypeError(`relate statement did not return an ${INTERNAL_ID}`)
     }
 
     // Save relationship targets in the same transaction
     await Promise.all(
-      schema.getRelationships().map(async (rel) => {
-        const key = rel.getKey()
+      schema.getRelationships().map(async (relationship) => {
+        const key = relationship.getKey()
 
-        const targetEntity = rel.getTarget()
+        const propertyValue: unknown = model[key]
+
+        // If property is not set (or falsy) then ignore it
+        const hasValue = Object.hasOwn(model, key) && Boolean(propertyValue)
+
+        if (!hasValue) {
+          return
+        }
+
+        const value = propertyValue
+
+        const values: unknown[] = relationship.getMany() && Array.isArray(value) ? value : [value]
+
+        const targetEntity = relationship.getTarget()
+
         const targetSchema = getModel(targetEntity)
 
-        // If property is not set then ignore it
-        if (Object.hasOwn(model, key) && (model as Record<string, unknown>)[key]) {
-          const values: unknown[] = rel.getMany()
-            ? ((model as Record<string, unknown>)[key] as unknown[])
-            : [(model as Record<string, unknown>)[key]]
-
-          if (targetSchema.getType() === EntityType.RelationshipEntity) {
-            return Promise.all(
-              values.map(async (value) => {
-                let otherProperty: PropertySchema | undefined
-
-                if (rel.getDirection() === Direction.OUTGOING) {
-                  otherProperty = targetSchema
-                    .getProperties()
-                    .find(
-                      (property) =>
-                        property.getType() === PropertyType.END_NODE ||
-                        property.getType() === PropertyType.OTHER_NODE,
-                    )
-                } else if (rel.getDirection() === Direction.INCOMING) {
-                  otherProperty = targetSchema
-                    .getProperties()
-                    .find(
-                      (property) =>
-                        property.getType() === PropertyType.START_NODE ||
-                        property.getType() === PropertyType.OTHER_NODE,
-                    )
-                }
-
-                if (!otherProperty) {
-                  throw new Error(
-                    `Relationship entity "${targetEntity?.name}" must declare a ` +
-                      `@StartNode or @EndNode property to be related via "${rel.getKey()}"`,
-                  )
-                }
-
-                const otherEntity = otherProperty.getEntity()
-                const otherSchema = getModel(otherEntity) // TODO: Validate the other object
-                const otherModel = (value as Record<string, unknown>)[
-                  otherProperty.getKey()
-                ] as object
-
-                const res = await this.save(otherModel, otherSchema)
-
-                await this.relateNodes(thisId, res.elementId, rel, targetSchema, value)
-              }),
-            )
-          }
-
+        if (targetSchema.getType() === EntityType.RelationshipEntity) {
           return Promise.all(
-            values.map(async (value) => {
-              // Save Node
-              const res = await this.save(value as object, targetSchema)
+            values.map(async (element) => {
+              if (!isRecord(element)) {
+                throw new TypeError(`The value of relationship "${key}" must be an object to save`)
+              }
 
-              // Relate the two nodes together
-              await this.relateNodes(thisId, res.elementId, rel, targetSchema, value)
+              const otherProperty = getOtherProperty(relationship, targetSchema, targetEntity)
+
+              const otherModel: unknown = element[otherProperty.getKey()]
+
+              if (!isRecord(otherModel)) {
+                throw new TypeError(
+                  `The value of "${otherProperty.getKey()}" on the relationship entity must be an object`,
+                )
+              }
+
+              // The node at the far end is saved with ITS OWN schema —
+              // the relationship entity's schema only describes the
+              // relationship between the two nodes
+              const otherEntity = otherProperty.getEntity()
+
+              if (otherEntity === undefined) {
+                throw new NeodeError(
+                  `The relationship entity has no target entity — declare the target model with @NodeEntity or defineModel() first`,
+                )
+              }
+
+              const otherSchema = getModel(otherEntity)
+
+              const saved = await this.save(otherModel, otherSchema)
+
+              await this.relateNodes(thisId, saved.elementId, relationship, targetSchema, element)
             }),
           )
         }
 
-        return;
+        return Promise.all(
+          values.map(async (element) => {
+            if (!isRecord(element)) {
+              throw new TypeError(`The value of relationship "${key}" must be an object to save`)
+            }
+
+            // Save Node
+            const saved = await this.save(element, targetSchema)
+
+            // Relate the two nodes together
+            await this.relateNodes(thisId, saved.elementId, relationship, targetSchema, element)
+          }),
+        )
       }),
     )
 
     return { elementId: thisId }
-  }
-
-  private async relateNodes<T>(
-    fromId: string,
-    toId: string,
-    rel: RelationshipPropertySchema,
-    targetSchema: EntitySchema,
-    entity: T,
-  ): Promise<unknown> {
-    const fromNode = 'from'
-    const toNode = 'to'
-    const thisRel = 'rel'
-
-    const builder = new Builder()
-
-    // Match nodes by element ID, falling back to a merge if unknown
-    builder
-      .match(fromNode)
-      .whereId(fromNode, fromId)
-      .match(toNode)
-      .whereId(toNode, toId)
-
-      // Merge Relationship
-      .merge(fromNode)
-      .relationship(rel.getType(), rel.getDirection(), thisRel)
-      .to(toNode)
-
-    // Set relationship properties
-    if (targetSchema.getType() === EntityType.RelationshipEntity) {
-      for (const property of targetSchema.getProperties()) {
-        const key = property.getKey()
-
-        // Ignore if not set
-        if (!Object.hasOwn(entity as Record<string, unknown>, key)) {continue}
-
-        const value = (entity as Record<string, unknown>)[key]
-
-        switch (property.getType()) {
-          // Ignore any internals
-          case PropertyType.INTERNAL_ID:
-          case PropertyType.START_NODE:
-          case PropertyType.END_NODE:
-          case PropertyType.OTHER_NODE: {
-            break
-          }
-
-          case PropertyType.ALL_PROPERTIES: {
-            for (const entryValue of Object.values(value as Record<string, unknown>)) {setPropertyInBuilder(builder, thisRel, property, entryValue)}
-            
-            break
-          }
-
-          default: {
-            setPropertyInBuilder(builder, thisRel, property, value)
-            break
-          }
-        }
-      }
-    }
-
-    const { query, params } = builder.build()
-
-    return this.runner.run(query, params)
   }
 }

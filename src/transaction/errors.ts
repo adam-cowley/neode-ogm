@@ -1,5 +1,5 @@
 import type { QueryOutput, QueryParams as QueryParameters } from '../driver/types.js'
-import NeodeError from '../errors/neode-error.js'
+import { NeodeError } from '../errors/neode-error.js'
 
 export const ERROR_TRANSACTION_FAILED = 'ERROR_TRANSACTION_FAILED'
 
@@ -25,7 +25,7 @@ transaction is rolled back (port of neode's TransactionError):
  - `results` — results of the statements that succeeded before the failure
  - `details` — the failed statements only ({ index, query, params, error })
 */
-export default class TransactionError extends NeodeError {
+export class TransactionError extends NeodeError {
   readonly errors: (BatchStatementError | null)[]
   readonly results: QueryOutput[]
   readonly details: BatchStatementError[]

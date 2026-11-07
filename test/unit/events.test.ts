@@ -1,5 +1,5 @@
 import { vi } from 'vitest'
-import Neode from '../../src/neode.service'
+import { Neode } from '../../src/neode.service'
 import { EventType } from '../../src/common/events'
 import { NodeEntity, InternalId, Uuid, String, OneToMany } from '../../src/decorators'
 import { Direction } from '../../src/query'

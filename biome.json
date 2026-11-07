@@ -21,6 +21,6 @@
     }
   },
   "files": {
-    "includes": ["**", "!dist/**", "!coverage/**", "!bench/**"]
+    "includes": ["**", "!dist/**", "!**/dist/**", "!coverage/**", "!bench/**"]
   }
 }

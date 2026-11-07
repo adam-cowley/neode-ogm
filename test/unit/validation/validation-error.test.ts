@@ -1,7 +1,7 @@
 import neo4j from 'neo4j-driver'
 
 import { EntitySchema } from '../../../src/meta/entity/entity-schema'
-import { PropertySchema, PropertyType  } from '../../../src/meta/property-schema'
+import { PropertySchema, PropertyType } from '../../../src/meta/property-schema'
 import { validate } from '../../../src/validation'
 import { ValidationError } from '../../../src/validation/validation-error'
 

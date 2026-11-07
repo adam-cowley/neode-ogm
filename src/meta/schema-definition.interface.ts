@@ -24,6 +24,56 @@ export type PropertyTypeName =
   | 'duration'
 
 /**
+Vector index declaration for a property (NTS-447): installing the schema
+creates a Neo4j vector index over the property (dropped by `dropSchema()`),
+and `knn()` searches it. `dimensions` must match the embedding model;
+`similarityFunction` defaults to 'cosine'.
+*/
+export interface VectorConfig {
+  /**
+  Number of dimensions of the stored vectors — must match the embedding model
+  */
+  dimensions: number
+  similarityFunction?: 'cosine' | 'euclidean'
+  /**
+  Embedding sugar (NTS-449): the property whose value the vector is
+  computed from — e.g. `from: 'plot'` embeds the `plot` property.
+  */
+  from?: string
+  /**
+  Embedding sugar (NTS-449): the embedding function the user supplies
+  (the library stays dependency-free) — called with the source property's
+  value whenever that source property is being written and the vector
+  property itself is not explicitly provided in the same payload
+  (an explicit vector value always wins). Failures surface as a
+  NeodeError naming the model and property.
+  */
+  provider?: (text: string) => Promise<number[]>
+}
+
+/**
+Property value transforms (NTS-449): user-supplied value mappers applied
+on the write and read paths. `in` converts a user value into its stored
+form before validation on every write path (create / update / merge /
+bulk); `out` converts the stored form back at hydration. Both may be
+async on the write path — `out` must be synchronous, hydration is
+synchronous. Failures surface as a NeodeError naming the model and
+property.
+*/
+export interface TransformConfig {
+  /**
+  value -> stored form, applied before validation on every write path
+  (create / update / merge / bulk writes). May be async.
+  */
+  in?: (value: unknown) => unknown
+  /**
+  stored form -> value, applied at hydration on read. Must be
+  synchronous — hydration is a synchronous pass.
+  */
+  out?: (value: unknown) => unknown
+}
+
+/**
 Full form property definition, mirroring neode's schema object options.
 */
 export interface PropertyDefinition {
@@ -63,6 +113,19 @@ export interface PropertyDefinition {
   Declare a full-text index over the property (NTS-123/436).
   */
   fulltext?: boolean
+  /**
+  Declare a vector index over the property (NTS-447): created by
+  `installSchema()` with the deterministic `vectorIndexName()` naming and
+  dropped by `dropSchema()`.
+  */
+  vector?: VectorConfig
+  /**
+  Property value transforms (NTS-449): `in` converts the user value into
+  its stored form before validation on every write path (create / update
+  / merge / bulk writes), `out` converts the stored form back at
+  hydration on read. See TransformConfig.
+  */
+  transform?: TransformConfig
   /**
   Read-side fallbacks applied at hydration when the stored/projected
   value is null or absent (NTS-139, the Zod `.catch()` analogue): a
@@ -183,7 +246,7 @@ export interface ExpressionDefinition {
 */
 export interface ComputedDefinition {
   type: 'computed'
-  compute: (entity: any) => unknown
+  compute: (entity: unknown) => unknown
 }
 
 export type ProjectionDefinition =

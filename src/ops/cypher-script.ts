@@ -3,7 +3,7 @@ Cypher script runner (NTS-134) — split a .cypher file into statements
 (comment- and string-aware) and execute them sequentially.
 */
 
-import type { Runner, QueryOutput } from '../driver/types.js'
+import type { QueryOutput, Runner } from '../driver/types.js'
 
 /**
 Split a script's contents into statements.
@@ -44,66 +44,70 @@ export function splitCypherStatements(content: string): string[] {
       break
     }
 
-    switch (char) {
-      case ';': {
-        endStatement(index)
-        index += 1
-        break
-      }
+    const next = advance(content, index, char, endStatement)
 
-      case "'":
-      case '"': {
-        hasCode = true
-        index = skipString(content, index, char)
-        break
-      }
+    index = next.index
 
-      case '`': {
-        hasCode = true
-        index = skipQuotedIdentifier(content, index)
-        break
-      }
-
-      case '-': {
-        if (content[index + 1] === '-') {
-          index = skipLineComment(content, index)
-          break
-        }
-
-        hasCode = true
-        index += 1
-        break
-      }
-
-      case '/': {
-        if (content[index + 1] === '/') {
-          index = skipLineComment(content, index)
-          break
-        }
-
-        if (content[index + 1] === '*') {
-          index = skipBlockComment(content, index)
-          break
-        }
-
-        hasCode = true
-        index += 1
-        break
-      }
-
-      default: {
-        if (!/\s/.test(char)) {
-          hasCode = true
-        }
-
-        index += 1
-      }
+    if (next.isCode) {
+      hasCode = true
     }
   }
 
   endStatement(content.length)
 
   return statements
+}
+
+/**
+One scanner step: consume the character at `index` and return the next
+index, plus whether the step saw statement code (comments and whitespace
+are not code). Extracted so the scanner loop stays a plain loop (a switch
+with `break` inside a loop is flagged).
+*/
+function advance(
+  content: string,
+  index: number,
+  char: string,
+  endStatement: (semicolonIndex: number) => void,
+): { index: number; isCode: boolean } {
+  switch (char) {
+    case ';': {
+      endStatement(index)
+
+      return { index: index + 1, isCode: false }
+    }
+
+    case "'":
+    case '"': {
+      return { index: skipString(content, index, char), isCode: true }
+    }
+
+    case '`': {
+      return { index: skipQuotedIdentifier(content, index), isCode: true }
+    }
+
+    case '-': {
+      return content[index + 1] === '-'
+        ? { index: skipLineComment(content, index), isCode: false }
+        : { index: index + 1, isCode: true }
+    }
+
+    case '/': {
+      if (content[index + 1] === '/') {
+        return { index: skipLineComment(content, index), isCode: false }
+      }
+
+      if (content[index + 1] === '*') {
+        return { index: skipBlockComment(content, index), isCode: false }
+      }
+
+      return { index: index + 1, isCode: true }
+    }
+
+    default: {
+      return { index: index + 1, isCode: !/\s/.test(char) }
+    }
+  }
 }
 
 export interface RunCypherScriptOptions {

@@ -8,24 +8,27 @@ import type {
 } from '../driver/types.js'
 import { EventType } from '../common/events.js'
 import { getModel, getModels } from '../meta/index.js'
-import type { EntitySchema } from '../meta/entity/entity-schema.js'
-import { elementIdOfEntity } from '../utils.js'
+import { EntitySchema } from '../meta/entity/entity-schema.js'
+import type { EntitySchema as EntitySchemaType } from '../meta/entity/entity-schema.js'
+import { elementIdOfEntity } from '../element-id.js'
 import type { RelationshipPropertySchema } from '../meta/relationship-property-schema.js'
-import type INeode from '../neode.interface.js'
-import DeleteService, { type DeleteOptions } from '../services/query/delete.service.js'
-import DetachService, { type DetachResult } from '../services/query/detach.service.js'
-import FindByIdService from '../services/query/find-by-id.service.js'
-import FindService from '../services/query/find.service.js'
-import GetService, { type OrderSpec } from '../services/query/get.service.js'
-import MergeService from '../services/query/merge.service.js'
-import RelateService from '../services/query/relate.service.js'
-import UpdateService from '../services/query/update.service.js'
-import WithinDistanceService from '../services/query/within-distance.service.js'
+import type { INeode } from '../neode.interface.js'
+import { NeodeError } from '../errors/index.js'
+import { DeleteService, type DeleteOptions } from '../services/query/delete.service.js'
+import { DetachService, type DetachResult } from '../services/query/detach.service.js'
+import { FindByIdService } from '../services/query/find-by-id.service.js'
+import { FindService } from '../services/query/find.service.js'
+import { GetService, type OrderSpec } from '../services/query/get.service.js'
+import { MergeService } from '../services/query/merge.service.js'
+import { RelateService } from '../services/query/relate.service.js'
+import { UpdateService } from '../services/query/update.service.js'
+import { WithinDistanceService } from '../services/query/within-distance.service.js'
 import { search, type ScoredEntity } from '../services/query/search.service.js'
+import { isConstructorOf, isRecord } from '../services/type-guards.js'
 
-
-export default class TransactionalService implements INeode {
+export class TransactionalService implements INeode {
   private readonly handle: TransactionHandle
+
   private readonly eventEmitter: EventEmitter
 
   constructor(handle: TransactionHandle, eventEmitter: EventEmitter) {
@@ -34,8 +37,53 @@ export default class TransactionalService implements INeode {
   }
 
   /**
-  The underlying transaction handle — a Runner scoped to this transaction
+  The schema registered for the given model constructor
   */
+  private getSchema(constructor: unknown): EntitySchemaType {
+    const found = getModel(constructor)
+
+    if (!(found instanceof EntitySchema)) {
+      const constructorName = typeof constructor === 'function' ? constructor.name : ''
+
+      const name = constructorName.length > 0 ? constructorName : 'unknown'
+
+      throw new NeodeError(
+        `Couldn't find a model for "${name}". Registered model(s) are: ${Array.from(
+          getModels().keys(),
+          (model) => (typeof model === 'function' ? model.name : 'unknown'),
+        ).join(', ')}`,
+      )
+    }
+
+    return found
+  }
+
+  /**
+  The relationship declared on the schema under the given key
+  (mirror of the facade's relate-by-key resolution)
+  */
+  private requireRelationship(schema: EntitySchemaType, key: string): RelationshipPropertySchema {
+    if (!schema.hasRelationship(key)) {
+      throw new NeodeError(
+        `Unknown relationship "${key}" on ${schema.getLabels().join(':') || 'entity'}`,
+      )
+    }
+
+    return schema.getRelationship(key)
+  }
+
+  /**
+  The facade-mirror methods accept the per-call `database` argument for
+  signature parity; a transaction handle is bound to one database at open
+  time, so the argument is acknowledged and ignored
+  */
+  private ignoreDatabaseOverride(database: string | undefined): void {
+    if (database !== undefined) {
+      // Deliberately ignored: this transaction runs against the database
+      // it was opened with
+    }
+  }
+
   getRunner(): Runner {
     return this.handle
   }
@@ -52,60 +100,32 @@ export default class TransactionalService implements INeode {
     await this.handle.rollback()
   }
 
-  private getSchema(constructor: unknown): EntitySchema {
-    const found = getModel(constructor)
-
-    if (!found) {
-      const name = (constructor as { name?: string })?.name || 'unknown'
-
-      throw new Error(
-        `Couldn't find a model for "${name}". Registered model(s) are: ${Array.from(
-          getModels().keys(),
-        )
-          .map((model) => (model as { name?: string }).name)
-          .join(', ')}`,
-      )
-    }
-
-    return found
-  }
-
-  /**
-  The relationship declared on the schema under the given key
-  (mirror of the facade's relate-by-key resolution)
-  */
-  private requireRelationship(schema: EntitySchema, key: string): RelationshipPropertySchema {
-    if (!schema.hasRelationship(key)) {
-      throw new Error(
-        `Unknown relationship "${key}" on ${schema.getLabels().join(':') || 'entity'}`,
-      )
-    }
-
-    return schema.getRelationship(key)
-  }
-
   async find<T>(
     constructor: new (...arguments_: never[]) => T,
     value: string,
-    _database?: string,
+    database?: string,
   ): Promise<T | undefined> {
+    this.ignoreDatabaseOverride(database)
+
     const schema = this.getSchema(constructor)
 
     const service = new FindService(this.handle)
 
-    return service.find(constructor, schema, value) as Promise<T | undefined>
+    return service.find<T>(constructor, schema, value)
   }
 
   async findById<T>(
     constructor: new (...arguments_: never[]) => T,
     id: string,
-    _database?: string,
+    database?: string,
   ): Promise<T | undefined> {
+    this.ignoreDatabaseOverride(database)
+
     const schema = this.getSchema(constructor)
 
     const service = new FindByIdService(this.handle)
 
-    return service.find(constructor, schema, id) as Promise<T | undefined>
+    return service.find<T>(constructor, schema, id)
   }
 
   async get<T>(
@@ -113,8 +133,10 @@ export default class TransactionalService implements INeode {
     parameters: Record<string, unknown>,
     limit?: number,
     skip?: number,
-    _database?: string,
+    database?: string,
   ): Promise<T[]> {
+    this.ignoreDatabaseOverride(database)
+
     const schema = this.getSchema(constructor)
 
     const service = new GetService(this.handle)
@@ -132,23 +154,29 @@ export default class TransactionalService implements INeode {
     return records[0]
   }
 
-  async save<T>(entity: T, _database?: string): Promise<T> {
-    const entityRecord = entity as unknown as Record<string, unknown>
-    const schema = this.getSchema(entityRecord.constructor)
+  async save<T>(entity: T, database?: string): Promise<T> {
+    this.ignoreDatabaseOverride(database)
+
+    if (!isRecord(entity)) {
+      throw new TypeError('save requires an entity object')
+    }
+
+    const schema = this.getSchema(entity.constructor)
 
     const merge = new MergeService(this.handle)
 
-    const { elementId } = await merge.save(entity as object, schema)
+    const { elementId } = await merge.save(entity, schema)
 
-    const saved = await this.findById<T>(
-      entityRecord.constructor as new (
-        ...arguments_: never[]
-      ) => T,
-      elementId,
-    )
+    const constructor: unknown = entity.constructor
 
-    if (!saved) {
-      throw new Error('Entity was saved but could not be found immediately afterwards')
+    if (!isConstructorOf<T>(constructor)) {
+      throw new TypeError('The saved entity has no model constructor')
+    }
+
+    const saved = await this.findById<T>(constructor, elementId)
+
+    if (saved === undefined) {
+      throw new NeodeError('Entity was saved but could not be found immediately afterwards')
     }
 
     // Emit event
@@ -162,16 +190,19 @@ export default class TransactionalService implements INeode {
   cascade modes through; the legacy string second argument (database)
   stays accepted, as on the facade.
   */
-  async delete<T>(entity: T, options?: DeleteOptions | string, _database?: string): Promise<void> {
-    const schema = this.getSchema((entity as unknown as Record<string, unknown>).constructor)
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- the generic mirrors INeode#delete's signature; the entity type cannot be inferred from anything else in it
+  async delete<T>(entity: T, options?: DeleteOptions | string, database?: string): Promise<void> {
+    this.ignoreDatabaseOverride(database)
+
+    if (!isRecord(entity)) {
+      throw new TypeError('delete requires an entity object')
+    }
+
+    const schema = this.getSchema(entity.constructor)
 
     const service = new DeleteService(this.handle)
 
-    await service.delete(
-      schema,
-      entity as object,
-      typeof options === 'string' ? undefined : options,
-    )
+    await service.delete(schema, entity, typeof options === 'string' ? undefined : options)
 
     // Emit event
     this.eventEmitter.emit(EventType.NODE_DELETED, entity)
@@ -184,51 +215,61 @@ export default class TransactionalService implements INeode {
   async update<T>(
     entity: T,
     properties: Record<string, unknown> = {},
-    _database?: string,
+    database?: string,
   ): Promise<T | undefined> {
-    const entityRecord = entity as unknown as Record<string, unknown>
-    const schema = this.getSchema(entityRecord.constructor)
+    this.ignoreDatabaseOverride(database)
 
-    await new UpdateService(this.handle).update(schema, entity as object, properties)
+    if (!isRecord(entity)) {
+      throw new TypeError('update requires an entity object')
+    }
 
-    const elementId = elementIdOfEntity(schema, entity as object)
+    const schema = this.getSchema(entity.constructor)
 
-    return elementId ? (new FindByIdService(this.handle).find(
-      entityRecord.constructor as new (
-        ...arguments_: never[]
-      ) => T,
-      schema,
-      elementId,
-    ) as Promise<T | undefined>) : undefined;
+    await new UpdateService(this.handle).update(schema, entity, properties)
+
+    const elementId = elementIdOfEntity(schema, entity)
+
+    if (elementId === undefined) {
+      return undefined
+    }
+
+    const constructor: unknown = entity.constructor
+
+    if (!isConstructorOf<T>(constructor)) {
+      throw new TypeError('The updated entity has no model constructor')
+    }
+
+    return new FindByIdService(this.handle).find<T>(constructor, schema, elementId)
   }
 
   /**
   Relate two saved nodes by the relationship's KEY on the from-entity's
   schema — mirror of the facade's relate
   */
-  async relate<From extends object, To extends object>(
+  async relate<From extends object>(
     constructor: new (...arguments_: never[]) => From,
     from: From,
-    to: To,
+    to: object,
     relationshipKey: string,
     properties: Record<string, unknown> = {},
-    forceCreate = false,
+    isForceCreate = false,
   ): Promise<GraphRelationship | undefined> {
     const schema = this.getSchema(constructor)
-    const rel = this.requireRelationship(schema, relationshipKey)
+
+    const relationship = this.requireRelationship(schema, relationshipKey)
 
     const result = await new RelateService(this.handle).relate(
       schema,
       from,
       to,
-      rel,
+      relationship,
       properties,
-      forceCreate,
+      isForceCreate,
     )
 
-    if (result) {
+    if (result !== undefined) {
       this.eventEmitter.emit(
-        forceCreate ? EventType.RELATIONSHIP_CREATED : EventType.RELATIONSHIP_MERGED,
+        isForceCreate ? EventType.RELATIONSHIP_CREATED : EventType.RELATIONSHIP_MERGED,
         result,
       )
     }
@@ -247,9 +288,10 @@ export default class TransactionalService implements INeode {
     relationshipKey: string,
   ): Promise<DetachResult<From, To>> {
     const schema = this.getSchema(constructor)
-    const rel = this.requireRelationship(schema, relationshipKey)
 
-    return new DetachService(this.handle).detach(schema, from, to, rel)
+    const relationship = this.requireRelationship(schema, relationshipKey)
+
+    return new DetachService(this.handle).detach(schema, from, to, relationship)
   }
 
   /**
@@ -262,8 +304,10 @@ export default class TransactionalService implements INeode {
     order?: OrderSpec,
     limit?: number,
     skip?: number,
-    _database?: string,
+    database?: string,
   ): Promise<T[]> {
+    this.ignoreDatabaseOverride(database)
+
     const schema = this.getSchema(constructor)
 
     return new GetService(this.handle).get<T>(constructor, schema, parameters, limit, skip, order)
@@ -291,8 +335,10 @@ export default class TransactionalService implements INeode {
     order?: OrderSpec,
     limit?: number,
     skip?: number,
-    _database?: string,
+    database?: string,
   ): Promise<T[]> {
+    this.ignoreDatabaseOverride(database)
+
     const schema = this.getSchema(constructor)
 
     return new WithinDistanceService(this.handle).withinDistance<T>(

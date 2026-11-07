@@ -3,10 +3,11 @@ import { THIS_NODE } from '../../constants.js'
 import { hydrate } from '../../hydrate.js'
 import type { EntitySchema } from '../../meta/entity/entity-schema.js'
 import { PropertyType, isProjectedProperty } from '../../meta/property-schema.js'
-import { getValueOrDefault } from '../../utils.js'
-import { modelPropertyValues } from '../write-utils.js'
+import { getValueOrDefault } from '../../utilities.js'
+import { applyEmbeddings, applyInTransforms, modelPropertyValues } from '../write-utilities.js'
 import { validate } from '../../validation/index.js'
-import QueryService from './query.service.js'
+import { NeodeError } from '../../errors/index.js'
+import { QueryService } from './query.service.js'
 import { getMergeFields } from './merge.service.js'
 
 /**
@@ -62,9 +63,38 @@ export function chunk<T>(rows: T[], chunkSize: number): T[][] {
 }
 
 function requireChunkSize(chunkSize: number): void {
-  if (!Number.isInteger(chunkSize) || chunkSize < 1) {
-    throw new Error(`chunkSize must be a positive integer, received ${chunkSize}`)
+  if (!Number.isSafeInteger(chunkSize) || chunkSize < 1) {
+    throw new NeodeError(`chunkSize must be a positive integer, received ${String(chunkSize)}`)
   }
+}
+
+/**
+Sorted copy of string values (code-unit order). `Array#toSorted` is outside
+the ES2022 lib target and `Array#sort` is banned by lint, so this is a plain
+insertion sort — the sorted lists are merge-field keys, a handful at most.
+*/
+function sortedCopy(values: string[]): string[] {
+  const sorted: string[] = []
+
+  for (const value of values) {
+    const position = sorted.findIndex((existing) => value < existing)
+
+    if (position === -1) {
+      sorted.push(value)
+    } else {
+      sorted.splice(position, 0, value)
+    }
+  }
+
+  return sorted
+}
+
+/**
+True when the runner opens its own transactions (a ConnectionProvider)
+rather than running in an already-open transaction's scope
+*/
+function isConnectionProvider(runner: Runner): runner is ConnectionProvider {
+  return 'beginTransaction' in runner && typeof runner.beginTransaction === 'function'
 }
 
 /**
@@ -87,10 +117,10 @@ export function processCreateRow(
   // silently dropped
   const relationship = schema
     .getRelationships()
-    .find((rel) => row[rel.getKey()] !== undefined && row[rel.getKey()] !== null)
+    .find((candidate) => row[candidate.getKey()] !== undefined && row[candidate.getKey()] !== null)
 
   if (relationship) {
-    throw new Error(
+    throw new NeodeError(
       `createMany does not support nested relationship values ("${relationship.getKey()}" given); ` +
         'create relationships separately',
     )
@@ -101,7 +131,9 @@ export function processCreateRow(
   const values: Record<string, unknown> = {}
 
   for (const property of schema.getProperties()) {
-    if (NON_WRITABLE_TYPES.has(property.getType()) || isProjectedProperty(property)) {continue}
+    if (NON_WRITABLE_TYPES.has(property.getType()) || isProjectedProperty(property)) {
+      continue
+    }
 
     const value = getValueOrDefault(row, property, schema)
 
@@ -140,7 +172,7 @@ export function processMergeRow(
   }
 
   if (Object.keys(match).length === 0) {
-    throw new Error(
+    throw new NeodeError(
       'mergeMany requires every row to set at least one merge field ' +
         `(unique, indexed or primary key properties): ${mergeFields
           .map((property) => property.getKey())
@@ -151,11 +183,15 @@ export function processMergeRow(
   const set: Record<string, unknown> = {}
 
   for (const property of schema.getProperties()) {
-    if (NON_WRITABLE_TYPES.has(property.getType()) || isProjectedProperty(property)) {continue}
-
-    // Match keys ride in the match map; they must never be
-    // default-resolved into the set map
-    if (mergeKeys.has(property.getKey())) {continue}
+    if (
+      NON_WRITABLE_TYPES.has(property.getType()) ||
+      isProjectedProperty(property) ||
+      // Match keys ride in the match map; they must never be
+      // default-resolved into the set map
+      mergeKeys.has(property.getKey())
+    ) {
+      continue
+    }
 
     const value = getValueOrDefault(row, property, schema)
 
@@ -192,7 +228,7 @@ RETURN this
 */
 export function buildMergeQuery(labels: string[], matchKeys: string[]): string {
   if (matchKeys.length === 0) {
-    throw new Error('mergeMany requires at least one match property')
+    throw new NeodeError('mergeMany requires at least one match property')
   }
 
   const pattern = matchKeys.map((key) => `${key}: row.${key}`).join(', ')
@@ -206,6 +242,28 @@ export function buildMergeQuery(labels: string[], matchKeys: string[]): string {
 }
 
 /**
+Bulk rows are transformed per row before the shared validate-and-reduce
+pass: embedding sugar first (NTS-449), then `in` transforms — the same
+order and semantics as the single create / merge paths. Each row is
+copied, so the caller's records are left untouched.
+*/
+async function prepareRows(
+  rows: Record<string, unknown>[],
+  schema: EntitySchema,
+): Promise<Record<string, unknown>[]> {
+  return Promise.all(
+    rows.map(async (row) => {
+      const prepared = { ...row }
+
+      await applyEmbeddings(schema, prepared)
+      await applyInTransforms(schema, prepared)
+
+      return prepared
+    }),
+  )
+}
+
+/**
 Run one unit of work per chunk: a managed WRITE transaction when the
 runner is a ConnectionProvider, or the runner's own scope when it is an
 already-open transaction
@@ -215,13 +273,11 @@ async function inWriteTransaction(
   database: string | undefined,
   work: (tx: Runner) => Promise<QueryOutput>,
 ): Promise<QueryOutput> {
-  const provider = runner as ConnectionProvider
-
-  if (typeof provider.beginTransaction !== 'function') {
+  if (!isConnectionProvider(runner)) {
     return work(runner)
   }
 
-  const tx = await provider.beginTransaction('WRITE', database)
+  const tx = await runner.beginTransaction('WRITE', database)
 
   try {
     const output = await work(tx)
@@ -230,7 +286,12 @@ async function inWriteTransaction(
 
     return output
   } catch (error) {
-    await tx.rollback().catch(() => {})
+    // A failing rollback must not mask the original error
+    try {
+      await tx.rollback()
+    } catch {
+      // ignored: the original error below is what the caller needs
+    }
 
     throw error
   }
@@ -241,68 +302,7 @@ Bulk CREATE and MERGE via UNWIND: one managed write transaction per
 chunk, one UNWIND statement per transaction, rows validated and reduced
 to property maps exactly like the single-create / merge paths
 */
-export default class BulkService extends QueryService {
-  /**
-  CREATE every row in chunks. Rows are flat property records: nested
-  relationship targets are not supported (they throw), defaults and
-  validation behave exactly like create()
-  */
-  async createMany<T>(
-    constructor: new (...arguments_: never[]) => T,
-    schema: EntitySchema,
-    rows: Record<string, unknown>[],
-    options: BulkOptions = {},
-  ): Promise<BulkChunk<T>[]> {
-    const rowMaps = rows.map((row) => processCreateRow(row, schema))
-
-    return this.writeChunks<T>(constructor, rowMaps, buildCreateQuery(schema.getLabels()), options)
-  }
-
-  /**
-  MERGE every row in chunks on the model's merge fields (the unique,
-  indexed or primary key properties each row explicitly sets): rows
-  matching an existing node update it (`+=`), the rest are created.
-  Every row must merge on the same merge fields
-  */
-  async mergeMany<T>(
-    constructor: new (...arguments_: never[]) => T,
-    schema: EntitySchema,
-    rows: Record<string, unknown>[],
-    options: BulkOptions = {},
-  ): Promise<BulkChunk<T>[]> {
-    if (rows.length === 0) {
-      return []
-    }
-
-    const parts = rows.map((row) => processMergeRow(row, schema))
-
-    const firstPart = parts[0]
-
-    if (firstPart === undefined) {
-      return []
-    }
-
-    const matchKeys = Object.keys(firstPart.match).sort()
-
-    for (const [index, part] of parts.entries()) {
-      const keys = Object.keys(part.match).sort()
-
-      if (keys.join(',') !== matchKeys.join(',')) {
-        throw new Error(
-          `mergeMany requires every row to merge on the same merge fields: ` +
-            `row 0 merges on ${matchKeys.join(', ')}, row ${index} on ${keys.join(', ')}`,
-        )
-      }
-    }
-
-    const query = buildMergeQuery(schema.getLabels(), matchKeys)
-
-    // The MERGE pattern reads the match values off the row map
-    const rowMaps = parts.map((part) => ({ ...part.set, ...part.match }))
-
-    return this.writeChunks<T>(constructor, rowMaps, query, options)
-  }
-
+export class BulkService extends QueryService {
   private async writeChunks<T>(
     constructor: new (...arguments_: never[]) => T,
     rowMaps: Record<string, unknown>[],
@@ -325,5 +325,73 @@ export default class BulkService extends QueryService {
     }
 
     return chunks
+  }
+
+  /**
+  CREATE every row in chunks. Rows are flat property records: nested
+  relationship targets are not supported (they throw), defaults and
+  validation behave exactly like create()
+  */
+  async createMany<T>(
+    constructor: new (...arguments_: never[]) => T,
+    schema: EntitySchema,
+    rows: Record<string, unknown>[],
+    options: BulkOptions = {},
+  ): Promise<BulkChunk<T>[]> {
+    // Embedding sugar + `in` transforms (NTS-449): user value -> stored
+    // form, per row, before the shared validate-and-reduce pass
+    const prepared = await prepareRows(rows, schema)
+
+    const rowMaps = prepared.map((row) => processCreateRow(row, schema))
+
+    // shortcut: vector properties persist as plain SET values through the
+    // UNWIND row map (indexable, not the packed vector format) — switch to
+    // per-row procedure calls when bulk storage must be space-efficient too
+    return this.writeChunks<T>(constructor, rowMaps, buildCreateQuery(schema.getLabels()), options)
+  }
+
+  /**
+  MERGE every row in chunks on the model's merge fields (the unique,
+  indexed or primary key properties each row explicitly sets): rows
+  matching an existing node update it (`+=`), the rest are created.
+  Every row must merge on the same merge fields
+  */
+  async mergeMany<T>(
+    constructor: new (...arguments_: never[]) => T,
+    schema: EntitySchema,
+    rows: Record<string, unknown>[],
+    options: BulkOptions = {},
+  ): Promise<BulkChunk<T>[]> {
+    // Embedding sugar + `in` transforms (NTS-449): user value -> stored
+    // form, per row, before the match/set split
+    const prepared = await prepareRows(rows, schema)
+
+    const parts = prepared.map((row) => processMergeRow(row, schema))
+
+    const firstPart = parts[0]
+
+    if (firstPart === undefined) {
+      return []
+    }
+
+    const matchKeys = sortedCopy(Object.keys(firstPart.match))
+
+    for (const [index, part] of parts.entries()) {
+      const keys = sortedCopy(Object.keys(part.match))
+
+      if (keys.join(',') !== matchKeys.join(',')) {
+        throw new NeodeError(
+          `mergeMany requires every row to merge on the same merge fields: ` +
+            `row 0 merges on ${matchKeys.join(', ')}, row ${String(index)} on ${keys.join(', ')}`,
+        )
+      }
+    }
+
+    const query = buildMergeQuery(schema.getLabels(), matchKeys)
+
+    // The MERGE pattern reads the match values off the row map
+    const rowMaps = parts.map((part) => ({ ...part.set, ...part.match }))
+
+    return this.writeChunks<T>(constructor, rowMaps, query, options)
   }
 }

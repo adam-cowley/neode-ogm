@@ -31,10 +31,20 @@ export class ValidationError extends Error {
       ...new Set(details.map((detail) => detail.path[0]).filter((key) => key !== undefined)),
     ]
 
+    // NTS-446: the message carries every failing property with its rule
+    // and reason — not just the names — so an agent can fix all of them
+    // in one pass. The structured list stays in `details`.
+    const rendered = details
+      .map(
+        (detail) => `"${String(detail.path[0] ?? '<root>')}" (${detail.type}): ${detail.message}`,
+      )
+      .join('; ')
+
     super(
       keys.length > 0
-        ? `${ERROR_VALIDATION}: ${keys.map((key) => `"${String(key)}"`).join(', ')}`
-        : ERROR_VALIDATION,
+        ? `Validation failed on ${String(keys.length)} propert${keys.length === 1 ? 'y' : 'ies'} — ` +
+            `${rendered} [${ERROR_VALIDATION}]`
+        : `${ERROR_VALIDATION}: ${rendered}`,
     )
 
     this.name = 'ValidationError'

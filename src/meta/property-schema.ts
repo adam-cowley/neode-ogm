@@ -1,4 +1,6 @@
 import type { Newable } from '../meta/newable.js'
+import type { Direction } from '../query/index.js'
+import type { VectorConfig, TransformConfig } from './schema-definition.interface.js'
 import type { EntitySchema } from './entity/entity-schema.js'
 
 export const PropertyType = {
@@ -82,7 +84,7 @@ export const TemporalTypes: PropertyType[] = [
 
 export const RelationshipTypes: PropertyType[] = [PropertyType.ONE_TO_ONE, PropertyType.ONE_TO_ONE]
 
-export type DefaultValue = (model: object, schema: EntitySchema) => any | undefined
+export type DefaultValue = (model: object, schema: EntitySchema) => unknown
 
 export class PropertySchema {
   private type: PropertyType = PropertyType.ANY
@@ -116,103 +118,6 @@ export class PropertySchema {
 
   private readonly key: string
 
-  constructor(key: string) {
-    this.key = key
-  }
-
-  getKey(): string {
-    return this.key
-  }
-
-  setType(type: PropertyType): void {
-    this.type = type
-  }
-
-  getType(): PropertyType {
-    return this.type
-  }
-
-  setArray(value = true): void {
-    this.array = value
-  }
-
-  isArray(): boolean {
-    return this.array
-  }
-
-  setDefaultValue(value: DefaultValue): void {
-    this.defaultValue = value
-  }
-
-  getDefaultValue(): DefaultValue {
-    return this.defaultValue
-  }
-
-  setPrimaryKey(value = true): void {
-    this.primaryKey = value
-    this.unique = value
-  }
-
-  isPrimaryKey(): boolean {
-    return this.primaryKey
-  }
-
-  setUnique(value = true): void {
-    this.unique = value
-  }
-
-  isUnique(): boolean {
-    return this.unique
-  }
-
-  setRequired(value = true): void {
-    this.required = value
-  }
-
-  isRequired(): boolean {
-    return this.required
-  }
-
-  setHidden(value = true): void {
-    this.hidden = value
-  }
-
-  isHidden(): boolean {
-    return this.hidden
-  }
-
-  setProtected(value = true): void {
-    this.protectedOption = value
-  }
-
-  isProtected(): boolean {
-    return this.protectedOption
-  }
-
-  setReadonly(value = true): void {
-    this.readOnly = value
-  }
-
-  isReadonly(): boolean {
-    return this.readOnly
-  }
-
-  setIndex(value = true): void {
-    this.index = value
-  }
-
-  isIndex(): boolean {
-    return this.index
-  }
-
-  setExists(value = true): void {
-    this.exists = value
-  }
-
-  isExists(): boolean {
-    return this.exists
-  }
-
   // ---- Hydration + schema-sync config (NTS-139/140/141) ----
 
   /**
@@ -242,6 +147,159 @@ export class PropertySchema {
   */
   private fake: (() => unknown) | undefined
 
+  /**
+  Vector index declaration (NTS-447): installSchema()/dropSchema() turn it
+  into a VectorIndexDefinition for the owning label
+  */
+  private vector: VectorConfig | undefined
+
+  /**
+  Property value transforms (NTS-449): `in` maps user values to their
+  stored form before validation on writes, `out` maps the stored form
+  back at hydration
+  */
+  private transform: TransformConfig | undefined
+
+  // ---- Read-model projection configuration (NTS-135/136/137/138) ----
+
+  /**
+  @RelatedOne / @RelatedMany: relationship type, e.g. 'IN_COURSE' ('A|B' allowed)
+  */
+  private relationshipType: string | undefined
+
+  /**
+  @RelatedOne / @RelatedMany: field subset; undefined = full-entity eager loading
+  */
+  private fields: string[] | undefined
+
+  /**
+  @RelatedOne / @RelatedMany / @RelationshipCount / @RelationshipExists direction
+  */
+  private projectionDirection: Direction | undefined
+
+  /**
+  WHERE fragment inside COUNT { } / EXISTS { }; `node` is the target node
+  */
+  private where: string | undefined
+
+  /**
+  @RelationshipCount variable-length hop bounds
+  */
+  private minHops: number | undefined
+  private maxHops: number | undefined
+
+  /**
+  @LabelPresent: the label tested for
+  */
+  private label: string | undefined
+
+  /**
+  @Expression: raw Cypher projected into the read query
+  */
+  private expression: string | undefined
+
+  /**
+  @Computed: derives the value in TypeScript after hydration
+  */
+  private compute: ((entity: unknown) => unknown) | undefined
+
+  constructor(key: string) {
+    this.key = key
+  }
+
+  getKey(): string {
+    return this.key
+  }
+
+  setType(type: PropertyType): void {
+    this.type = type
+  }
+
+  getType(): PropertyType {
+    return this.type
+  }
+
+  setArray(isArray = true): void {
+    this.array = isArray
+  }
+
+  isArray(): boolean {
+    return this.array
+  }
+
+  setDefaultValue(value: DefaultValue): void {
+    this.defaultValue = value
+  }
+
+  getDefaultValue(): DefaultValue {
+    return this.defaultValue
+  }
+
+  setPrimaryKey(isPrimaryKey = true): void {
+    this.primaryKey = isPrimaryKey
+    this.unique = isPrimaryKey
+  }
+
+  isPrimaryKey(): boolean {
+    return this.primaryKey
+  }
+
+  setUnique(isUnique = true): void {
+    this.unique = isUnique
+  }
+
+  isUnique(): boolean {
+    return this.unique
+  }
+
+  setRequired(isRequired = true): void {
+    this.required = isRequired
+  }
+
+  isRequired(): boolean {
+    return this.required
+  }
+
+  setHidden(isHidden = true): void {
+    this.hidden = isHidden
+  }
+
+  isHidden(): boolean {
+    return this.hidden
+  }
+
+  setProtected(isProtected = true): void {
+    this.protectedOption = isProtected
+  }
+
+  isProtected(): boolean {
+    return this.protectedOption
+  }
+
+  setReadonly(isReadonly = true): void {
+    this.readOnly = isReadonly
+  }
+
+  isReadonly(): boolean {
+    return this.readOnly
+  }
+
+  setIndex(isIndex = true): void {
+    this.index = isIndex
+  }
+
+  isIndex(): boolean {
+    return this.index
+  }
+
+  setExists(isExists = true): void {
+    this.exists = isExists
+  }
+
+  isExists(): boolean {
+    return this.exists
+  }
+
   setCoalesce(coalesce: string | string[]): void {
     this.coalesce = coalesce
   }
@@ -250,8 +308,8 @@ export class PropertySchema {
     return this.coalesce
   }
 
-  setTyped(value = true): void {
-    this.typed = value
+  setTyped(isTyped = true): void {
+    this.typed = isTyped
   }
 
   isTyped(): boolean {
@@ -282,32 +340,48 @@ export class PropertySchema {
     return this.fake
   }
 
-  setOnCreateSet(value = true): void {
-    this.onCreateSet = value
+  setVector(vector: VectorConfig): void {
+    this.vector = vector
+  }
+
+  getVector(): VectorConfig | undefined {
+    return this.vector
+  }
+
+  setTransform(transform: TransformConfig): void {
+    this.transform = transform
+  }
+
+  getTransform(): TransformConfig | undefined {
+    return this.transform
+  }
+
+  setOnCreateSet(isOnCreateSet = true): void {
+    this.onCreateSet = isOnCreateSet
   }
 
   getOnCreateSet(): boolean {
     return this.onCreateSet
   }
 
-  setOnMatchSet(value = true): void {
-    this.onMatchSet = value
+  setOnMatchSet(isOnMatchSet = true): void {
+    this.onMatchSet = isOnMatchSet
   }
 
   getOnMatchSet(): boolean {
     return this.onMatchSet
   }
 
-  setAlwaysSet(value = true): void {
-    this.alwaysSet = value
+  setAlwaysSet(isAlwaysSet = true): void {
+    this.alwaysSet = isAlwaysSet
   }
 
   getAlwaysSet(): boolean {
     return this.alwaysSet
   }
 
-  setFulltext(value = true): void {
-    this.fulltext = value
+  setFulltext(isFulltext = true): void {
+    this.fulltext = isFulltext
   }
 
   getFulltext(): boolean {
@@ -326,7 +400,7 @@ export class PropertySchema {
     this.entity = entity
   }
 
-  getEntity(): Newable {
+  getEntity(): Newable | undefined {
     return this.entity
   }
 
@@ -340,49 +414,6 @@ export class PropertySchema {
   getRules(): Record<string, unknown> {
     return this.rules
   }
-
-  // ---- Read-model projection configuration (NTS-135/136/137/138) ----
-
-  /**
-  @RelatedOne / @RelatedMany: relationship type, e.g. 'IN_COURSE' ('A|B' allowed)
-  */
-  private relationshipType: string | undefined
-
-  /**
-  @RelatedOne / @RelatedMany: field subset; undefined = full-entity eager loading
-  */
-  private fields: string[] | undefined
-
-  /**
-  @RelatedOne / @RelatedMany / @RelationshipCount / @RelationshipExists direction
-  */
-  private projectionDirection: import('../query/index.js').Direction | undefined
-
-  /**
-  WHERE fragment inside COUNT { } / EXISTS { }; `node` is the target node
-  */
-  private where: string | undefined
-
-  /**
-  @RelationshipCount variable-length hop bounds
-  */
-  private minHops: number | undefined
-  private maxHops: number | undefined
-
-  /**
-  @LabelPresent: the label tested for
-  */
-  private label: string | undefined
-
-  /**
-  @Expression: raw Cypher projected into the read query
-  */
-  private expression: string | undefined
-
-  /**
-  @Computed: derives the value in TypeScript after hydration
-  */
-  private compute: ((entity: any) => unknown) | undefined
 
   setRelationshipType(relationshipType: string): void {
     this.relationshipType = relationshipType
@@ -400,11 +431,11 @@ export class PropertySchema {
     return this.fields
   }
 
-  setDirection(direction: import('../query/index.js').Direction): void {
+  setDirection(direction: Direction): void {
     this.projectionDirection = direction
   }
 
-  getDirection(): import('../query/index.js').Direction | undefined {
+  getDirection(): Direction | undefined {
     return this.projectionDirection
   }
 
@@ -448,11 +479,11 @@ export class PropertySchema {
     return this.expression
   }
 
-  setCompute(compute: (entity: any) => unknown): void {
+  setCompute(compute: (entity: unknown) => unknown): void {
     this.compute = compute
   }
 
-  getCompute(): ((entity: any) => unknown) | undefined {
+  getCompute(): ((entity: unknown) => unknown) | undefined {
     return this.compute
   }
 }

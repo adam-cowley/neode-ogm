@@ -1,4 +1,5 @@
 import { Match } from './match.js'
+import { NeodeError } from '../errors/index.js'
 import { Order } from './order.js'
 import { Property } from './property.js'
 import { Relationship } from './relationship.js'
@@ -10,11 +11,11 @@ import { WhereId } from './where-id.js'
 import { WhereNull } from './where-null.js'
 import { WhereRaw } from './where-raw.js'
 import { WhereStatement } from './where-statement.js'
-import type { Direction } from './direction.js'
 import { WithDistinctStatement } from './with-distinct-statement.js'
 import { WithStatement } from './with-statement.js'
-import type { AccessMode, ConnectionProvider, QueryOutput, Runner } from '../driver/types.js'
+import type { AccessMode, QueryOutput, Runner } from '../driver/types.js'
 import type { EntitySchema } from '../meta/entity/entity-schema.js'
+import { isRecord } from '../services/type-guards.js'
 
 /**
 Identity criteria for a persisted entity, as produced by
@@ -32,9 +33,7 @@ export const mode = {
   WRITE: 'WRITE',
 } as const
 
-export type BuilderParams = Record<string, unknown>
-
-type WhereArguments = [left: string, operator: string, value: unknown] | [left: string, value: unknown]
+export type BuilderParameters = Record<string, unknown>
 
 /**
 Fluent Cypher query builder.
@@ -48,12 +47,88 @@ All user values are passed as query parameters - the generated query
 contains only aliases.
 */
 export class Builder {
-  private readonly params: BuilderParams = {}
-  private readonly statements: { toString(includePrefix?: boolean): string }[] = []
+  private readonly params: BuilderParameters = {}
+  private readonly statements: { toString(shouldIncludePrefix?: boolean): string }[] = []
 
   private current?: Statement
   private whereClause?: WhereStatement
-  private setCount = 0
+  private parameterCount = 0
+
+  /**
+  The statement segment currently being built — every pattern method
+  appends to it.
+  */
+  private get activeStatement(): Statement {
+    if (this.current === undefined) {
+      throw new NeodeError(
+        'Builder has no open statement — call match(), create(), merge() or statement() first',
+      )
+    }
+
+    return this.current
+  }
+
+  /**
+  The where segment currently being built — every where method appends
+  to it.
+  */
+  private get activeWhereClause(): WhereStatement {
+    if (this.whereClause === undefined) {
+      throw new NeodeError(
+        'Builder has no open where segment — call match(), create(), merge() or whereStatement() first',
+      )
+    }
+
+    return this.whereClause
+  }
+
+  /**
+  Generate a unique parameter name and add the value to the params object
+  */
+  private addParameter(key: string, value: unknown): string {
+    let attempt = 1
+    const base = `where_${key.replaceAll(/[^a-z0-9]+/gi, '_')}`
+
+    let variable = base
+
+    while (this.params[variable] !== undefined) {
+      attempt++
+      variable = `${base}_${String(attempt)}`
+    }
+
+    this.params[variable] = value
+
+    return variable
+  }
+
+  /**
+  Convert a map of properties into inline pattern properties,
+  adding each value to the query parameters
+  */
+  private convertPropertyMap(
+    alias: string | undefined,
+    properties?: BuilderParameters,
+  ): Property[] {
+    if (properties === undefined) {
+      return []
+    }
+
+    return Object.entries(properties).map(([key, value]) => {
+      const propertyAlias = `${String(alias)}_${key}`
+
+      this.params[propertyAlias] = value
+
+      return new Property(key, propertyAlias)
+    })
+  }
+
+  private whereStringOperator(property: string, value: string, operator: string): this {
+    const variable = this.addParameter(property, value)
+
+    this.activeWhereClause.append(new Where(property, operator, `$${variable}`))
+
+    return this
+  }
 
   /**
   Start a new query segment and set the current statement
@@ -85,11 +160,11 @@ export class Builder {
   /**
   Match a node pattern by alias and optional labels / inline properties
   */
-  match(alias?: string, labels?: string | string[] | false, properties?: BuilderParams): this {
+  match(alias?: string, labels?: string | string[] | false, properties?: BuilderParameters): this {
     this.whereStatement('WHERE')
     this.statement()
 
-    this.current!.match(new Match(alias, labels, this.convertPropertyMap(alias, properties)))
+    this.activeStatement.match(new Match(alias, labels, this.convertPropertyMap(alias, properties)))
 
     return this
   }
@@ -101,7 +176,7 @@ export class Builder {
     this.whereStatement('WHERE')
     this.statement('OPTIONAL MATCH')
 
-    this.current!.match(new Match(alias, labels))
+    this.activeStatement.match(new Match(alias, labels))
 
     return this
   }
@@ -142,32 +217,13 @@ export class Builder {
   keeps the semantics identical to neode's grouped output.
   */
   or(...arguments_: unknown[]): this {
-    if (!this.whereClause) {
+    if (this.whereClause === undefined) {
       this.whereStatement('WHERE')
     }
 
-    this.whereClause!.setConnector('OR')
+    this.activeWhereClause.setConnector('OR')
 
-    return this.where(...(arguments_ as WhereArguments))
-  }
-
-  /**
-  Generate a unique parameter name and add the value to the params object
-  */
-  private addParameter(key: string, value: unknown): string {
-    let attempt = 1
-    const base = `where_${key.replaceAll(/[^a-z0-9]+/gi, '_')}`
-
-    let variable = base
-
-    while (this.params[variable] !== undefined) {
-      attempt++
-      variable = `${base}_${attempt}`
-    }
-
-    this.params[variable] = value
-
-    return variable
+    return this.where(...arguments_)
   }
 
   /**
@@ -180,35 +236,71 @@ export class Builder {
   - `where('n.name =~ ".*"')` - raw string
   */
   where(...arguments_: unknown[]): this {
-    if (arguments_.length === 0 || !arguments_[0]) {
-      return this
-    }
+    const first = arguments_[0]
 
-    // Two arguments: property / value equality
-    if (arguments_.length === 2) {
-      arguments_ = [arguments_[0], OPERATOR_EQUALS, arguments_[1]]
+    // neode parity: a falsy first argument (undefined, null, '', 0, false, NaN, 0n)
+    // adds no condition at all — an empty argument list is covered by the
+    // undefined check
+    if (
+      first === undefined ||
+      first === null ||
+      first === '' ||
+      first === false ||
+      first === 0 ||
+      first === 0n ||
+      (typeof first === 'number' && Number.isNaN(first))
+    ) {
+      return this
     }
 
     // Single argument: object, array or raw string
     if (arguments_.length === 1) {
-      const [argument] = arguments_
+      if (Array.isArray(first)) {
+        for (const inner of first) {
+          if (!Array.isArray(inner)) {
+            continue
+          }
 
-      if (Array.isArray(argument)) {
-        for (const inner of argument) {
-          this.where(...(inner as unknown[]))
+          const clauseArguments: unknown[] = inner
+
+          this.where(...clauseArguments)
         }
-      } else if (typeof argument === 'object') {
-        for (const [key, value] of Object.entries(argument as Record<string, unknown>)) {
+      } else if (isRecord(first)) {
+        for (const [key, value] of Object.entries(first)) {
           this.where(key, value)
         }
-      } else {
-        this.whereRaw(String(argument))
+      } else if (typeof first === 'string') {
+        this.whereRaw(first)
+      } else if (
+        typeof first === 'number' ||
+        typeof first === 'bigint' ||
+        typeof first === 'boolean'
+      ) {
+        this.whereRaw(String(first))
       }
     } else {
-      const [left, operator, value] = arguments_ as [string, string, unknown]
-      const variable = this.addParameter(left, value)
+      if (typeof first !== 'string') {
+        throw new TypeError(
+          `where() expects a string property as its first argument, received ${typeof first}`,
+        )
+      }
 
-      this.whereClause!.append(new Where(left, operator, `$${variable}`))
+      if (arguments_.length === 2) {
+        // Two arguments: property / value equality
+        const variable = this.addParameter(first, arguments_[1])
+
+        this.activeWhereClause.append(new Where(first, OPERATOR_EQUALS, `$${variable}`))
+      } else {
+        const operator = arguments_[1]
+
+        if (typeof operator !== 'string') {
+          throw new TypeError('where() expects a string operator as its second argument')
+        }
+
+        const variable = this.addParameter(first, arguments_[2])
+
+        this.activeWhereClause.append(new Where(first, operator, `$${variable}`))
+      }
     }
 
     return this
@@ -220,7 +312,7 @@ export class Builder {
   whereId(alias: string, value: string | number): this {
     const variable = this.addParameter(`${alias}_id`, value)
 
-    this.whereClause!.append(new WhereId(alias, variable))
+    this.activeWhereClause.append(new WhereId(alias, variable))
 
     return this
   }
@@ -229,7 +321,7 @@ export class Builder {
   Add a raw where clause
   */
   whereRaw(clause: string): this {
-    this.whereClause!.append(new WhereRaw(clause))
+    this.activeWhereClause.append(new WhereRaw(clause))
 
     return this
   }
@@ -240,10 +332,10 @@ export class Builder {
   whereNot(...arguments_: unknown[]): this {
     this.where(...arguments_)
 
-    const last = this.whereClause!.last()
+    const last = this.activeWhereClause.last()
 
-    if (last && typeof (last as Where).setNegative === 'function') {
-      ;(last as Where).setNegative()
+    if (last instanceof Where) {
+      last.setNegative()
     }
 
     return this
@@ -256,7 +348,7 @@ export class Builder {
     const floorVariable = this.addParameter(`${alias}_floor`, floor)
     const ceilingVariable = this.addParameter(`${alias}_ceiling`, ceiling)
 
-    this.whereClause!.append(new WhereBetween(alias, floorVariable, ceilingVariable))
+    this.activeWhereClause.append(new WhereBetween(alias, floorVariable, ceilingVariable))
 
     return this
   }
@@ -267,10 +359,10 @@ export class Builder {
   whereNotBetween(alias: string, floor: unknown, ceiling: unknown): this {
     this.whereBetween(alias, floor, ceiling)
 
-    const last = this.whereClause!.last()
+    const last = this.activeWhereClause.last()
 
-    if (last && typeof (last as WhereBetween).setNegative === 'function') {
-      ;(last as WhereBetween).setNegative()
+    if (last instanceof WhereBetween) {
+      last.setNegative()
     }
 
     return this
@@ -282,7 +374,7 @@ export class Builder {
   whereIn(property: string, values: unknown[]): this {
     const variable = this.addParameter(property, values)
 
-    this.whereClause!.append(new Where(property, 'IN', `$${variable}`))
+    this.activeWhereClause.append(new Where(property, 'IN', `$${variable}`))
 
     return this
   }
@@ -308,19 +400,11 @@ export class Builder {
     return this.whereStringOperator(property, value, 'ENDS WITH')
   }
 
-  private whereStringOperator(property: string, value: string, operator: string): this {
-    const variable = this.addParameter(property, value)
-
-    this.whereClause!.append(new Where(property, operator, `$${variable}`))
-
-    return this
-  }
-
   /**
   `property IS NULL`
   */
   whereNull(property: string): this {
-    this.whereClause!.append(new WhereNull(property))
+    this.activeWhereClause.append(new WhereNull(property))
 
     return this
   }
@@ -331,10 +415,10 @@ export class Builder {
   whereNotNull(property: string): this {
     this.whereNull(property)
 
-    const last = this.whereClause!.last()
+    const last = this.activeWhereClause.last()
 
-    if (last && typeof (last as WhereNull).setNegative === 'function') {
-      ;(last as WhereNull).setNegative()
+    if (last instanceof WhereNull) {
+      last.setNegative()
     }
 
     return this
@@ -362,8 +446,8 @@ export class Builder {
   Label predicate: `alias:Label` (or `NOT alias:Label`), optionally
   over several labels - all of them must be present
   */
-  whereLabel(alias: string, label: string | string[], negate = false): this {
-    this.whereClause!.append(new LabelPredicate(alias, label, negate))
+  whereLabel(alias: string, label: string | string[], isNegated = false): this {
+    this.activeWhereClause.append(new LabelPredicate(alias, label, isNegated))
 
     return this
   }
@@ -373,7 +457,7 @@ export class Builder {
   (shares the label-predicate machinery with whereLabel)
   */
   orderByLabel(alias: string, label: string | string[], direction = ''): this {
-    this.current!.order(new Order(new LabelPredicate(alias, label).toString(), direction))
+    this.activeStatement.order(new Order(new LabelPredicate(alias, label).toString(), direction))
 
     return this
   }
@@ -382,7 +466,7 @@ export class Builder {
   Add a `DELETE` clause
   */
   delete(...values: string[]): this {
-    this.current!.delete(...values)
+    this.activeStatement.delete(...values)
 
     return this
   }
@@ -391,7 +475,7 @@ export class Builder {
   Add a `DETACH DELETE` clause
   */
   detachDelete(...values: string[]): this {
-    this.current!.detachDelete(...values)
+    this.activeStatement.detachDelete(...values)
 
     return this
   }
@@ -399,41 +483,23 @@ export class Builder {
   /**
   Start a `CREATE` statement
   */
-  create(alias: string, labels?: string | string[] | false, properties?: BuilderParams): this {
+  create(alias: string, labels?: string | string[] | false, properties?: BuilderParameters): this {
     this.whereStatement('WHERE')
     this.statement('CREATE')
 
-    this.current!.match(new Match(alias, labels, this.convertPropertyMap(alias, properties)))
+    this.activeStatement.match(new Match(alias, labels, this.convertPropertyMap(alias, properties)))
 
     return this
   }
 
   /**
-  Convert a map of properties into inline pattern properties,
-  adding each value to the query parameters
-  */
-  private convertPropertyMap(alias: string | undefined, properties?: BuilderParams): Property[] {
-    if (properties) {
-      return Object.keys(properties).map((key) => {
-        const propertyAlias = `${alias}_${key}`
-
-        this.params[propertyAlias] = properties[key]
-
-        return new Property(key, propertyAlias)
-      })
-    }
-
-    return []
-  }
-
-  /**
   Start a `MERGE` statement
   */
-  merge(alias: string, labels?: string | string[] | false, properties?: BuilderParams): this {
+  merge(alias: string, labels?: string | string[] | false, properties?: BuilderParameters): this {
     this.whereStatement('WHERE')
     this.statement('MERGE')
 
-    this.current!.match(new Match(alias, labels, this.convertPropertyMap(alias, properties)))
+    this.activeStatement.match(new Match(alias, labels, this.convertPropertyMap(alias, properties)))
 
     return this
   }
@@ -446,24 +512,24 @@ export class Builder {
   - `set({ 'n.name': 'Adam' })` - map of properties
   - `set('n.age = n.age + 1', undefined)` - raw set
   */
-  set(
-    property: string | Record<string, unknown>,
-    value?: unknown,
-    operator = '=',
-  ): this {
-    if (value === undefined && property instanceof Object) {
+  set(property: string | Record<string, unknown>, value?: unknown, operator = '='): this {
+    if (value === undefined && isRecord(property)) {
       for (const [key, value_] of Object.entries(property)) {
         this.set(key, value_)
       }
     } else {
-      if (value === undefined) {
-        this.current!.setRaw([property as string])
-      } else {
-        const alias = `set_${this.setCount}`
-        this.params[alias] = value
-        this.setCount++
+      if (typeof property !== 'string') {
+        throw new TypeError('set() expects a string property when a value is given')
+      }
 
-        this.current!.set(property as string, alias, operator)
+      if (value === undefined) {
+        this.activeStatement.setRaw([property])
+      } else {
+        const alias = `set_${String(this.parameterCount)}`
+        this.params[alias] = value
+        this.parameterCount++
+
+        this.activeStatement.set(property, alias, operator)
       }
     }
 
@@ -473,21 +539,21 @@ export class Builder {
   /**
   Set a property only on `ON CREATE SET`
   */
-  onCreateSet(
-    property: string | Record<string, unknown>,
-    value?: unknown,
-    operator = '=',
-  ): this {
-    if (value === undefined && property instanceof Object) {
+  onCreateSet(property: string | Record<string, unknown>, value?: unknown, operator = '='): this {
+    if (value === undefined && isRecord(property)) {
       for (const [key, value_] of Object.entries(property)) {
         this.onCreateSet(key, value_)
       }
     } else {
-      const alias = `set_${this.setCount}`
-      this.params[alias] = value
-      this.setCount++
+      if (typeof property !== 'string') {
+        throw new TypeError('onCreateSet() expects a string property when a value is given')
+      }
 
-      this.current!.onCreateSet(property as string, alias, operator)
+      const alias = `set_${String(this.parameterCount)}`
+      this.params[alias] = value
+      this.parameterCount++
+
+      this.activeStatement.onCreateSet(property, alias, operator)
     }
 
     return this
@@ -496,22 +562,51 @@ export class Builder {
   /**
   Set a property only on `ON MATCH SET`
   */
-  onMatchSet(
-    property: string | Record<string, unknown>,
-    value?: unknown,
-    operator = '=',
-  ): this {
-    if (value === undefined && property instanceof Object) {
+  onMatchSet(property: string | Record<string, unknown>, value?: unknown, operator = '='): this {
+    if (value === undefined && isRecord(property)) {
       for (const [key, value_] of Object.entries(property)) {
         this.onMatchSet(key, value_)
       }
     } else {
-      const alias = `set_${this.setCount}`
-      this.params[alias] = value
-      this.setCount++
+      if (typeof property !== 'string') {
+        throw new TypeError('onMatchSet() expects a string property when a value is given')
+      }
 
-      this.current!.onMatchSet(property as string, alias, operator)
+      const alias = `set_${String(this.parameterCount)}`
+      this.params[alias] = value
+      this.parameterCount++
+
+      this.activeStatement.onMatchSet(property, alias, operator)
     }
+
+    return this
+  }
+
+  /**
+  Persist a vector property through Neo4j's space-efficient vector
+  storage procedure (NTS-449): `CALL db.create.setNodeVectorProperty(...)`
+  for nodes, `db.create.setRelationshipVectorProperty` for
+  relationships. Rendered as its own CALL clause after the statement's
+  SET clauses.
+  */
+  setVectorProperty(
+    alias: string,
+    property: string,
+    value: unknown,
+    target: 'node' | 'relationship' = 'node',
+  ): this {
+    const parameterAlias = `set_${String(this.parameterCount)}`
+    this.params[parameterAlias] = value
+    this.parameterCount++
+
+    const procedure =
+      target === 'relationship'
+        ? 'db.create.setRelationshipVectorProperty'
+        : 'db.create.setNodeVectorProperty'
+
+    this.activeStatement.call(
+      `CALL ${procedure}(${alias}, ${JSON.stringify(property)}, $${parameterAlias})`,
+    )
 
     return this
   }
@@ -520,7 +615,7 @@ export class Builder {
   Remove properties or labels, in `n.prop` or `n:Label` format
   */
   remove(...items: string[]): this {
-    this.current!.remove(items)
+    this.activeStatement.remove(items)
 
     return this
   }
@@ -529,7 +624,7 @@ export class Builder {
   Set return fields / expressions
   */
   return(...values: string[]): this {
-    this.current!.return(...values)
+    this.activeStatement.return(...values)
 
     return this
   }
@@ -538,7 +633,7 @@ export class Builder {
   Set the record limit
   */
   limit(limit: number): this {
-    this.current!.limit(limit)
+    this.activeStatement.limit(limit)
 
     return this
   }
@@ -547,7 +642,7 @@ export class Builder {
   Set records to skip
   */
   skip(skip: number): this {
-    this.current!.skip(skip)
+    this.activeStatement.skip(skip)
 
     return this
   }
@@ -564,33 +659,35 @@ export class Builder {
   */
   orderBy(...arguments_: unknown[]): this {
     let order: Order | undefined
+    const first = arguments_[0]
 
     if (arguments_.length === 2) {
-      order = new Order(String(arguments_[0]), String(arguments_[1]))
-    } else if (Array.isArray(arguments_[0])) {
-      ;for (const argument of (arguments_[0] as unknown[])) {this.orderBy(argument)}
-    } else if (typeof arguments_[0] === 'object' && arguments_[0]) {
-      const descriptor = arguments_[0] as { field?: unknown; order?: unknown }
+      order = new Order(String(first), String(arguments_[1]))
+    } else if (Array.isArray(first)) {
+      for (const argument of first) {
+        this.orderBy(argument)
+      }
+    } else if (isRecord(first)) {
+      const field = first['field']
 
-      if (descriptor.field) {
+      if (typeof field === 'string' && field !== '') {
         // P2.2 parity (neode Builder#orderBy): an object carrying a
         // `field` key is a single `{ field, order }` descriptor,
         // not a field -> direction map.
-        order = new Order(
-          String(descriptor.field),
-          descriptor.order ? String(descriptor.order) : '',
-        )
+        const direction = first['order']
+
+        order = new Order(field, typeof direction === 'string' ? direction : '')
       } else {
-        for (const [key, value] of Object.entries(descriptor as Record<string, unknown>)) {
+        for (const [key, value] of Object.entries(first)) {
           this.orderBy(key, value)
         }
       }
-    } else if (arguments_[0]) {
-      order = new Order(String(arguments_[0]))
+    } else if (typeof first === 'string' && first !== '') {
+      order = new Order(first)
     }
 
     if (order) {
-      this.current!.order(order)
+      this.activeStatement.order(order)
     }
 
     return this
@@ -606,11 +703,11 @@ export class Builder {
   */
   relationship(
     type?: string | string[],
-    direction?: string | Direction,
+    direction?: string,
     alias?: string,
     degrees?: number | string,
   ): this {
-    this.current!.match(new Relationship(type, direction, alias, degrees))
+    this.activeStatement.match(new Relationship(type, direction, alias, degrees))
 
     return this
   }
@@ -618,8 +715,8 @@ export class Builder {
   /**
   Complete a relationship with a target node pattern
   */
-  to(alias: string, labels?: string | string[] | false, properties?: BuilderParams): this {
-    this.current!.match(new Match(alias, labels, this.convertPropertyMap(alias, properties)))
+  to(alias: string, labels?: string | string[] | false, properties?: BuilderParameters): this {
+    this.activeStatement.match(new Match(alias, labels, this.convertPropertyMap(alias, properties)))
 
     return this
   }
@@ -630,7 +727,9 @@ export class Builder {
   property. One implementation keeps read and write paths in lockstep.
   */
   matchEntity(alias: string, schema: EntitySchema, criteria: EntityMatchCriteria): this {
-    return criteria.elementId ? this.match(alias).whereId(alias, criteria.elementId) : this.match(alias, schema.getLabels(), { [criteria.key]: criteria.value });
+    return criteria.elementId === undefined || criteria.elementId === ''
+      ? this.match(alias, schema.getLabels(), { [criteria.key]: criteria.value })
+      : this.match(alias).whereId(alias, criteria.elementId)
   }
 
   /**
@@ -638,14 +737,16 @@ export class Builder {
   identity (the `to(...)` counterpart of matchEntity)
   */
   toEntity(alias: string, schema: EntitySchema, criteria: EntityMatchCriteria): this {
-    return criteria.elementId ? this.to(alias).whereId(alias, criteria.elementId) : this.to(alias, schema.getLabels(), { [criteria.key]: criteria.value });
+    return criteria.elementId === undefined || criteria.elementId === ''
+      ? this.to(alias, schema.getLabels(), { [criteria.key]: criteria.value })
+      : this.to(alias).whereId(alias, criteria.elementId)
   }
 
   /**
   Complete a relationship pointing to anything
   */
   toAnything(): this {
-    this.current!.match(new Match())
+    this.activeStatement.match(new Match())
 
     return this
   }
@@ -659,7 +760,7 @@ export class Builder {
 
     return this.statements
       .map((statement) => statement.toString(false))
-      .filter((statement) => statement.length)
+      .filter((statement) => statement.length > 0)
       .join('\n')
   }
 
@@ -673,19 +774,19 @@ export class Builder {
 
     // A ConnectionProvider routes by mode; a bare Runner ignores the
     // extra argument
-    return (runner as ConnectionProvider).run(query, params, mode)
+    return runner.run(query, params, mode)
   }
 
   /**
   Build the query
   */
-  build(): { query: string; params: BuilderParams } {
+  build(): { query: string; params: BuilderParameters } {
     this.whereStatement()
     this.statement()
 
     const query = this.statements
       .map((statement) => statement.toString())
-      .filter((statement) => statement.length)
+      .filter((statement) => statement.length > 0)
       .join('\n')
 
     return {

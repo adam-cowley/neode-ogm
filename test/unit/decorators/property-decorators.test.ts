@@ -23,7 +23,7 @@ import {
   Uuid,
 } from '../../../src/decorators'
 import { getModel } from '../../../src/meta'
-import { PropertySchema, PropertyType  } from '../../../src/meta/property-schema'
+import { PropertySchema, PropertyType } from '../../../src/meta/property-schema'
 
 describe('Property Decorators (NTS-12)', () => {
   describe('@Property', () => {

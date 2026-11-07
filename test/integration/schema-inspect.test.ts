@@ -3,9 +3,9 @@
 // when this file's service imports are evaluated first.
 import { openBackend, TestBackend } from './support/backend'
 import { inspectSchema } from '../../src/services/schema/inspect.service'
-import SchemaService from '../../src/services/schema/schema.service'
-import FulltextIndexService from '../../src/services/schema/fulltext.service'
-import VectorIndexService from '../../src/services/schema/vector.service'
+import { SchemaService } from '../../src/services/schema/schema.service'
+import { FulltextIndexService } from '../../src/services/schema/fulltext.service'
+import { VectorIndexService } from '../../src/services/schema/vector.service'
 import { NodeEntity, Uuid, String } from '../../src/decorators'
 import { getModel } from '../../src/meta'
 

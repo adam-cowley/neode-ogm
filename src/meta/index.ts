@@ -1,6 +1,5 @@
 import type { Newable } from '../meta/newable.js'
 import type { Direction } from '../query/index.js'
-import type INeode from '../neode.interface.js'
 export type { DefaultValue } from './property-schema.js'
 import type { PropertySchema } from './property-schema.js'
 import { PropertyType } from './property-schema.js'
@@ -11,8 +10,7 @@ import { EntitySchema, EntityType } from './entity/entity-schema.js'
 import type { PropertyConfig } from '../decorators/property-config.interface.js'
 import type { PropertyDefinition } from './schema-definition.interface.js'
 import { replayRegistrations } from '../decorators/registrations.js'
-import Repository from '../repository/index.js'
-
+import { isConstructorOf, isRecord } from '../services/type-guards.js'
 const models = new Map<Newable, EntitySchema>()
 
 /**
@@ -45,39 +43,52 @@ const METAMODEL_KEYS = new Set([
   'typed',
   'description',
   'fake',
+  'vector',
+  'transform',
 ])
 
-export function getModels() {
+export function getModels(): Map<Newable, EntitySchema> {
   return models
 }
 
-export function getModel(constructor: any): EntitySchema {
+export function getModel(constructor: object): EntitySchema
+export function getModel(constructor: unknown): EntitySchema | undefined
+export function getModel(constructor: unknown): EntitySchema | undefined {
   // Bare classes (no class decorator) register their field decorators lazily
+  if (!isConstructorOf<unknown>(constructor)) {
+    return undefined
+  }
+
   replayRegistrations(constructor)
 
-  return getModels().get(constructor)!
+  return getModels().get(constructor)
 }
 
-export function mergeModel(constructor: any): EntitySchema {
+export function mergeModel(constructor: Newable): EntitySchema {
   // Field decorators queue registrations on the class's Symbol.metadata;
   // replay them before resolving so bare classes register lazily too
   replayRegistrations(constructor)
 
-  if (!getModels().has(constructor)) {
-    getModels().set(constructor, new EntitySchema())
+  let model = getModels().get(constructor)
+
+  if (model === undefined) {
+    model = new EntitySchema()
+    getModels().set(constructor, model)
   }
 
-  return getModels().get(constructor)!
+  return model
 }
 
-export function mergeRelationshipModel(constructor: any): EntitySchema {
+export function mergeRelationshipModel(constructor: Newable): EntitySchema {
   // Decorators are run in a weird order (accessor, property then class decorators)
   // So this may already exist as a NodeEntity and should be confirmed
-  if (!getModels().has(constructor)) {
-    getModels().set(constructor, new EntitySchema())
+  let model = getModels().get(constructor)
+
+  if (model === undefined) {
+    model = new EntitySchema()
+    getModels().set(constructor, model)
   }
 
-  const model = getModels().get(constructor)!
   model.setType(EntityType.RelationshipEntity)
 
   return model
@@ -86,7 +97,7 @@ export function mergeRelationshipModel(constructor: any): EntitySchema {
 // PropertyConfig | PropertyDefinition: decorator configs vs the map adapter's
 // (structurally compatible; PropertyDefinition just lacks the rule index signature)
 export function mergeProperty(
-  constructor: any,
+  constructor: Newable,
   key: string,
   type: PropertyType,
   config: PropertyConfig | PropertyDefinition = {},
@@ -105,56 +116,56 @@ export function mergeProperty(
   }
 
   // Set Config
-  if (config?.primary === true) {
+  if (config.primary === true) {
     property.setPrimaryKey(true)
   }
 
-  if (config?.unique === true) {
+  if (config.unique === true) {
     property.setUnique(true)
   }
 
-  if (Array.isArray(config?.unique)) {
+  if (Array.isArray(config.unique)) {
     property.setCompositeUnique(config.unique)
   }
 
-  if (config?.array === true) {
+  if (config.array === true) {
     property.setArray(true)
   }
 
-  if (config?.required === true) {
+  if (config.required === true) {
     property.setRequired(true)
   }
 
-  if (config?.hidden === true) {
+  if (config.hidden === true) {
     property.setHidden(true)
   }
 
-  if (config?.protected === true) {
+  if (config.protected === true) {
     property.setProtected(true)
   }
 
-  if (config?.readonly === true) {
+  if (config.readonly === true) {
     property.setReadonly(true)
   }
 
-  if (config?.index === true) {
+  if (config.index === true) {
     property.setIndex(true)
   }
 
-  if (Array.isArray(config?.index)) {
+  if (Array.isArray(config.index)) {
     property.setCompositeIndex(config.index)
   }
 
-  if (config?.typed === true) {
+  if (config.typed === true) {
     property.setTyped(true)
   }
 
-  if (config?.exists === true) {
+  if (config.exists === true) {
     property.setExists(true)
   }
 
-  if (Object.hasOwn(config, 'default')) {
-    property.setDefaultValue(config.default!)
+  if (config.default !== undefined) {
+    property.setDefaultValue(config.default)
   }
 
   if (Object.hasOwn(config, 'onCreateSet')) {
@@ -169,20 +180,20 @@ export function mergeProperty(
     property.setAlwaysSet(config.alwaysSet)
   }
 
-  if (config?.fulltext === true) {
+  if (config.fulltext === true) {
     property.setFulltext(true)
   }
 
   // Agent-facing property explanation (NTS-445)
-  if (typeof config?.description === 'string') {
+  if (typeof config.description === 'string') {
     property.setDescription(config.description)
   }
 
   // Read-model projection config (NTS-135/136/137/138)
-  const projection = config as Record<string, unknown>
+  const projection: Record<string, unknown> = isRecord(config) ? config : {}
 
-  if (Array.isArray(projection['fields'])) {
-    property.setFields(projection['fields'] as string[])
+  if (isStringArray(projection['fields'])) {
+    property.setFields(projection['fields'])
   }
 
   if (typeof projection['where'] === 'string') {
@@ -205,18 +216,28 @@ export function mergeProperty(
     property.setExpression(projection['expression'])
   }
 
-  if (typeof projection['compute'] === 'function') {
-    property.setCompute(projection['compute'] as (entity: any) => unknown)
+  if (isFunction(projection['compute'])) {
+    property.setCompute(projection['compute'])
   }
 
   // Hydration defaults (NTS-139): literal or sibling-property coalesce
-  if (typeof projection['coalesce'] === 'string' || Array.isArray(projection['coalesce'])) {
-    property.setCoalesce(projection['coalesce'] as string | string[])
+  if (isCoalesce(projection['coalesce'])) {
+    property.setCoalesce(projection['coalesce'])
   }
 
   // Factory seeding (NTS-444): per-property fake data generator
-  if (typeof projection['fake'] === 'function') {
-    property.setFake(projection['fake'] as () => unknown)
+  if (isFunction(projection['fake'])) {
+    property.setFake(projection['fake'])
+  }
+
+  // Vector index declaration (NTS-447)
+  if (config.vector !== undefined) {
+    property.setVector(config.vector)
+  }
+
+  // Property value transforms (NTS-449)
+  if (config.transform !== undefined) {
+    property.setTransform(config.transform)
   }
 
   // Persist every config key the metamodel has no flag for as a validation rule
@@ -228,79 +249,45 @@ export function mergeProperty(
 }
 
 export function mergeRelationshipProperty(
-  constructor: any,
+  constructor: Newable,
   key: string,
   type: string,
   target: Newable,
   direction: Direction,
-  many: boolean,
-  eager?: boolean,
+  isMany: boolean,
+  isEager?: boolean,
   description?: string,
 ): RelationshipPropertySchema {
-  mergeModel(constructor)
+  const model = mergeModel(constructor)
 
-  if (!models.get(constructor)!.hasProperty(key)) {
-    models.get(constructor)!.addRelationship(key)
+  if (!model.hasProperty(key)) {
+    model.addRelationship(key)
   }
 
-  const rel = models.get(constructor)!.getRelationship(key)
+  const relationship = model.getRelationship(key)
 
-  rel.setType(type)
-  rel.setDirection(direction)
-  rel.setTarget(target)
-  rel.setMany(many)
-  rel.setEager(eager || false)
+  relationship.setType(type)
+  relationship.setDirection(direction)
+  relationship.setTarget(target)
+  relationship.setMany(isMany)
+  relationship.setEager(isEager ?? false)
 
   // Agent-facing relationship explanation (NTS-445)
   if (description !== undefined) {
-    rel.setDescription(description)
+    relationship.setDescription(description)
   }
 
-  return rel
+  return relationship
 }
 
-/**
-A (custom) repository class, registered per entity. Instances are created
-with (neode, entity, database?) at resolution time — never stored.
-*/
-export type RepositoryConstructor = new (
-  neode: INeode,
-  entity: any,
-  database?: string,
-) => Repository<any>
-
-const repositories = new Map<Newable, RepositoryConstructor>()
-
-export function registerRepository(
-  entity: Newable,
-  repository: Repository<any> | RepositoryConstructor,
-) {
-  // An instance is accepted for convenience: its constructor is stored
-  repositories.set(
-    entity,
-    typeof repository === 'function'
-      ? repository
-      : (repository.constructor as RepositoryConstructor),
-  )
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string')
 }
 
-export function getRepository(entity: Newable): RepositoryConstructor | undefined {
-  return repositories.get(entity)
+function isFunction(value: unknown): value is (argument?: unknown) => unknown {
+  return typeof value === 'function'
 }
 
-/**
-Resolution point for repositories: the custom repository registered for
-the entity (constructed with the given neode and entity), or the default
-Repository
-*/
-export function resolveRepository<Entity>(
-  neode: INeode,
-  entity: new (...arguments_: never[]) => Entity,
-  database?: string,
-): Repository<Entity> {
-  const Custom = repositories.get(entity)
-
-  return Custom
-    ? (new Custom(neode, entity, database) as Repository<Entity>)
-    : new Repository<Entity>(neode, entity, database)
+function isCoalesce(value: unknown): value is string | string[] {
+  return typeof value === 'string' || Array.isArray(value)
 }

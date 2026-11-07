@@ -1,7 +1,7 @@
 // The backend import loads neode.service first, resolving the module cycles
 // before anything below is evaluated
 import { openBackend, TestBackend } from './support/backend'
-import Neode from '../../src/neode.service'
+import { Neode } from '../../src/neode.service'
 
 describe('Per-query read/write routing', () => {
   let backend: TestBackend

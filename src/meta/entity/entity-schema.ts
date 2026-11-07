@@ -1,6 +1,7 @@
 import type { Newable } from '../newable.js'
 import { PropertySchema } from '../property-schema.js'
 import { RelationshipPropertySchema } from '../relationship-property-schema.js'
+import { NeodeError } from '../../errors/index.js'
 
 export const EntityType = {
   NodeEntity: 0,
@@ -10,24 +11,36 @@ export const EntityType = {
 export type EntityType = (typeof EntityType)[keyof typeof EntityType]
 
 export class EntitySchema {
-  protected properties = new Map<string, PropertySchema>()
-  protected relationships = new Map<string, RelationshipPropertySchema>()
-
   private labels: string[] = []
   private objectConstructor!: Newable
-  protected entityType: EntityType = EntityType.NodeEntity
 
   /**
   Free-text explanation emitted by the agent ontology (NTS-445)
   */
   private description: string | undefined
 
+  protected properties = new Map<string, PropertySchema>()
+  protected relationships = new Map<string, RelationshipPropertySchema>()
+  protected entityType: EntityType = EntityType.NodeEntity
+
   constructor(entityType: EntityType = EntityType.NodeEntity) {
     this.entityType = entityType
   }
 
+  /**
+  The model's display name for error messages (NTS-446): its labels, or a
+  fallback while labels are unset
+  */
+  private modelName(): string {
+    return this.labels.join(':') || 'entity'
+  }
+
   setLabels(labels: string[]): void {
-    this.labels = [...new Set(labels)].sort()
+    const sorted = [...new Set(labels)]
+
+    sorted.sort(compareStrings)
+
+    this.labels = sorted
   }
 
   getLabels(): string[] {
@@ -55,11 +68,32 @@ export class EntitySchema {
   }
 
   getRelationship(key: string): RelationshipPropertySchema {
-    return this.relationships.get(key)!
+    const relationship = this.relationships.get(key)
+
+    if (relationship === undefined) {
+      // NTS-446: name the model, the known relationships, and the fix
+      const defined = this.getRelationships().map((entry) => entry.getKey())
+
+      throw new NeodeError(
+        `Relationship "${key}" is not defined on model "${this.modelName()}"` +
+          (defined.length > 0
+            ? ` — defined relationships: ${defined.join(', ')}. ` +
+              'Check the relationship key, or declare it on the model.'
+            : ' — the model declares no relationships; declare one first.'),
+      )
+    }
+
+    return relationship
   }
 
   getRelationships(): RelationshipPropertySchema[] {
-    return Array.from(this.relationships.values())
+    const relationships: RelationshipPropertySchema[] = []
+
+    for (const relationship of this.relationships.values()) {
+      relationships.push(relationship)
+    }
+
+    return relationships
   }
 
   setConstructor(constructor: Newable): void {
@@ -93,7 +127,7 @@ export class EntitySchema {
     // Default Primary Key to <first label lowercased>_id (see neode Model.js)
     const [firstLabel] = this.getLabels()
 
-    if (!firstLabel) {
+    if (firstLabel === undefined || firstLabel === '') {
       return undefined
     }
 
@@ -111,7 +145,22 @@ export class EntitySchema {
   }
 
   getProperty(key: string): PropertySchema {
-    return this.properties.get(key)!
+    const property = this.properties.get(key)
+
+    if (property === undefined) {
+      // NTS-446: name the model, the known properties, and the fix
+      const defined = this.getProperties().map((entry) => entry.getKey())
+
+      throw new NeodeError(
+        `Property "${key}" is not defined on model "${this.modelName()}"` +
+          (defined.length > 0
+            ? ` — defined properties: ${defined.join(', ')}. ` +
+              'Check the property key, or declare it on the model.'
+            : ' — the model declares no properties; declare one first.'),
+      )
+    }
+
+    return property
   }
 
   addProperty(key: string): Map<string, PropertySchema> {
@@ -119,6 +168,24 @@ export class EntitySchema {
   }
 
   getProperties(): PropertySchema[] {
-    return Array.from(this.properties.values())
+    const properties: PropertySchema[] = []
+
+    for (const property of this.properties.values()) {
+      properties.push(property)
+    }
+
+    return properties
   }
+}
+
+/**
+Default Array#sort order for label strings (UTF-16 code-unit comparison, the
+same order the previous no-comparator sort produced)
+*/
+function compareStrings(a: string, b: string): number {
+  if (a < b) {
+    return -1
+  }
+
+  return a > b ? 1 : 0
 }

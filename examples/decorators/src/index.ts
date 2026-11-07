@@ -68,7 +68,9 @@ n.mergeOn(
       .then(() => adulthood)
   })
   .then((adulthood) => {
-    if (!adulthood) {throw new Error('Movie merge failed')}
+    if (!adulthood) {
+      throw new Error('Movie merge failed')
+    }
 
     // Output some results
     console.log('Created #', adulthood._id) // eslint-disable-line no-console

@@ -4,7 +4,7 @@
 import { openBackend, TestBackend } from './support/backend'
 import { NodeEntity, Uuid, String, InternalId, Number } from '../../src/decorators'
 import { getModel } from '../../src/meta'
-import GetService, { OrderSpec } from '../../src/services/query/get.service'
+import { GetService, type OrderSpec } from '../../src/services/query/get.service'
 
 // ---- Fixtures (per-file: decorator registry is global per module registry) --
 

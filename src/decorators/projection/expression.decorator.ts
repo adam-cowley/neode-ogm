@@ -18,7 +18,9 @@ Example:
 friendCount: number;
 ```
 */
-export function Expression(expression: string): (value: undefined, context: ClassFieldDecoratorContext) => void {
+export function Expression(
+  expression: string,
+): (value: undefined, context: ClassFieldDecoratorContext) => void {
   return function (_value: undefined, context: ClassFieldDecoratorContext): void {
     const propertyKey = memberName(context)
 

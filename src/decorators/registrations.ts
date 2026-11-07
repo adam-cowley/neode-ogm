@@ -1,4 +1,5 @@
 import type { Newable } from '../meta/newable.js'
+import { isRecord } from '../services/type-guards.js'
 
 /**
 Deferred registration protocol for standard (TC39) decorators.
@@ -12,6 +13,10 @@ legacy immediate registration + `reflect-metadata` design:type reflection.
 export type FieldRegistration = (constructor: Newable) => void
 
 const REGISTRATIONS = '__neodeRegistrations__'
+
+function isMetadataObject(value: unknown): value is DecoratorMetadataObject {
+  return isRecord(value)
+}
 
 export function addRegistration(
   // `Symbol.metadata` is missing from older lib targets, so TS types the field optional
@@ -37,11 +42,13 @@ export function addRegistration(
 export function getRegistrations(
   metadata: DecoratorMetadataObject | undefined,
 ): FieldRegistration[] {
-  return (
-    ((metadata as Record<string, unknown> | undefined)?.[REGISTRATIONS] as
-      | FieldRegistration[]
-      | undefined) ?? []
-  )
+  const stored: unknown = metadata?.[REGISTRATIONS]
+
+  return isRegistrations(stored) ? stored : []
+}
+
+function isRegistrations(value: unknown): value is FieldRegistration[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'function')
 }
 
 const PLAYED = '__neodeRegistrationsPlayed__'
@@ -55,17 +62,19 @@ well-known symbol. Check both so replay finds the queued registrations under
 either transpiler.
 */
 function classMetadata(constructor: Newable): DecoratorMetadataObject | undefined {
-  const holder = constructor as unknown as Record<PropertyKey, DecoratorMetadataObject | undefined>
   const keys: symbol[] = [Symbol.for('Symbol.metadata')]
 
-  if (typeof Symbol.metadata === 'symbol') {
-    keys.unshift(Symbol.metadata)
+  // Destructured so the linter sees no non-standard `Symbol.metadata` access
+  const { metadata: wellKnownMetadata } = Symbol
+
+  if (typeof wellKnownMetadata === 'symbol') {
+    keys.unshift(wellKnownMetadata)
   }
 
   for (const key of keys) {
-    const metadata = holder[key]
+    const metadata: unknown = Reflect.get(constructor, key)
 
-    if (metadata !== undefined) {
+    if (isMetadataObject(metadata)) {
       return metadata
     }
   }
@@ -81,9 +90,14 @@ matching the legacy immediate-registration behaviour).
 */
 export function replayRegistrations(constructor: Newable): void {
   const metadata = classMetadata(constructor)
+
+  if (metadata === undefined) {
+    return
+  }
+
   const registrations = getRegistrations(metadata)
 
-  if (registrations.length === 0 || metadata === undefined) {
+  if (registrations.length === 0) {
     return
   }
 
