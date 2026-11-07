@@ -1,4 +1,4 @@
-export default class WhereRaw {
+export class WhereRaw {
   private readonly statement: string
 
   constructor(statement: string) {

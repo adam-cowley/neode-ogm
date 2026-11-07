@@ -1,8 +1,8 @@
-import Builder from './Builder.js'
+import { Builder } from './builder.js'
 import { getModel } from '../meta/index.js'
-import type EntitySchema from '../meta/entity/entity-schema.js';
+import type { EntitySchema } from '../meta/entity/entity-schema.js';
 import { EntityType } from '../meta/entity/entity-schema.js'
-import type RelationshipPropertySchema from '../meta/relationship-property-schema.js'
+import type { RelationshipPropertySchema } from '../meta/relationship-property-schema.js'
 
 export const EAGER_ID = '__EAGER_ID__'
 export const EAGER_LABELS = '__EAGER_LABELS__'

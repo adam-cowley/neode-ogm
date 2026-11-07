@@ -3,7 +3,7 @@ import { defineModel } from '../../../src/meta/map-schema'
 import { PropertyType } from '../../../src/meta/property-schema'
 import { Required, String } from '../../../src/decorators'
 import { validate } from '../../../src/validation'
-import ValidationError from '../../../src/validation/validation-error'
+import { ValidationError } from '../../../src/validation/validation-error'
 
 // ---- Fixtures (per-file: decorator registry is global per module registry) --
 

@@ -7,7 +7,7 @@ import {
   eagerNode,
   eagerPattern,
   eagerRelationship,
-} from '../../../src/query/eager-utils'
+} from '../../../src/query/eager-utilities.js'
 import { getModel, mergeRelationshipProperty } from '../../../src/meta'
 import { NodeEntity, OneToMany, RelationshipEntity } from '../../../src/decorators'
 

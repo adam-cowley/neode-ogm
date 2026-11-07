@@ -16,7 +16,7 @@
  * Where neode's tests use internal classes (Model / RelationshipType
  * instances), plain labels and strings are used instead.
  */
-import Builder, { Direction, Where, WhereStatement } from '../../../src/query'
+import { Builder, Direction, Where, WhereStatement  } from '../../../src/query'
 
 describe('QueryBuilder parity with neode (NTS-17 / P2.2)', () => {
   const label = 'Person'

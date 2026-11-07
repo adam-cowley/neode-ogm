@@ -8,7 +8,7 @@ import {
 } from '../../src/services/schema/drift.service'
 import type { ConnectionProvider, QueryRecord } from '../../src/driver/types'
 import { mergeModel } from '../../src/meta'
-import EntitySchema from '../../src/meta/entity/entity-schema'
+import { EntitySchema } from '../../src/meta/entity/entity-schema'
 import { PropertyType } from '../../src/meta/property-schema'
 
 /**

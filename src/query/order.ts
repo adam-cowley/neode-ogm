@@ -1,4 +1,4 @@
-export default class Order {
+export class Order {
   private readonly field: string
   private readonly direction: string
 

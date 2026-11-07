@@ -82,6 +82,58 @@ export interface Ontology {
 }
 
 /**
+Append the entity's property bullet list, heading included (NTS-445)
+*/
+function pushPropertyLines(lines: string[], entity: EntityOntology): void {
+  if (entity.properties.length === 0) {
+    return
+  }
+
+  lines.push('### Properties', '')
+
+  for (const property of entity.properties) {
+    const flags = [
+      property.required ? 'required' : '',
+      property.unique ? 'unique' : '',
+      property.indexed ? 'indexed' : '',
+    ]
+      .filter((flag) => flag !== '')
+      .join(', ')
+
+    const qualifier = flags === '' ? property.type : `${property.type}, ${flags}`
+
+    lines.push(
+      `- \`${property.name}\` (${qualifier})${
+        property.description === undefined ? '' : `: ${property.description}`
+      }`,
+    )
+  }
+
+  lines.push('')
+}
+
+/**
+Append the entity's relationship bullet list, heading included (NTS-445)
+*/
+function pushRelationshipLines(lines: string[], entity: EntityOntology): void {
+  if (entity.relationships.length === 0) {
+    return
+  }
+
+  lines.push('### Relationships', '')
+
+  for (const related of entity.relationships) {
+    lines.push(
+      `- \`${related.name}\` :${related.relationship} ${related.direction} -> ${related.target}${
+        related.description === undefined ? '' : `: ${related.description}`
+      }`,
+    )
+  }
+
+  lines.push('')
+}
+
+/**
 Build an agent-readable ontology over ALL registered models (NTS-445):
 entities with their labels, descriptions, properties and relationships,
 pulled from the shared metadata registry the map API and decorators both
@@ -100,19 +152,19 @@ export function ontology(): Ontology {
         required: property.isRequired(),
         unique: property.isUnique() || property.getCompositeUnique() !== undefined,
         indexed: property.isIndex() || property.getCompositeIndex() !== undefined,
-        ...(description !== undefined ? { description } : {}),
+        ...(description !== undefined && { description }),
       }
     })
 
-    const relationships = schema.getRelationships().map((rel) => {
-      const description = rel.getDescription()
+    const relationships = schema.getRelationships().map((related) => {
+      const description = related.getDescription()
 
       return {
-        name: rel.getKey(),
-        relationship: rel.getType(),
-        direction: DIRECTION_NAMES[rel.getDirection()] ?? 'both',
-        target: rel.getTarget()?.name ?? '',
-        ...(description !== undefined ? { description } : {}),
+        name: related.getKey(),
+        relationship: related.getType(),
+        direction: DIRECTION_NAMES[related.getDirection()],
+        target: related.getTarget().name,
+        ...(description !== undefined && { description }),
       }
     })
 
@@ -121,7 +173,7 @@ export function ontology(): Ontology {
     entities.push({
       name: constructor.name,
       labels: schema.getLabels(),
-      ...(entityDescription !== undefined ? { description: entityDescription } : {}),
+      ...(entityDescription !== undefined && { description: entityDescription }),
       properties,
       relationships,
     })
@@ -147,41 +199,9 @@ export function ontologyMarkdown(): string {
 
     lines.push(`Labels: ${entity.labels.join(', ')}`, '')
 
-    if (entity.properties.length > 0) {
-      lines.push('### Properties', '')
+    pushPropertyLines(lines, entity)
 
-      for (const property of entity.properties) {
-        const flags = [
-          property.required && 'required',
-          property.unique && 'unique',
-          property.indexed && 'indexed',
-        ]
-          .filter(Boolean)
-          .join(', ')
-
-        const qualifier = flags ? `${property.type}, ${flags}` : property.type
-
-        lines.push(
-          `- \`${property.name}\` (${qualifier})${property.description ? `: ${property.description}` : ''}`,
-        )
-      }
-
-      lines.push('')
-    }
-
-    if (entity.relationships.length > 0) {
-      lines.push('### Relationships', '')
-
-      for (const relationship of entity.relationships) {
-        lines.push(
-          `- \`${relationship.name}\` :${relationship.relationship} ${relationship.direction} -> ${relationship.target}${
-            relationship.description ? `: ${relationship.description}` : ''
-          }`,
-        )
-      }
-
-      lines.push('')
-    }
+    pushRelationshipLines(lines, entity)
   }
 
   return lines.join('\n')

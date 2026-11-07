@@ -1,6 +1,6 @@
 import { NodeEntity, String, Uuid } from '../../../src/decorators'
 import { getModel } from '../../../src/meta'
-import PropertySchema from '../../../src/meta/property-schema'
+import { PropertySchema } from '../../../src/meta/property-schema'
 
 describe('PropertySchema', () => {
   describe('options', () => {

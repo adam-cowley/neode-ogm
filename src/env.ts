@@ -1,6 +1,6 @@
 import neo4j, { type Config } from 'neo4j-driver'
 import dotenv from 'dotenv'
-import { Neo4jConnectionProvider } from './driver/neo4j.js'
+import { Neo4jConnectionProvider } from './driver/neo4j-connection-provider.js'
 import Neode from './neode.service.js'
 
 const LOG_LEVELS = new Set(['error', 'warn', 'info', 'debug'])

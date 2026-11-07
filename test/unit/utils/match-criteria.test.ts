@@ -1,4 +1,4 @@
-import EntitySchema from '../../../src/meta/entity/entity-schema'
+import { EntitySchema } from '../../../src/meta/entity/entity-schema'
 import { PropertyType } from '../../../src/meta/property-schema'
 import { GraphNode } from '../../../src/driver/types'
 import { matchCriteriaForEntity, elementIdOfEntity } from '../../../src/utils'

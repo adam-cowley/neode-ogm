@@ -1,4 +1,4 @@
-export default interface NodeConfig {
+export interface NodeConfig {
   labels?: string[]
   /**
   Free-text explanation of the model for LLM-agent-facing ontology

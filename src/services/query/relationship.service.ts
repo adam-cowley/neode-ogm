@@ -1,4 +1,4 @@
-import Builder from '../../query/index.js'
+import { Builder } from '../../query/index.js'
 import QueryService from './query.service.js'
 
 const REL = 'rel'

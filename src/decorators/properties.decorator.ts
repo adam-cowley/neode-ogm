@@ -1,8 +1,9 @@
 import { mergeProperty } from '../meta/index.js'
 import { PropertyType } from '../meta/property-schema.js'
+import type { Newable } from '../meta/newable.js'
 
-export default function Properties() {
-  return function (target: any, propertyKey: string, _descriptor?: any): void {
+export function Properties(): (target: { constructor: Newable }, propertyKey: string) => void {
+  return function (target: { constructor: Newable }, propertyKey: string): void {
     const constructor = target.constructor
 
     // Merge Property Key

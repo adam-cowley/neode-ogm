@@ -1,9 +1,10 @@
-import { EAGER_ID, EAGER_LABELS, eagerPattern } from '../query/eager-utils.js'
-import { Direction, quote } from '../query/index.js'
-import type EntitySchema from '../meta/entity/entity-schema.js'
-import type PropertySchema from '../meta/property-schema.js'
+import { EAGER_ID, EAGER_LABELS, eagerPattern } from '../query/eager-utilities.js'
+import { Direction } from '../query/index.js'
+import { quote } from '../query/quote.js'
+import type { EntitySchema } from '../meta/entity/entity-schema.js'
+import type { PropertySchema } from '../meta/property-schema.js';
 import { PropertyType, isProjectedProperty } from '../meta/property-schema.js'
-import RelationshipPropertySchema from '../meta/relationship-property-schema.js'
+import { RelationshipPropertySchema } from '../meta/relationship-property-schema.js'
 import { getModel } from '../meta/index.js'
 
 /**

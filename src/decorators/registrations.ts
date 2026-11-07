@@ -100,7 +100,9 @@ export function replayRegistrations(constructor: Newable): void {
   }
 }
 
-/** Standard decorators identify the decorated member by name. */
+/**
+Standard decorators identify the decorated member by name.
+*/
 export function memberName(context: ClassFieldDecoratorContext): string {
   return String(context.name)
 }

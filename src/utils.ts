@@ -1,5 +1,5 @@
-import type EntitySchema from './meta/entity/entity-schema.js'
-import type PropertySchema from './meta/property-schema.js'
+import type { EntitySchema } from './meta/entity/entity-schema.js'
+import type { PropertySchema } from './meta/property-schema.js'
 import { PropertyType } from './meta/property-schema.js'
 import { ELEMENT_ID } from './constants.js'
 /**
@@ -114,11 +114,11 @@ properties are written with ON CREATE SET, onMatchSet properties with
 ON MATCH SET, everything else unconditionally.
 */
 export function setPropertyInBuilder(
-  builder: import('./query/index.js').default,
+  builder: import('./query/index.js').Builder,
   alias: string,
   property: PropertySchema,
   value: unknown,
-): import('./query/index.js').default {
+): import('./query/index.js').Builder {
   if (value === undefined || value === null) {
     return builder.delete(`${alias}.${property.getKey()}`)
   }

@@ -1,6 +1,6 @@
 import type { DefaultValue } from '../meta/property-schema.js'
 
-export default interface PropertyConfig {
+export interface PropertyConfig {
   /**
   Property type name, as accepted by the @Property decorator (e.g. 'string', 'datetime').
   */

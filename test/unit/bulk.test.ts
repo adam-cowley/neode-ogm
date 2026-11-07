@@ -10,7 +10,7 @@ import {
   processMergeRow,
 } from '../../src/services/query/bulk.service'
 import { toCursorValue } from '../../src/services/query/paginate.service'
-import PropertySchema, { PropertyType } from '../../src/meta/property-schema'
+import { PropertySchema, PropertyType  } from '../../src/meta/property-schema'
 
 // ---- Fixtures (per-file: decorator registry is global per module registry) --
 

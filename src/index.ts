@@ -1,4 +1,3 @@
-
 export { EventType } from './common/events.js'
 export { fromEnv } from './env.js'
 export {
@@ -56,7 +55,7 @@ export type {
   GraphRelationship,
   AccessMode,
 } from './driver/types.js'
-export { Neo4jConnectionProvider } from './driver/neo4j.js'
+export { Neo4jConnectionProvider } from './driver/neo4j-connection-provider.js'
 export { RelateConnectionProvider } from './driver/relate.js'
 
 // Raw-cypher helpers + instrumented provider (NTS-122/124/132/133)

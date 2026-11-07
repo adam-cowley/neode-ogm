@@ -16,6 +16,7 @@ export default defineConfig(
       '*.config.ts',
       'bench/**',
       'examples/**',
+      'scripts/**',
       // Re-enabled in Phase 4 when type tests land
       'test/**',
     ],
@@ -120,6 +121,15 @@ export default defineConfig(
     files: ['src/driver/relate.ts'],
     rules: {
       'import-x/no-extraneous-dependencies': 'off',
+    },
+  },
+
+  // Public entry: the default export is the documented package API
+  // (import Neode from '@neode/ogm')
+  {
+    files: ['src/index.ts'],
+    rules: {
+      'import-x/no-default-export': 'off',
     },
   },
 

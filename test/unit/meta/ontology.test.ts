@@ -175,9 +175,9 @@ describe('ontology (NTS-445)', () => {
       expect(entity.properties.find((property) => property.name === 'name')?.description).toEqual(
         'Legal name',
       )
-      expect(entity.properties.find((property) => property.name === 'payroll')?.description).toEqual(
-        'Monthly pay',
-      )
+      expect(
+        entity.properties.find((property) => property.name === 'payroll')?.description,
+      ).toEqual('Monthly pay')
       expect(
         entity.relationships.find((relationship) => relationship.name === 'knows')?.description,
       ).toEqual('Someone this person knows')
@@ -188,7 +188,9 @@ describe('ontology (NTS-445)', () => {
     it('delegates ontology() and ontologyMarkdown() to the module', () => {
       const neode = new Neode({} as never)
 
-      expect(neode.ontology().entities.find((entity) => entity.name === 'OntologyPerson')).toBeDefined()
+      expect(
+        neode.ontology().entities.find((entity) => entity.name === 'OntologyPerson'),
+      ).toBeDefined()
       expect(neode.ontologyMarkdown()).toContain('## OntologyPerson')
     })
   })

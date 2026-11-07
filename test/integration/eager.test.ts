@@ -10,7 +10,7 @@ import {
 } from '../../src/decorators'
 import { openBackend, TestBackend } from './support/backend'
 import { Direction } from '../../src/query'
-import Builder from '../../src/query'
+import { Builder } from '../../src/query'
 import { getModel, mergeRelationshipProperty } from '../../src/meta'
 import { THIS_NODE } from '../../src/constants'
 import QueryService from '../../src/services/query/query.service'

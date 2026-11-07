@@ -1,6 +1,6 @@
 export const OPERATOR_EQUALS = '='
 
-export default class Where {
+export class Where {
   private negative = false
   private readonly left: string
   private readonly operator: string

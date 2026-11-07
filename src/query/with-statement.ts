@@ -1,4 +1,4 @@
-export default class WithStatement {
+export class WithStatement {
   private readonly variables: string[]
 
   constructor(variables: string[]) {

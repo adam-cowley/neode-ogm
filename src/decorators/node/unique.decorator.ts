@@ -2,7 +2,7 @@ import { mergeProperty } from '../../meta/index.js'
 import { PropertyType } from '../../meta/property-schema.js'
 import { addRegistration, memberName } from '../registrations.js'
 
-export default function Unique() {
+export function Unique(): (value: undefined, context: ClassFieldDecoratorContext) => void {
   return function (_value: undefined, context: ClassFieldDecoratorContext): void {
     const propertyKey = memberName(context)
 

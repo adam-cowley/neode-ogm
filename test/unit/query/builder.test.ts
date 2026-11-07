@@ -1,4 +1,4 @@
-import Builder, { Direction } from '../../../src/query'
+import { Builder, Direction  } from '../../../src/query'
 
 describe('QueryBuilder', () => {
   describe('match', () => {

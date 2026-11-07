@@ -4,7 +4,7 @@
 import { openBackend, TestBackend } from './support/backend'
 import { setDefaultNeode, WithMethods } from '../../src/entity-methods'
 import { NodeEntity, InternalId, String, Uuid } from '../../src/decorators'
-import Builder from '../../src/query'
+import { Builder } from '../../src/query'
 
 // ---- Fixtures (per-file: decorator registry is global per module) -----------
 

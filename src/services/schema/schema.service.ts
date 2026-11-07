@@ -1,8 +1,8 @@
 import type { ConnectionProvider } from '../../driver/types.js'
 import { quote } from '../../query/quote.js'
 import { getModels } from '../../meta/index.js'
-import type EntitySchema from '../../meta/entity/entity-schema.js'
-import type PropertySchema from '../../meta/property-schema.js'
+import type { EntitySchema } from '../../meta/entity/entity-schema.js'
+import type { PropertySchema } from '../../meta/property-schema.js';
 import { PropertyType } from '../../meta/property-schema.js'
 import FulltextIndexService from './fulltext.service.js'
 

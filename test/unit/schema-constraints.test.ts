@@ -11,7 +11,7 @@ import { declaredSchemaObjects } from '../../src/services/schema/inspect.service
 import { defineModel } from '../../src/meta/map-schema'
 import { mergeModel, getModel } from '../../src/meta'
 import { Property } from '../../src/decorators'
-import EntitySchema from '../../src/meta/entity/entity-schema'
+import { EntitySchema } from '../../src/meta/entity/entity-schema'
 import { PropertyType } from '../../src/meta/property-schema'
 
 /**

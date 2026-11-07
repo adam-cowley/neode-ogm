@@ -1,9 +1,9 @@
-import type EntitySchema from '../meta/entity/entity-schema.js'
+import type { EntitySchema } from '../meta/entity/entity-schema.js'
 import { getModel } from '../meta/index.js'
 import type { Newable } from '../meta/newable.js'
 import { getModelByName, unknownDefinitionError } from '../meta/map-schema.js'
 import type Neode from '../neode.service.js'
-import type PropertySchema from '../meta/property-schema.js'
+import type { PropertySchema } from '../meta/property-schema.js'
 
 /**
 Fake-invocation cap when retrying a unique property's `fake` for a
@@ -15,7 +15,9 @@ const MAX_FAKE_ATTEMPTS = 1000
 Options for one `.with()` call on a factory builder (NTS-444)
 */
 export interface FactoryWithSpec {
-  /** Number of target nodes to create and relate, per created instance */
+  /**
+  Number of target nodes to create and relate, per created instance
+  */
   count: number
   /**
   Properties for each target node: a static map, or a function of the
@@ -78,7 +80,7 @@ export default class FactoryBuilder<T extends object = any> {
     const schema = getModel(this.newable)
 
     if (!schema) {
-      const name = (this.newable as { name?: string }).name || 'unknown'
+      const name = (this.newable as { name?: string }).name ?? 'unknown'
 
       throw new Error(
         `Couldn't find a model for "${name}". Register the model via model() or a decorator first.`,
@@ -92,7 +94,7 @@ export default class FactoryBuilder<T extends object = any> {
   Seed `n` instances — `.create()` then resolves to an array
   */
   count(count: number): this {
-    if (!Number.isInteger(count) || count < 1) {
+    if (!Number.isSafeInteger(count) || count < 1) {
       throw new Error('count() requires a positive integer')
     }
 
@@ -107,7 +109,7 @@ export default class FactoryBuilder<T extends object = any> {
   Chainable; multiple `.with()` calls are allowed.
   */
   with(relationshipName: string, spec: FactoryWithSpec): this {
-    if (!Number.isInteger(spec.count) || spec.count < 0) {
+    if (!Number.isSafeInteger(spec.count) || spec.count < 0) {
       throw new Error(`with() requires a non-negative integer count for "${relationshipName}"`)
     }
 
@@ -124,13 +126,15 @@ export default class FactoryBuilder<T extends object = any> {
   async create(overrides: Record<string, unknown> = {}): Promise<T | T[]> {
     const total = this.total ?? 1
 
-    // Unique properties with a fake generator: pre-generate distinct
-    // values for the batch (app-level check — the fake fn must still be
-    // DB-safe across runs). Explicit overrides win and seed the used set.
+    // Unique properties with a fake generator: pre-generate distinct values
+    // for the batch (app-level check — the fake fn must still be DB-safe
+    // across runs). Explicit overrides always win; they apply to every row,
+    // so overriding a unique property across a multi-row batch is a caller error.
     const uniques = this.schema
       .getProperties()
       .filter((property) => property.isUnique() && typeof property.getFake() === 'function')
 
+    // An override on a unique property occupies its value before row 1
     const used = new Map<string, Set<unknown>>(
       uniques
         .filter((property) => overrides[property.getKey()] !== undefined)
@@ -170,6 +174,7 @@ export default class FactoryBuilder<T extends object = any> {
 
       // An override on a unique property applies to this row only —
       // consume it so later rows fake distinct values around the used set
+      // (uniques are pre-filtered to properties that have a fake generator)
       if (properties[key] !== undefined) {
         delete overrides[key]
 
@@ -186,7 +191,9 @@ export default class FactoryBuilder<T extends object = any> {
 
         if (++attempts > MAX_FAKE_ATTEMPTS) {
           throw new Error(
-            `The fake() generator for unique property "${key}" did not produce a distinct value after ${MAX_FAKE_ATTEMPTS} attempts`,
+            `The fake() generator for unique property "${key}" did not produce a distinct value after ${String(
+              MAX_FAKE_ATTEMPTS,
+            )} attempts`,
           )
         }
       } while (seen.has(value))

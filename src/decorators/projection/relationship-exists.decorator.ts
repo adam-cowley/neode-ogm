@@ -15,7 +15,7 @@ Example:
 hasNextLesson: boolean;
 ```
 */
-export default function RelationshipExists(config: RelationshipExistsConfig) {
+export function RelationshipExists(config: RelationshipExistsConfig): (value: undefined, context: ClassFieldDecoratorContext) => void {
   return function (_value: undefined, context: ClassFieldDecoratorContext): void {
     const propertyKey = memberName(context)
 

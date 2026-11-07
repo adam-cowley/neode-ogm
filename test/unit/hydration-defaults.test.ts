@@ -4,9 +4,9 @@ import { hydrateNode, hydrateRelationship } from '../../src/hydrate'
 import { EagerRelationship, EagerProjectionMap } from '../../src/hydrate'
 import { GraphNode, GraphRelationship } from '../../src/driver/types'
 import { InternalId, Property, RelationshipEntity } from '../../src/decorators'
-import RelationshipPropertySchema from '../../src/meta/relationship-property-schema'
+import { RelationshipPropertySchema } from '../../src/meta/relationship-property-schema'
 import { Direction } from '../../src/query'
-import EntitySchema from '../../src/meta/entity/entity-schema'
+import { EntitySchema } from '../../src/meta/entity/entity-schema'
 
 /**
  * Hydration defaults (NTS-139): stored/projected `null` hydrates as

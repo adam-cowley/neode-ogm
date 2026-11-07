@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import MergeService from '../../src/services/query/merge.service'
-import EntitySchema from '../../src/meta/entity/entity-schema'
+import { EntitySchema } from '../../src/meta/entity/entity-schema'
 import { PropertyType } from '../../src/meta/property-schema'
 import type { Runner } from '../../src/driver/types'
 

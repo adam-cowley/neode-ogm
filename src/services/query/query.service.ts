@@ -1,10 +1,10 @@
 import type { Newable } from '../../meta/newable.js'
-import type Builder from '../../query/index.js'
+import type { Builder } from '../../query/index.js'
 import type { Runner, GraphNode } from '../../driver/types.js'
 import { hydrateNode } from '../../hydrate.js'
 import { THIS_NODE } from '../../constants.js'
-import { eagerNode } from '../../query/eager-utils.js'
-import type EntitySchema from '../../meta/entity/entity-schema.js'
+import { eagerNode } from '../../query/eager-utilities.js'
+import type { EntitySchema } from '../../meta/entity/entity-schema.js'
 
 export default class QueryService {
   protected readonly runner: Runner

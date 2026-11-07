@@ -1,9 +1,10 @@
-import Builder, { quote } from '../../query/index.js'
+import { Builder } from '../../query/index.js'
+import { quote } from '../../query/quote.js'
 import { THIS_NODE } from '../../constants.js'
 import { matchCriteriaForEntity } from '../../utils.js'
 import { getModel } from '../../meta/index.js'
-import type EntitySchema from '../../meta/entity/entity-schema.js'
-import type RelationshipPropertySchema from '../../meta/relationship-property-schema.js'
+import type { EntitySchema } from '../../meta/entity/entity-schema.js'
+import type { RelationshipPropertySchema } from '../../meta/relationship-property-schema.js'
 import QueryService from './query.service.js'
 
 /**

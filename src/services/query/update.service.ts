@@ -1,9 +1,9 @@
-import Builder, { type EntityMatchCriteria } from '../../query/index.js'
+import { Builder,  type EntityMatchCriteria  } from '../../query/index.js'
 import { INTERNAL_ID, THIS_NODE } from '../../constants.js'
 import { matchCriteriaForEntity } from '../../utils.js'
 import type { GraphNode, QueryOutput } from '../../driver/types.js'
 import { PropertyType, isProjectedProperty } from '../../meta/property-schema.js'
-import type EntitySchema from '../../meta/entity/entity-schema.js'
+import type { EntitySchema } from '../../meta/entity/entity-schema.js'
 import { validate } from '../../validation/index.js'
 import QueryService from './query.service.js'
 

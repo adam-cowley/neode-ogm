@@ -3,7 +3,7 @@ import { quote } from '../../query/quote.js'
 import type { WithMethods } from '../../entity-methods.js'
 import { hydrate } from '../../hydrate.js'
 import { getModel } from '../../meta/index.js'
-import EntitySchema from '../../meta/entity/entity-schema.js'
+import { EntitySchema } from '../../meta/entity/entity-schema.js'
 import { type ScoredEntity, type ModelInput, resolveModel } from './search.service.js'
 
 /**

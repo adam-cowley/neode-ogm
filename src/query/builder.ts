@@ -1,20 +1,20 @@
-import Match from './Match.js'
-import Order from './Order.js'
-import Property from './Property.js'
-import Relationship from './Relationship.js'
-import Statement from './Statement.js'
-import Where, { OPERATOR_EQUALS } from './Where.js'
-import LabelPredicate from './LabelPredicate.js'
-import WhereBetween from './WhereBetween.js'
-import WhereId from './WhereId.js'
-import WhereNull from './WhereNull.js'
-import WhereRaw from './WhereRaw.js'
-import WhereStatement from './WhereStatement.js'
-import type { Direction } from './Direction.js'
-import WithDistinctStatement from './WithDistinctStatement.js'
-import WithStatement from './WithStatement.js'
+import { Match } from './match.js'
+import { Order } from './order.js'
+import { Property } from './property.js'
+import { Relationship } from './relationship.js'
+import { Statement } from './statement.js'
+import { Where, OPERATOR_EQUALS } from './where.js'
+import { LabelPredicate } from './label-predicate.js'
+import { WhereBetween } from './where-between.js'
+import { WhereId } from './where-id.js'
+import { WhereNull } from './where-null.js'
+import { WhereRaw } from './where-raw.js'
+import { WhereStatement } from './where-statement.js'
+import type { Direction } from './direction.js'
+import { WithDistinctStatement } from './with-distinct-statement.js'
+import { WithStatement } from './with-statement.js'
 import type { AccessMode, ConnectionProvider, QueryOutput, Runner } from '../driver/types.js'
-import type EntitySchema from '../meta/entity/entity-schema.js'
+import type { EntitySchema } from '../meta/entity/entity-schema.js'
 
 /**
 Identity criteria for a persisted entity, as produced by
@@ -47,7 +47,7 @@ when `build()` is called.
 All user values are passed as query parameters - the generated query
 contains only aliases.
 */
-export default class Builder {
+export class Builder {
   private readonly params: BuilderParams = {}
   private readonly statements: { toString(includePrefix?: boolean): string }[] = []
 

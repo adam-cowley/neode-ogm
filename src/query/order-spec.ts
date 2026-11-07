@@ -1,4 +1,4 @@
-import type Builder from './Builder.js'
+import type { Builder } from './builder.js'
 import { THIS_NODE } from '../constants.js'
 
 /**

@@ -13,7 +13,7 @@ import type {
   Runner,
   TransactionHandle,
 } from './driver/types.js'
-import { Neo4jConnectionProvider as Neo4indexConnectionProvider } from './driver/neo4j.js'
+import { Neo4jConnectionProvider as Neo4indexConnectionProvider } from './driver/neo4j-connection-provider.js'
 import { RelateConnectionProvider } from './driver/relate.js'
 import { instrumentConnectionProvider } from './driver/instrumented.js'
 import { jsonSafeRecord } from './driver/json-safe.js'
@@ -21,8 +21,8 @@ import { hydrate } from './hydrate.js'
 import { setDefaultNeode } from './entity-methods.js'
 import { getModel, getModels, resolveRepository } from './meta/index.js'
 import type { Newable } from './meta/newable.js'
-import type EntitySchema from './meta/entity/entity-schema.js'
-import type RelationshipPropertySchema from './meta/relationship-property-schema.js'
+import type { EntitySchema } from './meta/entity/entity-schema.js'
+import type { RelationshipPropertySchema } from './meta/relationship-property-schema.js'
 import {
   defineModel,
   extendModel,
@@ -50,7 +50,8 @@ import TransactionError, { type BatchStatementError } from './transaction/errors
 import FindByIdService from './services/query/find-by-id.service.js'
 import { INTERNAL_ID } from './constants.js'
 import { elementIdOfEntity } from './utils.js'
-import Builder, { quote } from './query/index.js'
+import { Builder } from './query/index.js'
+import { quote } from './query/quote.js'
 import { search, type ScoredEntity } from './services/query/search.service.js'
 import FactoryBuilder from './services/factory.service.js'
 import { knn, type KnnMode } from './services/query/knn.service.js'

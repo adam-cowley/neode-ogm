@@ -2,13 +2,10 @@ import { randomUUID } from 'node:crypto'
 
 import { mergeModel, mergeProperty, mergeRelationshipProperty } from './index.js'
 import type { Newable } from './newable.js'
-import type PropertySchema from './property-schema.js';
+import type { PropertySchema } from './property-schema.js'
 import { PropertyType } from './property-schema.js'
 import { toDirection } from '../query/index.js'
 import type {
-
-
-
   ProjectionDefinition,
   PropertyDefinition,
   PropertyTypeName,
@@ -143,10 +140,14 @@ function wireProjectionProperty(
     case 'relatedMany': {
       const related: RelatedOneDefinition | RelatedManyDefinition = definition
 
-      if (related.fields) {property.setFields(related.fields)}
+      if (related.fields) {
+        property.setFields(related.fields)
+      }
       property.setRelationshipType(related.relationship)
       property.setDirection(toDirection(related.direction))
-      if (target) {property.setEntity(target)}
+      if (target) {
+        property.setEntity(target)
+      }
       break
     }
 
@@ -155,10 +156,18 @@ function wireProjectionProperty(
 
       property.setRelationshipType(count.relationship)
       property.setDirection(toDirection(count.direction))
-      if (count.where) {property.setWhere(count.where)}
-      if (count.minHops !== undefined) {property.setMinHops(count.minHops)}
-      if (count.maxHops !== undefined) {property.setMaxHops(count.maxHops)}
-      if (target) {property.setEntity(target)}
+      if (count.where) {
+        property.setWhere(count.where)
+      }
+      if (count.minHops !== undefined) {
+        property.setMinHops(count.minHops)
+      }
+      if (count.maxHops !== undefined) {
+        property.setMaxHops(count.maxHops)
+      }
+      if (target) {
+        property.setEntity(target)
+      }
       break
     }
 
@@ -167,22 +176,24 @@ function wireProjectionProperty(
 
       property.setRelationshipType(exists.relationship)
       property.setDirection(toDirection(exists.direction))
-      if (exists.where) {property.setWhere(exists.where)}
+      if (exists.where) {
+        property.setWhere(exists.where)
+      }
       break
     }
 
     case 'labelPresent': {
-      property.setLabel((definition).label)
+      property.setLabel(definition.label)
       break
     }
 
     case 'expression': {
-      property.setExpression((definition).expression)
+      property.setExpression(definition.expression)
       break
     }
 
     case 'computed': {
-      property.setCompute((definition).compute)
+      property.setCompute(definition.compute)
       break
     }
   }

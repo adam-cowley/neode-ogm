@@ -1,4 +1,4 @@
-export default class WhereBetween {
+export class WhereBetween {
   private negative = false
   private readonly alias: string
   private readonly floor: string

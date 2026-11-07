@@ -1,12 +1,12 @@
-import Builder, { Direction } from '../../query/index.js'
+import { Builder,  Direction  } from '../../query/index.js'
 import { INTERNAL_ID, THIS_NODE } from '../../constants.js'
 import type { QueryOutput } from '../../driver/types.js'
 import { getModel } from '../../meta/index.js'
-import type EntitySchema from '../../meta/entity/entity-schema.js'
+import type { EntitySchema } from '../../meta/entity/entity-schema.js';
 import { EntityType } from '../../meta/entity/entity-schema.js'
-import type PropertySchema from '../../meta/property-schema.js'
+import type { PropertySchema } from '../../meta/property-schema.js';
 import { PropertyType, isProjectedProperty } from '../../meta/property-schema.js'
-import type RelationshipPropertySchema from '../../meta/relationship-property-schema.js'
+import type { RelationshipPropertySchema } from '../../meta/relationship-property-schema.js'
 import { getValueOrDefault, getValuesAsRecord, setPropertyInBuilder } from '../../utils.js'
 import { applyFakeValues, createNodeAndRelationships, modelPropertyValues } from '../write-utils.js'
 import { validate } from '../../validation/index.js'

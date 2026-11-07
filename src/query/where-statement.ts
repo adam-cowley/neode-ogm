@@ -5,7 +5,7 @@ interface WhereClause {
   toString(): string
 }
 
-export default class WhereStatement {
+export class WhereStatement {
   private readonly clauses: WhereClause[] = []
 
   /**

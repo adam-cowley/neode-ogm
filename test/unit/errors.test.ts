@@ -8,7 +8,7 @@ import {
   NeodeError,
   TransientError,
 } from '../../src/errors'
-import { Neo4jConnectionProvider, Neo4jTransactionHandle } from '../../src/driver/neo4j'
+import { Neo4jConnectionProvider, Neo4jTransactionHandle } from '../../src/driver/neo4j-connection-provider.js'
 
 /**
  * A Neo4jError / RelateError-shaped error: both carry the `code` and

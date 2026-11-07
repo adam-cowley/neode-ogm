@@ -2,7 +2,7 @@ import type { ConnectionProvider, QueryOutput, Runner } from '../../driver/types
 import { rollbackAfterFailure } from '../../transaction/rollback.js'
 import { THIS_NODE } from '../../constants.js'
 import { hydrate } from '../../hydrate.js'
-import type EntitySchema from '../../meta/entity/entity-schema.js'
+import type { EntitySchema } from '../../meta/entity/entity-schema.js'
 import { PropertyType, isProjectedProperty } from '../../meta/property-schema.js'
 import { getValueOrDefault } from '../../utils.js'
 import { modelPropertyValues } from '../write-utils.js'

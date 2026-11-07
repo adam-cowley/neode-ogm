@@ -1,6 +1,6 @@
 import type { Newable } from '../newable.js'
-import PropertySchema from '../property-schema.js'
-import RelationshipPropertySchema from '../relationship-property-schema.js'
+import { PropertySchema } from '../property-schema.js'
+import { RelationshipPropertySchema } from '../relationship-property-schema.js'
 
 export const EntityType = {
   NodeEntity: 0,
@@ -9,7 +9,7 @@ export const EntityType = {
 
 export type EntityType = (typeof EntityType)[keyof typeof EntityType]
 
-export default class EntitySchema {
+export class EntitySchema {
   protected properties = new Map<string, PropertySchema>()
   protected relationships = new Map<string, RelationshipPropertySchema>()
 
@@ -33,7 +33,7 @@ export default class EntitySchema {
     this.entityType = entityType
   }
 
-  setLabels(labels: string[]) {
+  setLabels(labels: string[]): void {
     this.labels = [...new Set(labels)].sort()
   }
 
@@ -41,23 +41,23 @@ export default class EntitySchema {
     return [...this.labels]
   }
 
-  addLabel(label: string) {
+  addLabel(label: string): void {
     this.setLabels([...this.labels, label])
   }
 
-  setDescription(description: string) {
+  setDescription(description: string): void {
     this.description = description
   }
 
-  getDescription() {
+  getDescription(): string | undefined {
     return this.description
   }
 
-  addRelationship(key: string) {
+  addRelationship(key: string): void {
     this.relationships.set(key, new RelationshipPropertySchema(key))
   }
 
-  hasRelationship(key: string) {
+  hasRelationship(key: string): boolean {
     return this.relationships.has(key)
   }
 
@@ -69,15 +69,15 @@ export default class EntitySchema {
     return Array.from(this.relationships.values())
   }
 
-  setConstructor(constructor: Newable) {
+  setConstructor(constructor: Newable): void {
     this.objectConstructor = constructor
   }
 
-  getConstructor() {
+  getConstructor(): Newable {
     return this.objectConstructor
   }
 
-  setType(type: EntityType) {
+  setType(type: EntityType): void {
     this.entityType = type
   }
 
@@ -85,7 +85,7 @@ export default class EntitySchema {
     return this.entityType
   }
 
-  hasProperty(key: string) {
+  hasProperty(key: string): boolean {
     return this.properties.has(key)
   }
 
@@ -129,11 +129,11 @@ export default class EntitySchema {
     return phantom
   }
 
-  getProperty(key: string) {
+  getProperty(key: string): PropertySchema {
     return this.properties.get(key)!
   }
 
-  addProperty(key: string) {
+  addProperty(key: string): Map<string, PropertySchema> {
     return this.properties.set(key, new PropertySchema(key))
   }
 
