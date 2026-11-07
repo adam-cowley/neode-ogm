@@ -100,6 +100,7 @@ export default class PropertySchema {
   private onCreateSet = false
   private onMatchSet = false
   private alwaysSet = false
+  private fulltext = false
 
   private entity!: Newable
 
@@ -283,6 +284,14 @@ export default class PropertySchema {
 
   getAlwaysSet() {
     return this.alwaysSet
+  }
+
+  setFulltext(value = true) {
+    this.fulltext = value
+  }
+
+  getFulltext() {
+    return this.fulltext
   }
 
   setEntity(entity: Newable) {

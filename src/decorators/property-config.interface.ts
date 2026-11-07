@@ -28,6 +28,11 @@ export default interface PropertyConfig {
   index?: boolean | string[]
   exists?: boolean
   /**
+  Include in the model's full-text search index, created by `installSchema()`
+  and resolved by `Repository.search()` (NTS-436).
+  */
+  fulltext?: boolean
+  /**
   Opt in to a property-type constraint generated from the declared type (NTS-141): `REQUIRE n.prop IS :: STRING`.
   */
   typed?: boolean

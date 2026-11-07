@@ -13,6 +13,7 @@ export { default as WhereStatement } from './WhereStatement.js'
 export { default as LabelPredicate } from './LabelPredicate.js'
 export { default as WithStatement } from './WithStatement.js'
 export { default as WithDistinctStatement } from './WithDistinctStatement.js'
+export { expr, caseExpr } from './expressions.js'
 export { Direction, toDirection } from './Direction.js'
 export {
   EAGER_ID,

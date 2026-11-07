@@ -254,6 +254,16 @@ export default class Neode implements INeode {
     parameters: QueryParameters | undefined,
     options: CypherOptions & { hydrate: new (...arguments_: never[]) => T },
   ): Promise<T[]>
+  async cypher<T>(
+    query: string,
+    parameters: QueryParameters | undefined,
+    options: CypherOptions & { hydrate: new (...arguments_: never[]) => T; alias?: string },
+  ): Promise<T[]>
+  async cypher(
+    query: string,
+    parameters?: QueryParameters,
+    options?: CypherOptions,
+  ): Promise<QueryOutput>
   async cypher(
     query: string,
     parameters: QueryParameters = {},

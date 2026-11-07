@@ -12,6 +12,8 @@ import type EntitySchema from '../meta/entity/entity-schema.js'
 import { elementIdOfEntity } from '../utils.js'
 import type RelationshipPropertySchema from '../meta/relationship-property-schema.js'
 import type INeode from '../neode.interface.js'
+import type { ScoredEntity } from '../services/query/search.service.js'
+import { hydrate } from '../hydrate.js'
 import DeleteService, { type DeleteOptions } from '../services/query/delete.service.js'
 import DetachService, { type DetachResult } from '../services/query/detach.service.js'
 import FindByIdService from '../services/query/find-by-id.service.js'
@@ -306,5 +308,34 @@ export default class TransactionalService implements INeode {
 
   async writeCypher(query: string, parameters: QueryParameters = {}): Promise<QueryOutput> {
     return this.handle.run(query, parameters)
+  }
+
+  async cypher<T>(
+    query: string,
+    parameters?: QueryParameters,
+    options?: { hydrate: new (...arguments_: never[]) => T; alias?: string },
+  ): Promise<T[]>
+  async cypher(
+    query: string,
+    parameters?: QueryParameters,
+    options?: object,
+  ): Promise<QueryOutput>
+  async cypher(
+    query: string,
+    parameters: QueryParameters = {},
+    options: { hydrate?: new (...arguments_: never[]) => unknown; alias?: string } = {},
+  ): Promise<QueryOutput | unknown[]> {
+    const output: QueryOutput = await this.handle.run(query, parameters)
+
+    return options.hydrate ? hydrate(options.hydrate, output, options.alias ?? 'this') : output
+  }
+
+  async search<T>(
+    _constructor: new (...arguments_: never[]) => T,
+    _indexName: string,
+    _query: string,
+    _limit?: number,
+  ): Promise<ScoredEntity<T>[]> {
+    throw new Error('Full-text search cannot run inside a transaction — run it on the neode instance')
   }
 }

@@ -7,6 +7,12 @@ import type PropertySchema from '../meta/property-schema.js'
 import type INeode from '../neode.interface.js'
 import type { GraphNode, QueryOutput } from '../driver/types.js'
 import { hydrateNode } from '../utils.js'
+import { fulltextIndexName } from '../services/schema/fulltext.service.js'
+import type { ScoredEntity } from '../services/query/search.service.js'
+
+export interface SearchOptions {
+  limit?: number
+}
 
 /**
 Ordering spec, matching neode's all() forms:
@@ -128,22 +134,26 @@ export default class Repository<Entity> {
 
   /**
   Apply a partial patch to a persisted entity, then persist it.
-  
-  The INeode facade has no dedicated update method and the repository
-  holds no Runner, so update is implemented through save(): a merge on
-  the entity's primary key that sets the patched properties — update
-  semantics for anything previously saved.
+
+  Named `patch` (not `update`) so domain interfaces that declare their own
+  `update(id, input)` can be implemented by subclasses without clashing
+  with the base signature (NTS-454/458/459).
   */
-  async update(entity: Entity, properties: Partial<Entity>): Promise<Entity> {
+  async patch(entity: Entity, properties: Partial<Entity>): Promise<Entity> {
     Object.assign(entity as unknown as object, properties)
 
     return this.save(entity)
   }
 
   /**
-  Delete by primary key value or by entity instance
+  Delete by primary key value or by entity instance. Pass `{ ifExists: true }`
+  to silently no-op when the entity does not exist (NTS-457) — the default
+  throws so callers learn about missing IDs.
   */
-  async delete(target: Entity | string | number): Promise<void> {
+  async delete(
+    target: Entity | string | number,
+    options: { ifExists?: boolean } = {},
+  ): Promise<void> {
     if (target !== null && typeof target === 'object') {
       return this.neode.delete(target, this.database)
     }
@@ -151,6 +161,10 @@ export default class Repository<Entity> {
     const entity = await this.find(target)
 
     if (!entity) {
+      if (options.ifExists) {
+        return
+      }
+
       throw new Error(`Cannot delete: entity not found for ID ${String(target)}`)
     }
 
@@ -158,9 +172,43 @@ export default class Repository<Entity> {
   }
 
   /**
+  Count entities grouped by one declared property's value (NTS-453):
+  `countBy('status')` → `{ ACTIVE: 3, CLOSED: 1 }`.
+  */
+  async countBy(
+    property: keyof Entity & string,
+    parameters: Partial<Entity> = {},
+  ): Promise<Record<string, number>> {
+    const declared = this.schema
+      .getProperties()
+      .find((schemaProperty) => schemaProperty.getKey() === property)
+
+    if (declared === undefined) {
+      throw new Error(
+        `Cannot countBy: "${property}" is not a declared property on ${this.getLabels().join(':')}`,
+      )
+    }
+
+    const key = declared.getKey().replaceAll('`', '``')
+    const builder = this.matchAll(parameters)
+    builder.return(`${THIS_NODE}.\`${key}\` AS value, count(${THIS_NODE}) AS count`)
+
+    const output = await this.read(builder)
+
+    const result: Record<string, number> = {}
+
+    for (const row of output.records) {
+      const value = row.get('value')
+      result[String(value)] = Repository.toCount(row.get('count'))
+    }
+
+    return result
+  }
+
+  /**
   Delete every entity matching params and return the number deleted.
   
-  shortcut: one DETACH DELETE statement rather than per-entity deletes,
+  shortcut: one DETACH DELETE statement rather than per-node deletes,
   so per-node delete events and cascade options do not apply — switch to
   a loop over delete() when cascading bulk deletes are needed
   */
@@ -181,6 +229,87 @@ export default class Repository<Entity> {
     }
 
     return Repository.toCount(firstRecord.get('count'))
+  }
+
+  /**
+  Atomically bump a numeric property: one server-side statement
+  `SET n.prop = coalesce(n.prop, 0) + by` — safe under concurrency where
+  read-modify-write via update() would lose updates.
+
+  The property must be declared on the schema (its name is interpolated
+  into the Cypher — property names cannot be parameters).
+  */
+  async increment(
+    target: Entity | string | number,
+    property: keyof Entity & string,
+    by = 1,
+    options: { ifExists?: boolean } = {},
+  ): Promise<number> {
+    const declared = this.schema
+      .getProperties()
+      .find((schemaProperty) => schemaProperty.getKey() === property)
+
+    if (declared === undefined) {
+      throw new Error(
+        `Cannot increment: "${property}" is not a declared property on ${this.getLabels().join(':')}`,
+      )
+    }
+
+    if (typeof by !== 'number' || !Number.isFinite(by)) {
+      throw new TypeError('Cannot increment: step must be a finite number')
+    }
+
+    // The step is a validated finite number, so inlining it into the raw
+    // set is injection-safe; the Builder's raw set has no parameter channel
+    const key = declared.getKey().replaceAll('`', '``')
+    const primaryKey = this.getPrimaryKey().getKey()
+    const id =
+      target !== null && typeof target === 'object'
+        ? (target as unknown as Record<string, unknown>)[primaryKey]
+        : target
+
+    const builder = new Builder().match(THIS_NODE, this.schema.getLabels(), { [primaryKey]: id })
+    builder.set(`${THIS_NODE}.\`${key}\` = coalesce(${THIS_NODE}.\`${key}\`, 0) + (${by})`)
+    builder.return(`${THIS_NODE}.\`${key}\` AS value`)
+
+    const { query, params } = builder.build()
+    const output = await this.neode.writeCypher(query, params, this.database)
+
+    const firstRecord = output.records[0]
+
+    if (firstRecord === undefined) {
+      if (options.ifExists) {
+        return 0
+      }
+
+      throw new Error(`Cannot increment: entity not found for ${String(target)}`)
+    }
+
+    return Repository.toCount(firstRecord.get('value'))
+  }
+
+  /**
+  Full-text search over the index `installSchema()` created for this
+  model's `fulltext: true` properties (NTS-436): hydrated entities with
+  their relevance score, best match first. Pass user text through
+  `toFulltextQuery()` first — the query is bound as a parameter, but
+  Lucene syntax characters in it are still parsed as such.
+  */
+  async search(query: string, options: SearchOptions = {}): Promise<ScoredEntity<Entity>[]> {
+    const fields = this.schema
+      .getProperties()
+      .filter((schemaProperty) => schemaProperty.getFulltext())
+      .map((schemaProperty) => schemaProperty.getKey())
+
+    if (fields.length === 0) {
+      throw new Error(
+        `Cannot search ${this.getLabels().join(':')}: no property is declared fulltext: true — declare one, or use neode.search(entity, indexName, query) with installFulltextIndexes()`,
+      )
+    }
+
+    const indexName = fulltextIndexName({ label: this.getLabels()[0]!, properties: fields })
+
+    return this.neode.search(this.entity, indexName, query, options.limit)
   }
 
   matchEntity(variable: string = THIS_NODE, object: Entity): Builder {
@@ -237,10 +366,20 @@ export default class Repository<Entity> {
     }
   }
 
-  private async read(builder: Builder): Promise<QueryOutput> {
+  protected async read(builder: Builder): Promise<QueryOutput> {
     const { query, params } = builder.build()
 
     return this.neode.readCypher(query, params, this.database)
+  }
+
+  /**
+  Run a write query built with the Builder against this repository's
+  database
+  */
+  protected async write(builder: Builder): Promise<QueryOutput> {
+    const { query, params } = builder.build()
+
+    return this.neode.writeCypher(query, params, this.database)
   }
 
   /**

@@ -32,6 +32,10 @@ export interface PropertyDefinition {
   default?: DefaultValue
   primary?: boolean
   /**
+  Include in the model's full-text search index (NTS-436).
+  */
+  fulltext?: boolean
+  /**
   boolean: single-property unique constraint.
   string[]: composite unique covering exactly the listed properties
   (NTS-140) — declared on one property, the array is the full composite.

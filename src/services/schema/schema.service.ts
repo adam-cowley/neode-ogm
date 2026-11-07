@@ -3,6 +3,7 @@ import { getModels } from '../../meta/index.js'
 import type EntitySchema from '../../meta/entity/entity-schema.js'
 import type PropertySchema from '../../meta/property-schema.js';
 import { PropertyType } from '../../meta/property-schema.js'
+import FulltextIndexService from './fulltext.service.js'
 
 export const ConstraintAction = {
   CREATE: 'CREATE',
@@ -223,6 +224,11 @@ export default class SchemaService {
     // generated only for declared types with a Cypher equivalent
     const propertyTypes = await this.runPropertyTypeStatementsForLabel(action, properties, label)
 
+    // Full-text indexes (NTS-436): one index per label covering every
+    // property declared `fulltext: true`, installed/dropped alongside the
+    // constraints so callers never handle index names
+    const fulltext = await this.runFulltextStatementsForLabel(action, properties, label)
+
     if (this.enterprise) {
       const exists = await this.runExistsConstraintStatementsForLabel(action, properties, label)
 
@@ -231,11 +237,36 @@ export default class SchemaService {
         ...compositeUniques,
         ...compositeIndexes,
         ...propertyTypes,
+        ...fulltext,
         ...exists,
       )
     }
 
-    return uniques.concat(...indexes, ...compositeUniques, ...compositeIndexes, ...propertyTypes)
+    return uniques.concat(
+      ...indexes,
+      ...compositeUniques,
+      ...compositeIndexes,
+      ...propertyTypes,
+      ...fulltext,
+    )
+  }
+
+  private runFulltextStatementsForLabel(
+    action: ConstraintAction,
+    properties: PropertySchema[],
+    label: string,
+  ): Promise<SchemaResult[]> {
+    const fulltext = properties.filter((property) => property.getFulltext())
+
+    if (fulltext.length === 0) {
+      return Promise.resolve([])
+    }
+
+    const service = new FulltextIndexService(this.connection, [
+      { label, properties: fulltext.map((property) => property.getKey()) },
+    ])
+
+    return action === ConstraintAction.CREATE ? service.create() : service.drop()
   }
 
   private async runUniqueConstraintStatementsForLabel(

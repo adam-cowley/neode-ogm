@@ -2,7 +2,8 @@ import { vi } from 'vitest'
 import Repository from '../../src/repository'
 import INeode from '../../src/neode.interface'
 import { GraphNode, QueryOutput, QueryRecord } from '../../src/driver/types'
-import { NodeEntity, InternalId, Uuid, String, Number } from '../../src/decorators'
+import { NodeEntity, InternalId, Uuid, String, Number as NumberDecorator } from '../../src/decorators'
+import { fulltextIndexName } from '../../src/services/schema/fulltext.service'
 
 // ---- Fixtures (decorator registry is global per module registry) -----------
 
@@ -17,7 +18,7 @@ class Movie {
   @String({ unique: true })
   title: string
 
-  @Number()
+  @NumberDecorator()
   released: number
 
   static build(values: Record<string, unknown>): Movie {
@@ -54,6 +55,15 @@ function stubNeode(output: Partial<QueryOutput> = {}) {
       vi.fn<
         (query: string, params: Record<string, unknown>, database?: string) => Promise<QueryOutput>
       >(),
+    search:
+      vi.fn<
+        (
+          constructor: unknown,
+          indexName: string,
+          query: string,
+          limit?: number,
+        ) => Promise<unknown[]>
+      >(),
   }
 
   mocks.find.mockResolvedValue(undefined)
@@ -62,6 +72,7 @@ function stubNeode(output: Partial<QueryOutput> = {}) {
   mocks.delete.mockResolvedValue(undefined)
   mocks.readCypher.mockResolvedValue({ records: [], ...output })
   mocks.writeCypher.mockResolvedValue({ records: [], ...output })
+  mocks.search.mockResolvedValue([])
 
   return { neode: mocks as unknown as INeode, mocks }
 }
@@ -251,14 +262,14 @@ describe('Repository', () => {
     })
   })
 
-  describe('update', () => {
+  describe('patch', () => {
     it('applies the patch to the entity and persists it via save', async () => {
       const { neode, mocks } = stubNeode()
 
       const repo = new Repository<Movie>(neode, Movie)
       const entity = Movie.build({ id: 'u1', title: 'Alien', released: 1979 })
 
-      const updated = await repo.update(entity, { released: 2003 })
+      const updated = await repo.patch(entity, { released: 2003 })
 
       expect(updated).toBe(entity)
       expect(updated.released).toBe(2003)
@@ -298,6 +309,15 @@ describe('Repository', () => {
       const repo = new Repository<Movie>(neode, Movie)
 
       await expect(repo.delete('nope')).rejects.toThrow(/not found/i)
+    })
+
+    it('silently no-ops when ifExists is set and the entity is missing', async () => {
+      const { neode, mocks } = stubNeode()
+
+      const repo = new Repository<Movie>(neode, Movie)
+
+      await expect(repo.delete('nope', { ifExists: true })).resolves.toBeUndefined()
+      expect(mocks.delete).not.toHaveBeenCalled()
     })
   })
 
@@ -355,7 +375,7 @@ describe('Repository', () => {
       const total: number = await repo.count({ released: 1979 })
       const saved: Movie = await repo.save(Movie.build({ title: 'Alien' }))
       const many: Movie[] = await repo.saveAll([Movie.build({ title: 'Alien' })])
-      const updated: Movie = await repo.update(Movie.build({ title: 'Alien' }), { released: 1979 })
+      const updated: Movie = await repo.patch(Movie.build({ title: 'Alien' }), { released: 1979 })
       const gone: void = await repo.delete('u1')
       const bulk: number = await repo.deleteAll({ released: 1979 })
 
@@ -368,6 +388,141 @@ describe('Repository', () => {
 
       // @ts-expect-error "bogus" is not a property of Movie
       await repo.findBy({ bogus: true })
+    })
+  })
+
+  describe('increment', () => {
+    it('writes one atomic coalesce statement and returns the new value', async () => {
+      const { neode, mocks } = stubNeode({ records: [keyedRecord({ value: 5 })] })
+
+      const repo = new Repository<Movie>(neode, Movie)
+      const value = await repo.increment('u1', 'released', 2)
+
+      const [query] = mocks.writeCypher.mock.calls[0]
+
+      expect(query).toContain('MATCH (this:Movie')
+      expect(query).toContain('SET this.`released` = coalesce(this.`released`, 0) + (2)')
+      expect(query).toContain('RETURN this.`released` AS value')
+      expect(value).toBe(5)
+    })
+
+    it('accepts an entity instance and matches on its primary key', async () => {
+      const { neode, mocks } = stubNeode({ records: [keyedRecord({ value: 1 })] })
+
+      const repo = new Repository<Movie>(neode, Movie)
+      await repo.increment(Movie.build({ id: 'u1' }), 'released')
+
+      const [query, params] = mocks.writeCypher.mock.calls[0]
+
+      expect(query).toContain('MATCH (this:Movie')
+      expect(query).toContain('id:')
+      expect(Object.values(params)).toContain('u1')
+    })
+
+    it('rejects undeclared properties', async () => {
+      const { neode } = stubNeode()
+      const repo = new Repository<Movie>(neode, Movie)
+
+      // @ts-expect-error "bogus" is not a property of Movie
+      await expect(repo.increment('u1', 'bogus')).rejects.toThrow('not a declared property')
+    })
+
+    it('rejects non-finite steps', async () => {
+      const { neode } = stubNeode()
+      const repo = new Repository<Movie>(neode, Movie)
+
+      // NB: bare global Number — importing the decorator shadows it
+      await expect(repo.increment('u1', 'released', Number.NaN)).rejects.toThrow('finite number')
+      await expect(repo.increment('u1', 'released', Number.POSITIVE_INFINITY)).rejects.toThrow(
+        'finite number',
+      )
+    })
+
+    it('returns 0 instead of throwing when ifExists is set and the entity is missing', async () => {
+      const { neode } = stubNeode()
+
+      const repo = new Repository<Movie>(neode, Movie)
+      const value = await repo.increment('missing', 'released', 1, { ifExists: true })
+
+      expect(value).toBe(0)
+    })
+  })
+
+  describe('countBy', () => {
+    it('groups counts by the declared property', async () => {
+      const { neode, mocks } = stubNeode({
+        records: [
+          keyedRecord({ value: 'ACTIVE', count: 3 }),
+          keyedRecord({ value: 'CLOSED', count: 1 }),
+        ],
+      })
+
+      const repo = new Repository<Movie>(neode, Movie)
+      const counts = await repo.countBy('released', { title: 'Alien' })
+
+      const [query] = mocks.readCypher.mock.calls[0]
+
+      expect(query).toContain('RETURN this.`released` AS value, count(this) AS count')
+      expect(counts).toEqual({ ACTIVE: 3, CLOSED: 1 })
+    })
+
+    it('rejects undeclared properties', async () => {
+      const { neode } = stubNeode()
+      const repo = new Repository<Movie>(neode, Movie)
+
+      // @ts-expect-error "bogus" is not a property of Movie
+      await expect(repo.countBy('bogus')).rejects.toThrow('not a declared property')
+    })
+  })
+
+  describe('search', () => {
+    @NodeEntity()
+    class Searchable {
+      @InternalId()
+      _id: string
+
+      @Uuid({ primary: true })
+      id: string
+
+      @String()
+      title: string
+
+      @String({ fulltext: true })
+      plot: string
+
+      static build(values: Record<string, unknown>): Searchable {
+        return Object.assign(new Searchable(), values) as unknown as Searchable
+      }
+    }
+
+    it('resolves the index name from the declared fulltext properties', async () => {
+      const { neode, mocks } = stubNeode()
+      const repo = new Repository<Searchable>(neode, Searchable)
+
+      await repo.search('alien')
+
+      const [constructor, indexName, query, limit] = mocks.search.mock.calls[0]
+
+      expect(constructor).toBe(Searchable)
+      expect(indexName).toBe(fulltextIndexName({ label: 'Searchable', properties: ['plot'] }))
+      expect(query).toBe('alien')
+      expect(limit).toBeUndefined()
+    })
+
+    it('passes the limit through', async () => {
+      const { neode, mocks } = stubNeode()
+      const repo = new Repository<Searchable>(neode, Searchable)
+
+      await repo.search('alien', { limit: 5 })
+
+      expect(mocks.search.mock.calls[0][3]).toBe(5)
+    })
+
+    it('throws when the model declares no fulltext properties', async () => {
+      const { neode } = stubNeode()
+      const repo = new Repository<Movie>(neode, Movie)
+
+      await expect(repo.search('alien')).rejects.toThrow('fulltext: true')
     })
   })
 })

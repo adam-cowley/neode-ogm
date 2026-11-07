@@ -26,6 +26,7 @@ const METAMODEL_KEYS = new Set([
   'onCreateSet',
   'onMatchSet',
   'alwaysSet',
+  'fulltext',
   'required',
   'hidden',
   'protected',
@@ -156,6 +157,10 @@ export function mergeProperty(
 
   if (Object.hasOwn(config, 'alwaysSet')) {
     property.setAlwaysSet(config.alwaysSet)
+  }
+
+  if (Object.hasOwn(config, 'fulltext')) {
+    property.setFulltext(config.fulltext)
   }
 
   // Read-model projection config (NTS-135/136/137/138)
