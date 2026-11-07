@@ -65,6 +65,7 @@ export function schemaStatement(
   label: string,
   properties: string[],
   name: string = schemaObjectName(label, properties[0] ?? '', type),
+  shouldQuoteLabel = true,
 ): string {
   if (properties.length === 0) {
     throw new TypeError(`Cannot create a ${type} schema object on ${label}: no properties given`)
@@ -77,6 +78,7 @@ export function schemaStatement(
   }
 
   const quoted = properties.map((property) => `n.${quote(property)}`)
+  const labelPattern = shouldQuoteLabel ? `n:${quote(label)}` : `n:${label}`
 
   const [firstProperty] = properties
 
@@ -99,7 +101,7 @@ export function schemaStatement(
     target = `REQUIRE ${firstQuoted} IS NOT NULL`
   }
 
-  return `CREATE ${kind} ${name} IF NOT EXISTS FOR (n:${quote(label)}) ${target}`
+  return `CREATE ${kind} ${name} IF NOT EXISTS FOR (${labelPattern}) ${target}`
 }
 
 /**
@@ -111,10 +113,13 @@ export function propertyTypeStatement(
   property: string,
   cypherType: string,
   name: string = schemaObjectName(label, property, ConstraintType.PROPERTY_TYPE),
+  shouldQuoteLabel = true,
 ): string {
+  const labelPattern = shouldQuoteLabel ? `n:${quote(label)}` : `n:${label}`
+
   return action === ConstraintAction.DROP
     ? `DROP CONSTRAINT ${name} IF EXISTS`
-    : `CREATE CONSTRAINT ${name} IF NOT EXISTS FOR (n:${quote(label)}) REQUIRE n.${quote(property)} IS :: ${cypherType}`
+    : `CREATE CONSTRAINT ${name} IF NOT EXISTS FOR (${labelPattern}) REQUIRE n.${quote(property)} IS :: ${cypherType}`
 }
 
 /**

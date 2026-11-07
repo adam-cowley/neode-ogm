@@ -190,22 +190,26 @@ export class Repository<Entity> {
 
   /**
   Apply a partial patch to a persisted entity, then persist it.
-  
-  The INeode facade has no dedicated update method and the repository
-  holds no Runner, so update is implemented through save(): a merge on
-  the entity's primary key that sets the patched properties — update
-  semantics for anything previously saved.
+
+  Named `patch` (not `update`) so domain interfaces that declare their own
+  `update(id, input)` can be implemented by subclasses without clashing
+  with the base signature (NTS-454/458/459).
   */
-  async update(entity: Entity & object, properties: Partial<Entity>): Promise<Entity> {
+  async patch(entity: Entity & object, properties: Partial<Entity>): Promise<Entity> {
     Object.assign(entity, properties)
 
     return this.save(entity)
   }
 
   /**
-  Delete by primary key value or by entity instance
+  Delete by primary key value or by entity instance. Pass `{ ifExists: true }`
+  to silently no-op when the entity does not exist (NTS-457) — the default
+  throws so callers learn about missing IDs.
   */
-  async delete(target: Entity | string | number): Promise<void> {
+  async delete(
+    target: Entity | string | number,
+    options: { ifExists?: boolean } = {},
+  ): Promise<void> {
     if (isRecord(target)) {
       return this.neode.delete(target, this.database)
     }
@@ -213,6 +217,10 @@ export class Repository<Entity> {
     const entity = await this.find(target)
 
     if (entity === undefined) {
+      if (options.ifExists === true) {
+        return
+      }
+
       throw new Error(`Cannot delete: entity not found for ID ${String(target)}`)
     }
 
@@ -224,9 +232,43 @@ export class Repository<Entity> {
   }
 
   /**
+  Count entities grouped by one declared property's value (NTS-453):
+  `countBy('status')` → `{ ACTIVE: 3, CLOSED: 1 }`.
+  */
+  async countBy(
+    property: keyof Entity & string,
+    parameters: Partial<Entity> = {},
+  ): Promise<Record<string, number>> {
+    const declared = this.schema
+      .getProperties()
+      .find((schemaProperty) => schemaProperty.getKey() === property)
+
+    if (declared === undefined) {
+      throw new Error(
+        `Cannot countBy: "${property}" is not a declared property on ${this.getLabels().join(':')}`,
+      )
+    }
+
+    const key = declared.getKey().replaceAll('`', '``')
+    const builder = this.matchAll(parameters)
+    builder.return(`${THIS_NODE}.\`${key}\` AS value, count(${THIS_NODE}) AS count`)
+
+    const output = await this.read(builder)
+
+    const result: Record<string, number> = {}
+
+    for (const row of output.records) {
+      const value = row.get('value')
+      result[String(value)] = Repository.toCount(row.get('count'))
+    }
+
+    return result
+  }
+
+  /**
   Delete every entity matching params and return the number deleted.
   
-  shortcut: one DETACH DELETE statement rather than per-entity deletes,
+  shortcut: one DETACH DELETE statement rather than per-node deletes,
   so per-node delete events and cascade options do not apply — switch to
   a loop over delete() when cascading bulk deletes are needed
   */
@@ -261,6 +303,7 @@ export class Repository<Entity> {
     target: Entity | string | number,
     property: keyof Entity & string,
     by = 1,
+    options: { ifExists?: boolean } = {},
   ): Promise<number> {
     const declared = this.schema
       .getProperties()
@@ -292,6 +335,10 @@ export class Repository<Entity> {
     const firstRecord = output.records[0]
 
     if (firstRecord === undefined) {
+      if (options.ifExists === true) {
+        return 0
+      }
+
       throw new Error(`Cannot increment: entity not found for ${String(target)}`)
     }
 

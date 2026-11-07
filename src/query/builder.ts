@@ -16,6 +16,12 @@ import { WithStatement } from './with-statement.js'
 import type { AccessMode, QueryOutput, Runner } from '../driver/types.js'
 import type { EntitySchema } from '../meta/entity/entity-schema.js'
 import { isRecord } from '../services/type-guards.js'
+import {
+  ConstraintAction,
+  ConstraintType,
+  propertyTypeStatement,
+  schemaStatement,
+} from '../services/schema/schema.service.js'
 
 /**
 Identity criteria for a persisted entity, as produced by
@@ -48,6 +54,7 @@ export class Builder {
   private current?: Statement
   private whereClause?: WhereStatement
   private parameterCount = 0
+  private subCount = 0
 
   /**
   The statement segment currently being built — every pattern method
@@ -121,6 +128,70 @@ export class Builder {
     const variable = this.addParameter(property, value)
 
     this.activeWhereClause.append(new Where(property, operator, `$${variable}`))
+
+    return this
+  }
+
+  /**
+  Flush any open statement / where segment into `statements`
+  */
+  private flush(): void {
+    this.whereStatement()
+    this.statement()
+  }
+
+  /**
+  Compile a sub-builder into a query fragment, namespacing its parameters
+  into this builder's parameter space (sub0_, sub1_, …) so nested queries
+  never collide with parent or sibling parameters
+  */
+  private compileSub(
+    build: (sub: Builder) => Builder,
+    imports: string[] = [],
+  ): { inner: string; imports: string[] } {
+    const sub = new Builder()
+    const returned = build(sub)
+
+    const { query, params } = returned.build()
+    const prefix = `sub${String(this.subCount++)}_`
+
+    for (const [key, value] of Object.entries(params)) {
+      this.params[`${prefix}${key}`] = value
+    }
+
+    return {
+      inner: query.replaceAll(/\$(\w+)/g, (_match, key: string) => `$${prefix}${key}`),
+      imports,
+    }
+  }
+
+  private schemaStatementSegment(
+    action: ConstraintAction,
+    type: ConstraintType,
+    label: string,
+    properties: string[],
+    cypherType = '',
+  ): this {
+    this.flush()
+    // Builder DDL composes the label unquoted (`FOR (n:User)`) — the
+    // SchemaService spellings stay quoted via the shared composers' default
+    this.statements.push({
+      toString: () =>
+        type === ConstraintType.PROPERTY_TYPE
+          ? propertyTypeStatement(action, label, properties[0] ?? '', cypherType, undefined, false)
+          : schemaStatement(action, type, label, properties, undefined, false),
+    })
+
+    return this
+  }
+
+  /**
+  Register a named parameter for use in raw expressions (`$name`) — the
+  channel for values inside setExpr / callProcedure / whereRaw positions,
+  where the builder cannot bind values itself (NTS-462/473)
+  */
+  param(name: string, value: unknown): this {
+    this.params[name] = value
 
     return this
   }
@@ -703,6 +774,204 @@ export class Builder {
     degrees?: number | string,
   ): this {
     this.activeStatement.match(new Relationship(type, direction, alias, degrees))
+
+    return this
+  }
+
+  /**
+  `SET <key> = <expression>` where the expression is raw Cypher
+  (`datetime()`, `coalesce($email, u.email)`, …). Values inside the
+  expression are bound via `param(name, value)` — the expression must
+  never interpolate data.
+  */
+  setExpr(key: string, expression: string, parameters: BuilderParameters = {}): this {
+    this.activeStatement.setRaw([`${key} = ${expression}`])
+
+    for (const [name, value] of Object.entries(parameters)) {
+      this.param(name, value)
+    }
+
+    return this
+  }
+
+  /**
+  `ON CREATE SET <key> = <expression>` — expression-valued, so server-side
+  values (`datetime()`, `randomUUID()`) and param-first coalesces compose
+  without raw Cypher (NTS-460/462)
+  */
+  onCreateSetExpr(key: string, expression: string, parameters: BuilderParameters = {}): this {
+    this.activeStatement.onCreateSetRaw([`${key} = ${expression}`])
+
+    for (const [name, value] of Object.entries(parameters)) {
+      this.param(name, value)
+    }
+
+    return this
+  }
+
+  /**
+  `ON MATCH SET <key> = <expression>` — expression-valued (NTS-460/462)
+  */
+  onMatchSetExpr(key: string, expression: string, parameters: BuilderParameters = {}): this {
+    this.activeStatement.onMatchSetRaw([`${key} = ${expression}`])
+
+    for (const [name, value] of Object.entries(parameters)) {
+      this.param(name, value)
+    }
+
+    return this
+  }
+
+  /**
+  A procedure call with YIELD: `CALL db.index.fulltext.queryNodes($index, $q)
+  YIELD node, score`. Arguments are expressions — bind values via
+  `param(name, value)` and pass `'$name'` (NTS-464).
+  */
+  callProcedure(procedure: string, arguments_: string[] = [], yields: string[] = []): this {
+    this.flush()
+
+    const argumentList = arguments_.join(', ')
+    const call = `CALL ${procedure}(${argumentList})`
+    const yieldClause = yields.length > 0 ? ` YIELD ${yields.join(', ')}` : ''
+
+    this.statements.push({ toString: () => `${call}${yieldClause}` })
+
+    return this
+  }
+
+  /**
+  Constraint / index DDL, composed like queries (NTS-474). Each call
+  appends one idempotent schema statement.
+  */
+  createUniqueConstraint(label: string, property: string): this {
+    return this.schemaStatementSegment(ConstraintAction.CREATE, ConstraintType.UNIQUE, label, [
+      property,
+    ])
+  }
+
+  createRangeIndex(label: string, property: string): this {
+    return this.schemaStatementSegment(ConstraintAction.CREATE, ConstraintType.INDEX, label, [
+      property,
+    ])
+  }
+
+  createCompositeUniqueConstraint(label: string, properties: string[]): this {
+    return this.schemaStatementSegment(
+      ConstraintAction.CREATE,
+      ConstraintType.UNIQUE,
+      label,
+      properties,
+    )
+  }
+
+  createCompositeIndex(label: string, properties: string[]): this {
+    return this.schemaStatementSegment(
+      ConstraintAction.CREATE,
+      ConstraintType.INDEX,
+      label,
+      properties,
+    )
+  }
+
+  createExistenceConstraint(label: string, property: string): this {
+    return this.schemaStatementSegment(ConstraintAction.CREATE, ConstraintType.EXISTS, label, [
+      property,
+    ])
+  }
+
+  createPropertyTypeConstraint(label: string, property: string, cypherType: string): this {
+    return this.schemaStatementSegment(
+      ConstraintAction.CREATE,
+      ConstraintType.PROPERTY_TYPE,
+      label,
+      [property],
+      cypherType,
+    )
+  }
+
+  dropConstraint(
+    label: string,
+    property: string,
+    type: ConstraintType = ConstraintType.UNIQUE,
+  ): this {
+    return this.schemaStatementSegment(ConstraintAction.DROP, type, label, [property])
+  }
+
+  /**
+  A scoped subquery: `CALL (u) { … }`. The callback builds the inner
+  query; `imports` names outer-scope variables passed into the subquery.
+  */
+  call(build: (sub: Builder) => Builder, imports: string[] = []): this {
+    const { inner } = this.compileSub(build, imports)
+    const scope = imports.length > 0 ? `(${imports.join(', ')})` : ''
+
+    this.flush()
+    this.statements.push({ toString: () => `CALL ${scope} {\n${inner}\n}` })
+
+    return this
+  }
+
+  /**
+  `UNWIND <listExpression> AS <variable>`
+  */
+  unwind(listExpression: string, variable: string): this {
+    this.flush()
+    this.statements.push({ toString: () => `UNWIND ${listExpression} AS ${variable}` })
+
+    return this
+  }
+
+  /**
+  `FOREACH (<variable> IN <listExpression> | <clauses>)` — the callback
+  builds the update clauses (SET / MERGE / DELETE …) applied per element
+  */
+  forEach(variable: string, listExpression: string, build: (sub: Builder) => Builder): this {
+    const { inner } = this.compileSub(build)
+    const clauses = inner.replaceAll('\n', ' ')
+
+    this.flush()
+    this.statements.push({
+      toString: () => `FOREACH (${variable} IN ${listExpression} | ${clauses})`,
+    })
+
+    return this
+  }
+
+  /**
+  `COUNT { … } AS <alias>` in a RETURN / WITH position (NTS: grouped and
+  conditional counts without hand-written Cypher)
+  */
+  countSubquery(alias: string, build: (sub: Builder) => Builder, imports: string[] = []): this {
+    const { inner, imports: scoped } = this.compileSub(build, imports)
+    const scope = scoped.length > 0 ? `WITH ${scoped.join(', ')} ` : ''
+
+    this.return(`COUNT { ${scope}${inner} } AS ${alias}`)
+
+    return this
+  }
+
+  /**
+  `COLLECT { … } AS <alias>` in a RETURN / WITH position (NTS: collected
+  sub-projections without hand-written Cypher)
+  */
+  collectSubquery(alias: string, build: (sub: Builder) => Builder, imports: string[] = []): this {
+    const { inner, imports: scoped } = this.compileSub(build, imports)
+    const scope = scoped.length > 0 ? `WITH ${scoped.join(', ')} ` : ''
+
+    this.return(`COLLECT { ${scope}${inner} } AS ${alias}`)
+
+    return this
+  }
+
+  /**
+  `EXISTS { … }` as a WHERE predicate (NTS: relationship / property
+  existence checks without hand-written Cypher)
+  */
+  whereExistsSubquery(build: (sub: Builder) => Builder, imports: string[] = []): this {
+    const { inner, imports: scoped } = this.compileSub(build, imports)
+    const scope = scoped.length > 0 ? `WITH ${scoped.join(', ')} ` : ''
+
+    this.whereRaw(`EXISTS { ${scope}${inner} }`)
 
     return this
   }

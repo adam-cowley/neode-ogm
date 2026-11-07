@@ -25,6 +25,7 @@ import { UpdateService } from '../services/query/update.service.js'
 import { WithinDistanceService } from '../services/query/within-distance.service.js'
 import { search, type ScoredEntity } from '../services/query/search.service.js'
 import { isConstructorOf, isRecord } from '../services/type-guards.js'
+import { hydrate } from '../hydrate.js'
 
 export class TransactionalService implements INeode {
   private readonly handle: TransactionHandle
@@ -363,5 +364,21 @@ export class TransactionalService implements INeode {
 
   async writeCypher(query: string, parameters: QueryParameters = {}): Promise<QueryOutput> {
     return this.handle.run(query, parameters)
+  }
+
+  async cypher<T>(
+    query: string,
+    parameters?: QueryParameters,
+    options?: { hydrate: new (...arguments_: never[]) => T; alias?: string },
+  ): Promise<T[]>
+  async cypher(query: string, parameters?: QueryParameters, options?: object): Promise<QueryOutput>
+  async cypher(
+    query: string,
+    parameters: QueryParameters = {},
+    options: { hydrate?: new (...arguments_: never[]) => unknown; alias?: string } = {},
+  ): Promise<QueryOutput | unknown[]> {
+    const output: QueryOutput = await this.handle.run(query, parameters)
+
+    return options.hydrate ? hydrate(options.hydrate, output, options.alias ?? 'this') : output
   }
 }

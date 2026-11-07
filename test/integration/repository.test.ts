@@ -62,7 +62,7 @@ describe('Repository', () => {
 
       expect(found?.title).toBe('Alien')
 
-      const updated = await movies.update(found as Movie, { released: 2003 })
+      const updated = await movies.patch(found as Movie, { released: 2003 })
 
       expect(updated.released).toBe(2003)
 

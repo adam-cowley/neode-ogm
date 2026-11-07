@@ -87,6 +87,10 @@ export interface PropertyDefinition {
   default?: DefaultValue
   primary?: boolean
   /**
+  Include in the model's full-text search index (NTS-436).
+  */
+  fulltext?: boolean
+  /**
   boolean: single-property unique constraint.
   string[]: composite unique covering exactly the listed properties
   (NTS-140) — declared on one property, the array is the full composite.
@@ -109,10 +113,6 @@ export interface PropertyDefinition {
   Opt in to a property-type constraint generated from the declared type (NTS-141): `REQUIRE n.prop IS :: STRING`.
   */
   typed?: boolean
-  /**
-  Declare a full-text index over the property (NTS-123/436).
-  */
-  fulltext?: boolean
   /**
   Declare a vector index over the property (NTS-447): created by
   `installSchema()` with the deterministic `vectorIndexName()` naming and

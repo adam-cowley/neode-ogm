@@ -1,4 +1,4 @@
-import type { QueryOutput, QueryParams as QueryParameters } from './driver/types.js'
+import type { CypherOptions, QueryOutput, QueryParams as QueryParameters } from './driver/types.js'
 import type { ScoredEntity } from './services/query/search.service.js'
 
 export interface INeode {
@@ -22,4 +22,10 @@ export interface INeode {
     query: string,
     limit?: number,
   ): Promise<ScoredEntity<T>[]>
+  cypher(query: string, parameters?: QueryParameters, options?: CypherOptions): Promise<QueryOutput>
+  cypher<T>(
+    query: string,
+    parameters: QueryParameters | undefined,
+    options: CypherOptions & { hydrate: new (...arguments_: never[]) => T },
+  ): Promise<T[]>
 }

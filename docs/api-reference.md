@@ -459,19 +459,21 @@ await people.count({ age: 30 })
 
 `Repository<Entity>` methods:
 
-| Method          | Signature                                                             | Description                                                                                 |
-| --------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `find`          | `(id) => Promise<Entity \| undefined>`                                | By primary key.                                                                             |
-| `findBy`        | `(params?) => Promise<Entity \| undefined>`                           | First match.                                                                                |
-| `findAll`       | `(params?, options?: { order?, limit?, skip? }) => Promise<Entity[]>` | `order` takes the same `OrderSpec` forms as `all()`.                                        |
-| `where`         | `(params?) => Promise<Entity[]>`                                      | Alias of `findAll(params)`.                                                                 |
-| `count`         | `(params?) => Promise<number>`                                        |                                                                                             |
-| `save`          | `(object) => Promise<Entity>`                                         | MERGE on primary key.                                                                       |
-| `saveAll`       | `(objects) => Promise<Entity[]>`                                      | One save (one write transaction) at a time.                                                 |
-| `update`        | `(entity, properties) => Promise<Entity>`                             | Apply a patch, then persist via save.                                                       |
-| `delete`        | `(entityOrId) => Promise<void>`                                       | By instance or primary key value.                                                           |
-| `deleteAll`     | `(params?) => Promise<number>`                                        | One bulk `DETACH DELETE` of every match; returns the count. No cascade, no per-node events. |
-| `getPrimaryKey` | `() => PropertySchema`                                                |                                                                                             |
+| Method          | Signature                                                             | Description                                                                                                                                                          |
+| --------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `find`          | `(id) => Promise<Entity \| undefined>`                                | By primary key.                                                                                                                                                      |
+| `findBy`        | `(params?) => Promise<Entity \| undefined>`                           | First match.                                                                                                                                                         |
+| `findAll`       | `(params?, options?: { order?, limit?, skip? }) => Promise<Entity[]>` | `order` takes the same `OrderSpec` forms as `all()`.                                                                                                                 |
+| `where`         | `(params?) => Promise<Entity[]>`                                      | Alias of `findAll(params)`.                                                                                                                                          |
+| `count`         | `(params?) => Promise<number>`                                        |                                                                                                                                                                      |
+| `save`          | `(object) => Promise<Entity>`                                         | MERGE on primary key.                                                                                                                                                |
+| `saveAll`       | `(objects) => Promise<Entity[]>`                                      | One save (one write transaction) at a time.                                                                                                                          |
+| `patch`         | `(entity, properties) => Promise<Entity>`                             | Apply a patch, then persist via save. Named `patch` so domain interfaces declaring their own `update(id, input)` can be implemented by subclasses (NTS-454/458/459). |
+| `delete`        | `(entityOrId, { ifExists? }) => Promise<void>`                        | By instance or primary key value. Throws on a missing ID; `{ ifExists: true }` silently no-ops (NTS-457).                                                            |
+| `increment`     | `(entityOrId, property, by?, { ifExists? }) => Promise<number>`       | Atomic `SET n.prop = coalesce(n.prop, 0) + by` (NTS-435). Returns the new value, or 0 when missing with `ifExists` (NTS-455).                                        |
+| `countBy`       | `(property, params?) => Promise<Record<string, number>>`              | Grouped counts over one declared property (NTS-453).                                                                                                                 |
+| `deleteAll`     | `(params?) => Promise<number>`                                        | One bulk `DETACH DELETE` of every match; returns the count. No cascade, no per-node events.                                                                          |
+| `getPrimaryKey` | `() => PropertySchema`                                                |                                                                                                                                                                      |
 
 ### Custom repositories
 
